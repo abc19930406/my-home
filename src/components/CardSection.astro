@@ -1,0 +1,157 @@
+---
+/**
+ * CardSection.astro
+ * 自動讀取 links.ts 資料並渲染分區卡片
+ * 未來新增連結只需編輯 links.ts，不需要改動此元件
+ */
+import type { CardLink } from '../data/links';
+
+interface Props {
+  section: string;
+  cards: CardLink[];
+}
+
+const { section, cards } = Astro.props;
+---
+
+<!-- 分區標題 -->
+<section class="mb-12">
+  <h2 class="section-title">— {section} —</h2>
+
+  <!-- 卡片網格：桌面四欄、手機兩欄 -->
+  <div class="card-grid">
+    {cards.map((card) => (
+      <div class="card">
+        {/* 卡片頂部：圖示 + 標題 */}
+        <div class="card-header">
+          <i class={`ti ti-${card.icon} card-icon`}></i>
+          {card.url ? (
+            <a href={card.url} class="card-title card-title--link">{card.title}</a>
+          ) : (
+            <span class="card-title">{card.title}</span>
+          )}
+        </div>
+
+        {/* 說明文字 */}
+        <p class="card-desc">{card.description}</p>
+
+        {/* 子連結（如知識庫的 Obsidian 筆記） */}
+        {card.children && card.children.length > 0 && (
+          <div class="card-children">
+            {card.children.map((child) => (
+              <a href={child.url} class="child-link" target="_blank" rel="noopener noreferrer">
+                <span class="child-arrow">→</span> {child.title}
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+    ))}
+  </div>
+</section>
+
+<style>
+  /* === 分區標題 === */
+  .section-title {
+    text-align: center;
+    font-size: 0.8rem;
+    letter-spacing: 0.3em;
+    color: #8A6E52;
+    margin-bottom: 2rem;
+    font-weight: 400;
+  }
+
+  /* === 卡片網格 === */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+
+  @media (min-width: 768px) {
+    .card-grid {
+      grid-template-columns: repeat(4, 1fr);
+    }
+  }
+
+  /* === 卡片 === */
+  .card {
+    background: #3A2818;
+    border: 1px solid #4A3525;
+    border-radius: 10px;
+    padding: 1.25rem;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+  }
+
+  .card:hover {
+    border-color: #C4956A;
+    transform: translateY(-2px);
+  }
+
+  /* === 卡片頂部 === */
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .card-icon {
+    color: #C4956A;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .card-title {
+    color: #F5E6CC;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  /* 有連結時的樣式 */
+  .card-title--link {
+    text-decoration: none;
+    color: #F5E6CC;
+    transition: color 0.2s ease;
+  }
+
+  .card-title--link:hover {
+    color: #C4956A;
+  }
+
+  /* === 說明文字 === */
+  .card-desc {
+    color: #A08060;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  /* === 子連結區塊 === */
+  .card-children {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #4A3525;
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .child-link {
+    color: #C4956A;
+    font-size: 0.75rem;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    transition: opacity 0.2s ease;
+  }
+
+  .child-link:hover {
+    opacity: 0.75;
+  }
+
+  .child-arrow {
+    font-size: 0.625rem;
+  }
+</style>
