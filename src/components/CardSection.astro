@@ -9,9 +9,10 @@ import type { CardLink } from '../data/links';
 interface Props {
   section: string;
   cards: CardLink[];
+  isLoggedIn?: boolean;
 }
 
-const { section, cards } = Astro.props;
+const { section, cards, isLoggedIn = false } = Astro.props;
 ---
 
 <!-- 分區標題 -->
@@ -24,11 +25,25 @@ const { section, cards } = Astro.props;
       <div class="card">
         {/* 卡片頂部：圖示 + 標題 */}
         <div class="card-header">
-          <i class={`ti ti-${card.icon} card-icon`}></i>
-          {card.url ? (
-            <a href={card.url} class="card-title card-title--link">{card.title}</a>
-          ) : (
-            <span class="card-title">{card.title}</span>
+          <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1;">
+            <i class={`ti ti-${card.icon} card-icon`}></i>
+            {card.url ? (
+              <a href={card.url} class="card-title card-title--link">{card.title}</a>
+            ) : (
+              <span class="card-title">{card.title}</span>
+            )}
+          </div>
+          {isLoggedIn && (
+            <button 
+              class="edit-btn" 
+              data-id={card.id}
+              data-title={card.title}
+              data-desc={card.description}
+              data-url={card.url}
+              title="編輯卡片"
+            >
+              ✏️
+            </button>
           )}
         </div>
 
@@ -158,5 +173,20 @@ const { section, cards } = Astro.props;
 
   .child-arrow {
     font-size: 0.625rem;
+  }
+
+  /* === 編輯按鈕 === */
+  .edit-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    opacity: 0.3;
+    transition: opacity 0.2s;
+    font-size: 0.8rem;
+    padding: 2px;
+  }
+
+  .edit-btn:hover {
+    opacity: 1;
   }
 </style>

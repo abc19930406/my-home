@@ -2,17 +2,15 @@
 /**
  * Welcome.astro — 首頁主體元件
  * 深木奶油風格 (Dark Wood Butter)
- * 資料驅動：所有卡片內容來自 src/data/links.ts
  */
-import { linksData } from '../data/links';
 import CardSection from './CardSection.astro';
+import type { CardLink } from '../data/links';
 
-// 依照指定順序，將卡片分組
-const sectionOrder = ["知識與創作", "生活記錄", "工具"];
-const groupedCards = sectionOrder.map(section => ({
-  name: section,
-  cards: linksData.filter(card => card.section === section)
-}));
+interface Props {
+  groupedCards: { name: string; cards: CardLink[] }[];
+}
+
+const { groupedCards } = Astro.props;
 ---
 
 <div class="page-wrapper">
@@ -64,9 +62,11 @@ const groupedCards = sectionOrder.map(section => ({
   <!-- ===== FOOTER 底部 ===== -->
   <footer class="footer">
     <div class="footer-links">
-      <span class="footer-link">GitHub</span><!-- url 確定後改為 <a href="..."> -->
+      <span class="footer-link">GitHub</span>
       <span class="footer-sep">・</span>
-      <span class="footer-link">Email</span><!-- url 確定後改為 <a href="..."> -->
+      <span class="footer-link">Email</span>
+      <span class="footer-sep">・</span>
+      <a href="/login" class="footer-link" style="opacity: 0.5;">管理</a>
     </div>
     <p class="footer-copy">© 2026 The Corner Table</p>
   </footer>
@@ -88,138 +88,5 @@ const groupedCards = sectionOrder.map(section => ({
 </script>
 
 <style>
-  /* ===== 頁面容器 ===== */
-  .page-wrapper {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 3rem 1.5rem;
-  }
-
-  /* ===== HEADER ===== */
-  .header {
-    margin-bottom: 3rem;
-  }
-
-  .header-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: baseline;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .site-name {
-    color: #F5E6CC;
-    font-size: 18px;
-    font-weight: 500;
-    margin: 0;
-    letter-spacing: 0.05em;
-  }
-
-  .site-meta {
-    color: #8A6E52;
-    font-size: 0.75rem;
-    margin: 0;
-  }
-
-  .site-subtitle {
-    color: #A08060;
-    font-size: 0.85rem;
-    font-style: italic;
-    margin: 0.5rem 0 0;
-  }
-
-  .header-divider {
-    border: none;
-    border-top: 1px solid #4A3525;
-    margin: 1.5rem 0 0;
-  }
-
-  /* ===== MAIN ===== */
-  .main-content {
-    margin-bottom: 3rem;
-  }
-
-  /* ===== 現在狀態 ===== */
-  .status-section {
-    margin-bottom: 3rem;
-  }
-
-  .status-heading {
-    text-align: center;
-    font-size: 0.8rem;
-    letter-spacing: 0.3em;
-    color: #8A6E52;
-    font-weight: 400;
-    margin-bottom: 1.5rem;
-  }
-
-  .status-card {
-    background: #3A2818;
-    border: 1px solid #4A3525;
-    border-radius: 10px;
-    padding: 1.5rem;
-  }
-
-  .status-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.25rem;
-  }
-
-  @media (min-width: 768px) {
-    .status-grid {
-      grid-template-columns: repeat(4, 1fr);
-    }
-  }
-
-  .status-item {
-    display: flex;
-    flex-direction: column;
-    gap: 0.375rem;
-  }
-
-  .status-label {
-    color: #A08060;
-    font-size: 0.75rem;
-  }
-
-  .status-value {
-    color: #F5E6CC;
-    font-size: 0.8rem;
-    min-height: 1.2em;
-  }
-
-  /* ===== FOOTER ===== */
-  .footer {
-    text-align: center;
-    padding-top: 1.5rem;
-    border-top: 1px solid #4A3525;
-  }
-
-  .footer-links {
-    margin-bottom: 0.75rem;
-  }
-
-  .footer-link {
-    color: #8A6E52;
-    font-size: 0.75rem;
-    text-decoration: none;
-    transition: color 0.2s ease;
-  }
-
-  .footer-link:hover {
-    color: #C4956A;
-  }
-
-  .footer-sep {
-    color: #4A3525;
-    font-size: 0.75rem;
-  }
-
-  .footer-copy {
-    color: #4A3525;
-    font-size: 0.625rem;
-    margin: 0;
-  }
+  @import "../styles/welcome.css";
 </style>

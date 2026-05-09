@@ -1,0 +1,182 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout>
+  <main class="page">
+    <div class="login-container">
+      <h1 class="login-title">管理員登入</h1>
+      <p class="login-desc">如果您不是管理員，請<a href="/">返回首頁</a>。</p>
+
+      <div id="error-msg" class="error-msg" style="display: none;"></div>
+
+      <form id="login-form" class="login-form">
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input type="email" id="email" required />
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <input type="password" id="password" required />
+        </div>
+        <button type="submit" id="submit-btn" class="submit-btn">登入</button>
+      </form>
+    </div>
+  </main>
+</Layout>
+
+<script>
+  import { supabase } from '../lib/supabase-client';
+
+  // 檢查是否已經登入
+  supabase.auth.getSession().then(({ data: { session } }) => {
+    if (session) {
+      window.location.href = '/admin';
+    }
+  });
+
+  const loginForm = document.getElementById('login-form');
+  const errorMsg = document.getElementById('error-msg');
+  const submitBtn = document.getElementById('submit-btn') as HTMLButtonElement;
+
+  loginForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    if (errorMsg) errorMsg.style.display = 'none';
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = '登入中...';
+    }
+
+    const email = (document.getElementById('email') as HTMLInputElement).value;
+    const password = (document.getElementById('password') as HTMLInputElement).value;
+
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      // 登入成功，跳轉到後台
+      window.location.href = '/admin';
+    } catch (err: any) {
+      if (errorMsg) {
+        errorMsg.textContent = err.message || '登入失敗，請檢查帳號密碼';
+        errorMsg.style.display = 'block';
+      }
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '登入';
+      }
+    }
+  });
+</script>
+
+<style>
+  .page {
+    padding: 2rem 1.5rem 3rem;
+    max-width: 680px;
+    margin: 0 auto;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .login-container {
+    width: 100%;
+    max-width: 400px;
+    background: #3A2818;
+    border: 1px solid #4A3525;
+    border-radius: 12px;
+    padding: 2rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+
+  .login-title {
+    color: #F5E6CC;
+    font-size: 1.5rem;
+    text-align: center;
+    margin-bottom: 0.5rem;
+  }
+
+  .login-desc {
+    color: #A08060;
+    text-align: center;
+    margin-bottom: 2rem;
+    font-size: 0.875rem;
+  }
+
+  .login-desc a {
+    color: #C4956A;
+    text-decoration: none;
+  }
+
+  .error-msg {
+    background: rgba(220, 38, 38, 0.1);
+    color: #ef4444;
+    padding: 0.75rem;
+    border-radius: 6px;
+    margin-bottom: 1.5rem;
+    font-size: 0.875rem;
+    text-align: center;
+  }
+
+  .login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  label {
+    color: #F5E6CC;
+    font-size: 0.875rem;
+  }
+
+  input {
+    background: #2C1E14;
+    border: 1px solid #4A3525;
+    color: #F5E6CC;
+    padding: 0.75rem;
+    border-radius: 6px;
+    font-family: inherit;
+    transition: border-color 0.2s ease;
+  }
+
+  input:focus {
+    outline: none;
+    border-color: #C4956A;
+  }
+
+  .submit-btn {
+    background: #C4956A;
+    color: #fff;
+    border: none;
+    padding: 0.875rem;
+    border-radius: 6px;
+    font-size: 1rem;
+    cursor: pointer;
+    font-family: inherit;
+    margin-top: 0.5rem;
+    transition: opacity 0.2s ease;
+  }
+
+  .submit-btn:hover {
+    opacity: 0.9;
+  }
+  
+  .submit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>

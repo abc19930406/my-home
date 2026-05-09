@@ -1,8 +1,32 @@
 ---
 import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
+import { supabase } from '../lib/supabase-client';
+import { linksData, type CardLink } from '../data/links';
+
+// 在「編譯期 (Build Time)」嘗試從 Supabase 抓取資料
+let finalCards = linksData; // 預設使用本地備份資料
+
+try {
+  const { data, error } = await supabase.from('cards').select('*').order('sort_order', { ascending: true });
+  
+  if (!error && data && data.length > 0) {
+    finalCards = data as CardLink[];
+  } else if (error) {
+    console.warn('⚠️ Build Warning: 無法從 Supabase 取得資料，將使用本地 links.ts 作為 fallback。錯誤原因:', error.message);
+  }
+} catch (err) {
+  console.warn('⚠️ Build Warning: Supabase 連線失敗，將使用本地 links.ts 作為 fallback。');
+}
+
+// 依照指定順序，將卡片分組
+const sectionOrder = ["知識與創作", "生活記錄", "工具"];
+const groupedCards = sectionOrder.map(section => ({
+  name: section,
+  cards: finalCards.filter(card => card.section === section)
+}));
 ---
 
 <Layout>
-	<Welcome />
+	<Welcome groupedCards={groupedCards} />
 </Layout>

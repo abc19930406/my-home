@@ -1,0 +1,364 @@
+---
+import Layout from '../layouts/Layout.astro';
+import CardSection from '../components/CardSection.astro';
+import { linksData } from '../data/links';
+
+// 依照指定順序，將卡片分組
+const sectionOrder = ["知識與創作", "生活記錄", "工具"];
+const groupedCards = sectionOrder.map(section => ({
+  name: section,
+  cards: linksData.filter(card => card.section === section)
+}));
+---
+
+<Layout>
+  <div class="page-wrapper" style="display: none;" id="admin-content">
+    <!-- ===== HEADER 頂部 ===== -->
+    <header class="header">
+      <div class="header-top">
+        <h1 class="site-name">The Corner Table</h1>
+        <div class="site-meta">
+          <span id="current-date"></span> ・ 台南 ・ 晴 29°C
+        </div>
+      </div>
+      <p class="site-subtitle">一個安靜角落，存放思緒與生活 (管理模式)</p>
+      
+      <div class="admin-actions">
+        <span>管理員登入中</span>
+        <button id="logout-btn" class="logout-btn">登出</button>
+      </div>
+      <hr class="header-divider" />
+    </header>
+
+    <!-- ===== MAIN 主體：三個卡片分區 ===== -->
+    <main class="main-content">
+      {groupedCards.map(({ name, cards }) => (
+        <CardSection section={name} cards={cards} isLoggedIn={true} />
+      ))}
+    </main>
+
+    <!-- ===== 現在狀態 ===== -->
+    <section class="status-section">
+      <h3 class="status-heading">— 現在狀態 —</h3>
+      <div class="status-card">
+        <div class="status-grid">
+          <div class="status-item">
+            <span class="status-label">📖 閱讀中</span>
+            <span class="status-value"><!-- 請手動填寫 --></span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">🧠 正在學</span>
+            <span class="status-value"><!-- 請手動填寫 --></span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">📍 最近去了</span>
+            <span class="status-value"><!-- 請手動填寫 --></span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">🎵 聽歌中</span>
+            <span class="status-value"><!-- 請手動填寫 --></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== FOOTER 底部 ===== -->
+    <footer class="footer">
+      <div class="footer-links">
+        <span class="footer-link">GitHub</span>
+        <span class="footer-sep">・</span>
+        <span class="footer-link">Email</span>
+      </div>
+      <p class="footer-copy">© 2026 The Corner Table</p>
+    </footer>
+  </div>
+
+  <!-- 編輯卡片的 Modal -->
+  <dialog id="edit-modal" class="edit-modal">
+    <div class="modal-content">
+      <h3>編輯卡片</h3>
+      <form id="edit-form">
+        <!-- 隱藏欄位，用於記錄當下正在編輯的是哪一張卡片的標題，作為查詢依據 -->
+        <input type="hidden" id="edit-original-title" />
+        
+        <div class="form-group">
+          <label for="edit-title">標題</label>
+          <input type="text" id="edit-title" name="title" required />
+        </div>
+        
+        <div class="form-group">
+          <label for="edit-desc">說明</label>
+          <input type="text" id="edit-desc" name="description" required />
+        </div>
+        
+        <div class="form-group">
+          <label for="edit-url">連結 URL</label>
+          <input type="text" id="edit-url" name="url" />
+        </div>
+        
+        <div class="modal-actions">
+          <button type="button" id="cancel-edit" class="btn-cancel">取消</button>
+          <button type="submit" id="save-edit" class="btn-save">儲存</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- 狀態提示元件 -->
+  <div id="toast" class="toast"></div>
+</Layout>
+
+<script>
+  import { supabase } from '../lib/supabase-client';
+
+  const adminContent = document.getElementById('admin-content');
+  const deployWebhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK || '';
+
+  // 1. 檢查權限
+  async function checkAuth() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      window.location.href = '/login'; // 未登入，踢回登入頁
+    } else {
+      if (adminContent) adminContent.style.display = 'block'; // 已登入，顯示畫面
+    }
+  }
+  checkAuth();
+
+  // 日期邏輯
+  const dateEl = document.getElementById('current-date');
+  if (dateEl) {
+    const now = new Date();
+    dateEl.textContent = now.toLocaleDateString('zh-TW', {
+      year: 'numeric', month: 'long', day: 'numeric', weekday: 'long',
+    });
+  }
+
+  // 登出邏輯
+  document.getElementById('logout-btn')?.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/';
+  });
+
+  // Modal 邏輯
+  const modal = document.getElementById('edit-modal') as HTMLDialogElement;
+  const editForm = document.getElementById('edit-form') as HTMLFormElement;
+  const cancelBtn = document.getElementById('cancel-edit');
+  const toast = document.getElementById('toast');
+  let currentCardElement: HTMLElement | null = null;
+  
+  function showToast(message: string) {
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 4000);
+  }
+
+  // 綁定所有編輯按鈕
+  document.querySelectorAll('.edit-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      const target = e.currentTarget as HTMLElement;
+      currentCardElement = target.closest('a.card') as HTMLElement;
+      
+      const originalTitle = target.dataset.title || '';
+      (document.getElementById('edit-original-title') as HTMLInputElement).value = originalTitle;
+      (document.getElementById('edit-title') as HTMLInputElement).value = originalTitle;
+      (document.getElementById('edit-desc') as HTMLInputElement).value = target.dataset.desc || '';
+      (document.getElementById('edit-url') as HTMLInputElement).value = target.dataset.url || '';
+      
+      modal.showModal();
+    });
+  });
+
+  cancelBtn?.addEventListener('click', () => modal.close());
+
+  // 提交表單更新 Supabase
+  editForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const submitBtn = document.getElementById('save-edit') as HTMLButtonElement;
+    submitBtn.disabled = true;
+    submitBtn.textContent = '儲存中...';
+
+    const originalTitle = (document.getElementById('edit-original-title') as HTMLInputElement).value;
+    const formData = new FormData(editForm);
+    const title = formData.get('title') as string;
+    const description = formData.get('description') as string;
+    const url = formData.get('url') as string;
+
+    try {
+      // 1. 寫入 Supabase (我們以原本的標題做為比對條件來更新)
+      const { error } = await supabase
+        .from('cards')
+        .update({ title, description, url })
+        .eq('title', originalTitle);
+
+      if (error) throw error;
+      
+      // 2. 觸發 Vercel Webhook 重新編譯首頁
+      fetch(deployWebhookUrl, { method: 'POST' }).catch(console.error);
+      
+      // 3. 立即更新本地畫面，讓使用者馬上看到修改結果
+      if (currentCardElement) {
+        const titleEl = currentCardElement.querySelector('.card-title');
+        const descEl = currentCardElement.querySelector('.card-desc');
+        const editBtnEl = currentCardElement.querySelector('.edit-btn') as HTMLElement;
+        
+        if (titleEl) titleEl.textContent = title;
+        if (descEl) descEl.textContent = description;
+        if (editBtnEl) {
+          editBtnEl.dataset.title = title;
+          editBtnEl.dataset.desc = description;
+          editBtnEl.dataset.url = url;
+        }
+        if (url) currentCardElement.setAttribute('href', url);
+      }
+
+      modal.close();
+      showToast('已儲存！新版本正在背景發布，約 1 分鐘後對訪客生效。');
+    } catch (err: any) {
+      console.error('Update failed:', err);
+      alert('更新失敗: ' + err.message);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = '儲存';
+    }
+  });
+</script>
+
+<style>
+  /* 沿用原本 Welcome 的樣式 */
+  @import "../styles/welcome.css";
+
+  .admin-actions {
+    margin-top: 1rem;
+    font-size: 0.875rem;
+    color: #A08060;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .logout-btn {
+    background: transparent;
+    border: 1px solid #4A3525;
+    color: #F5E6CC;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.2s;
+  }
+
+  .logout-btn:hover {
+    background: rgba(255,255,255,0.05);
+    border-color: #A08060;
+  }
+
+  /* Modal 樣式 */
+  .edit-modal {
+    background: transparent;
+    border: none;
+    margin: auto;
+    padding: 0;
+  }
+  
+  .edit-modal::backdrop {
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+  }
+
+  .modal-content {
+    background: #3A2818;
+    border: 1px solid #4A3525;
+    border-radius: 12px;
+    padding: 2rem;
+    width: 90vw;
+    max-width: 400px;
+    color: #F5E6CC;
+  }
+
+  .modal-content h3 {
+    margin-top: 0;
+    margin-bottom: 1.5rem;
+    color: #C4956A;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 1rem;
+  }
+
+  .form-group label {
+    font-size: 0.875rem;
+    margin-bottom: 0.25rem;
+    color: #A08060;
+  }
+
+  .form-group input {
+    background: #2C1E14;
+    border: 1px solid #4A3525;
+    color: #F5E6CC;
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-family: inherit;
+  }
+
+  .form-group input:focus {
+    outline: none;
+    border-color: #C4956A;
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1.5rem;
+  }
+
+  .btn-cancel {
+    background: transparent;
+    border: 1px solid #4A3525;
+    color: #A08060;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .btn-save {
+    background: #C4956A;
+    border: none;
+    color: #fff;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  .btn-save:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Toast 樣式 */
+  .toast {
+    position: fixed;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: #4A3525;
+    color: #F5E6CC;
+    padding: 1rem 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    font-size: 0.875rem;
+    opacity: 0;
+    transition: all 0.3s ease;
+    z-index: 9999;
+  }
+
+  .toast.show {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+</style>
