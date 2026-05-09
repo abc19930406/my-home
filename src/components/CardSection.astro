@@ -15,7 +15,7 @@ const { section, cards } = Astro.props;
 ---
 
 <!-- 分區標題 -->
-<section class="mb-12">
+<section class="card-section">
   <h2 class="section-title">— {section} —</h2>
 
   <!-- 卡片網格：桌面四欄、手機兩欄 -->
@@ -51,6 +51,11 @@ const { section, cards } = Astro.props;
 </section>
 
 <style>
+  /* === 分區容器 === */
+  .card-section {
+    margin-bottom: 3rem;
+  }
+
   /* === 分區標題 === */
   .section-title {
     text-align: center;
