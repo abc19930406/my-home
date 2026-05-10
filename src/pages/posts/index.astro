@@ -3,6 +3,7 @@ import Layout from '../../layouts/Layout.astro';
 import Starfield from '../../components/Starfield.astro';
 import ThemeToggle from '../../components/ThemeToggle.astro';
 import { supabase } from '../../lib/supabase-client';
+import '../../styles/posts.css';
 
 // 1. Build Time: 抓取 public 文章
 let publicPosts = [];
@@ -23,11 +24,14 @@ try {
 const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 ---
 
-<div class="halo-moon"></div>
 <Layout title="短文列表 | The Corner Table">
   <div class="bg-layer bg-day"></div>
   <div class="bg-layer bg-night"></div>
   <div class="halo-sun"></div>
+  <style is:global>
+  html, body { background-color: transparent !important; }
+</style>
+<div class="halo-moon"></div>
   <Starfield />
 
   <div class="notebook-container">
@@ -346,6 +350,4 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   fetchPrivatePosts();
 </script>
 
-<style>
-  @import "../../styles/posts.css";
-</style>
+
