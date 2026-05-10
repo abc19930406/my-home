@@ -1,0 +1,351 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Starfield from '../../components/Starfield.astro';
+import ThemeToggle from '../../components/ThemeToggle.astro';
+import { supabase } from '../../lib/supabase-client';
+
+// 1. Build Time: 抓取 public 文章
+let publicPosts = [];
+try {
+  const { data, error } = await supabase
+    .from('posts')
+    .select('*')
+    .eq('visibility', 'public')
+    .order('created_at', { ascending: false });
+    
+  if (!error && data) {
+    publicPosts = data;
+  }
+} catch (err) {
+  console.error('Build-time fetch failed:', err);
+}
+
+const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
+---
+
+<div class="halo-moon"></div>
+<Layout title="短文列表 | The Corner Table">
+  <div class="bg-layer bg-day"></div>
+  <div class="bg-layer bg-night"></div>
+  <div class="halo-sun"></div>
+  <Starfield />
+
+  <div class="notebook-container">
+    <div class="notebook-spine"></div>
+    <div class="notebook-page">
+        <div class="notebook-content">
+          <nav class="posts-nav">
+            <a href="/" class="nav-link">← 返回首頁</a>
+          </nav>
+
+          <h1 class="page-title">短文集</h1>
+
+          <!-- 管理員操作：新增短文按鈕 -->
+          <div class="admin-header-actions admin-only" style="display: none;">
+            <button id="open-add-form" class="btn-add-post">
+              <span>＋ 新增短文</span>
+            </button>
+          </div>
+
+          <!-- 管理員操作：新增短文表單 -->
+          <div id="add-post-section" class="add-post-section" style="display: none;">
+            <div class="admin-form-card">
+              <form id="post-form">
+                <input type="hidden" id="post-id" />
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>標題</label>
+                    <input type="text" id="post-title" required placeholder="標題..." />
+                  </div>
+                  <div class="form-group">
+                    <label>天氣與地點</label>
+                    <input type="text" id="post-weather" placeholder="晴・台南" />
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>正文 (Markdown)</label>
+                  <textarea id="post-content" rows="8" required placeholder="寫點什麼..."></textarea>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>權限</label>
+                    <select id="post-visibility">
+                      <option value="public">公開</option>
+                      <option value="friends">朋友</option>
+                      <option value="private">私人</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>照片 (選填)</label>
+                    <input type="file" id="post-image" accept="image/*" />
+                    <input type="hidden" id="post-image-url" />
+                  </div>
+                </div>
+                <div id="image-preview-container" style="display: none; margin-bottom: 1rem;">
+                  <img id="image-preview" src="" style="max-width: 100px; border-radius: 4px;" />
+                </div>
+                <div class="form-actions">
+                  <button type="button" id="close-add-form" class="btn-cancel">取消</button>
+                  <button type="submit" id="save-post-btn" class="btn-submit">發布文章</button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <div id="posts-container" class="post-list">
+            {publicPosts.map((post) => (
+              <div class="post-item" data-id={post.id}>
+                <div class="post-header">
+                  <div class={`visibility-dot dot-${post.visibility}`} title="公開"></div>
+                  <a href={`/posts/${post.id}`} class="post-title-link">{post.title}</a>
+                </div>
+                <div class="post-meta">
+                  {post.weather && <span>{post.weather} ・ </span>}
+                  <span>{new Date(post.created_at).toLocaleDateString('zh-TW')}</span>
+                  <span> ・ 閱讀約 {post.reading_time} 分鐘</span>
+                </div>
+                <p class="post-preview">{post.content.replace(/[*_#\[\]()]/g, '').substring(0, 80)}...</p>
+                
+                <!-- 管理員操作：編輯/刪除按鈕 -->
+                <div class="post-item-actions admin-only" style="display: none;">
+                  <button class="btn-inline-edit" data-post={JSON.stringify(post)}>編輯</button>
+                  <button class="btn-inline-delete" data-id={post.id}>刪除</button>
+                </div>
+              </div>
+            ))}
+            
+            {publicPosts.length === 0 && <p class="empty-state" id="empty-msg">尚無公開短文</p>}
+          </div>
+
+          <!-- 低調登入連結 -->
+          <div id="login-hint" class="login-hint">
+            <a href="/login" class="nav-link">登入</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ThemeToggle />
+    <div id="toast" class="toast"></div>
+  </Layout>
+
+<script define:vars={{ webhookUrl }}>
+  import { supabase } from '../../lib/supabase-client';
+
+  const deployWebhookUrl = webhookUrl;
+  const toast = document.getElementById('toast');
+
+  function showToast(message: string) {
+    if (!toast) return;
+    toast.textContent = message;
+    toast.setAttribute('style', [
+      'display: block',
+      'position: fixed',
+      'bottom: 20px',
+      'left: 50%',
+      'transform: translateX(-50%)',
+      'background: rgba(0,0,0,0.8)',
+      'color: #fff',
+      'padding: 8px 16px',
+      'border-radius: 20px',
+      'z-index: 1000'
+    ].join('; '));
+    setTimeout(() => { if (toast) toast.style.display = 'none'; }, 3000);
+  }
+
+  // 1. 處理主題初始化
+  const savedTheme = localStorage.getItem('tcr-theme') || 'day';
+  document.documentElement.classList.toggle('theme-night', savedTheme === 'night');
+  document.body.classList.add('posts-page');
+
+  // 2. 權限檢查：如果是管理員，顯示管理功能
+  async function checkAdmin() {
+    const { data: { session } } = await supabase.auth.getSession();
+    const loginHint = document.getElementById('login-hint');
+    
+    if (session) {
+      document.querySelectorAll('.admin-only').forEach(el => {
+        (el as HTMLElement).style.display = 'flex';
+      });
+      if (loginHint) loginHint.style.display = 'none';
+      return true;
+    }
+    if (loginHint) loginHint.style.display = 'block';
+    return false;
+  }
+
+  // 3. 處理表單邏輯
+  const openAddFormBtn = document.getElementById('open-add-form');
+  const closeAddFormBtn = document.getElementById('close-add-form');
+  const addPostSection = document.getElementById('add-post-section');
+  const postForm = document.getElementById('post-form') as HTMLFormElement;
+  const savePostBtn = document.getElementById('save-post-btn');
+  const postImageInput = document.getElementById('post-image') as HTMLInputElement;
+  const imagePreview = document.getElementById('image-preview') as HTMLImageElement;
+  const imagePreviewContainer = document.getElementById('image-preview-container');
+
+  openAddFormBtn?.addEventListener('click', () => {
+    if (addPostSection) addPostSection.style.display = 'block';
+    openAddFormBtn.style.display = 'none';
+  });
+
+  closeAddFormBtn?.addEventListener('click', () => {
+    resetForm();
+  });
+
+  function resetForm() {
+    if (addPostSection) addPostSection.style.display = 'none';
+    if (openAddFormBtn) openAddFormBtn.style.display = 'flex';
+    postForm.reset();
+    (document.getElementById('post-id') as HTMLInputElement).value = '';
+    (document.getElementById('post-image-url') as HTMLInputElement).value = '';
+    if (imagePreviewContainer) imagePreviewContainer.style.display = 'none';
+    if (savePostBtn) savePostBtn.textContent = '發布文章';
+  }
+
+  // 圖片上傳
+  postImageInput?.addEventListener('change', async (e) => {
+    const file = (e.target as HTMLInputElement).files?.[0];
+    if (!file) return;
+
+    const fileName = `${Math.random().toString(36).substring(2)}.${file.name.split('.').pop()}`;
+    const filePath = `post_images/${fileName}`;
+
+    const { data, error } = await supabase.storage.from('post_images').upload(filePath, file);
+    if (error) {
+      alert('上傳失敗');
+      return;
+    }
+
+    const { data: { publicUrl } } = supabase.storage.from('post_images').getPublicUrl(filePath);
+    (document.getElementById('post-image-url') as HTMLInputElement).value = publicUrl;
+    if (imagePreview) imagePreview.src = publicUrl;
+    if (imagePreviewContainer) imagePreviewContainer.style.display = 'block';
+    showToast('圖片已上傳');
+  });
+
+  // 提交表單
+  postForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (savePostBtn) (savePostBtn as HTMLButtonElement).disabled = true;
+
+    const id = (document.getElementById('post-id') as HTMLInputElement).value;
+    const title = (document.getElementById('post-title') as HTMLInputElement).value;
+    const content = (document.getElementById('post-content') as HTMLTextAreaElement).value;
+    const weather = (document.getElementById('post-weather') as HTMLInputElement).value;
+    const visibility = (document.getElementById('post-visibility') as HTMLSelectElement).value;
+    const image_url = (document.getElementById('post-image-url') as HTMLInputElement).value;
+    const reading_time = Math.max(1, Math.ceil(content.length / 300));
+
+    const postData = { title, content, weather, visibility, image_url, reading_time };
+
+    let error;
+    if (id) {
+      const { error: err } = await supabase.from('posts').update(postData).eq('id', id);
+      error = err;
+    } else {
+      const { error: err } = await supabase.from('posts').insert([postData]);
+      error = err;
+    }
+
+    if (error) {
+      alert('儲存失敗');
+    } else {
+      showToast('儲存成功，正在重新編譯...');
+      fetch(deployWebhookUrl, { method: 'POST' }).catch(() => {});
+      setTimeout(() => window.location.reload(), 1500);
+    }
+  });
+
+  // 列表按鈕事件
+  async function bindActions() {
+    const isAdmin = await checkAdmin();
+    if (!isAdmin) return;
+
+    document.querySelectorAll('.btn-inline-edit').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const post = JSON.parse((e.currentTarget as HTMLElement).dataset.post || '{}');
+        (document.getElementById('post-id') as HTMLInputElement).value = post.id;
+        (document.getElementById('post-title') as HTMLInputElement).value = post.title;
+        (document.getElementById('post-content') as HTMLTextAreaElement).value = post.content;
+        (document.getElementById('post-weather') as HTMLInputElement).value = post.weather || '';
+        (document.getElementById('post-visibility') as HTMLSelectElement).value = post.visibility;
+        (document.getElementById('post-image-url') as HTMLInputElement).value = post.image_url || '';
+        
+        if (post.image_url) {
+          if (imagePreview) imagePreview.src = post.image_url;
+          if (imagePreviewContainer) imagePreviewContainer.style.display = 'block';
+        }
+        
+        if (savePostBtn) savePostBtn.textContent = '更新文章';
+        if (addPostSection) addPostSection.style.display = 'block';
+        if (openAddFormBtn) openAddFormBtn.style.display = 'none';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+
+    document.querySelectorAll('.btn-inline-delete').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        if (!confirm('確定刪除？')) return;
+        const id = (e.currentTarget as HTMLElement).dataset.id;
+        const { error } = await supabase.from('posts').delete().eq('id', id);
+        if (!error) {
+          showToast('已刪除');
+          fetch(deployWebhookUrl, { method: 'POST' }).catch(() => {});
+          setTimeout(() => window.location.reload(), 1000);
+        }
+      });
+    });
+  }
+
+  // 4. Client Side: 抓取私密文章並顯示
+  async function fetchPrivatePosts() {
+    const { data: { session } } = await supabase.auth.getSession();
+    const isAdmin = !!session;
+
+    const { data, error } = await supabase
+      .from('posts')
+      .select('*')
+      .neq('visibility', 'public')
+      .order('created_at', { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      const container = document.getElementById('posts-container');
+      const emptyMsg = document.getElementById('empty-msg');
+      if (emptyMsg) emptyMsg.style.display = 'none';
+
+      data.forEach(post => {
+        if (document.querySelector(`[data-id="${post.id}"]`)) return;
+
+        const postHtml = `
+          <div class="post-item" data-id="${post.id}">
+            <div class="post-header">
+              <div class="visibility-dot dot-${post.visibility}" title="${post.visibility === 'friends' ? '朋友' : '私人'}"></div>
+              <a href="/posts/${post.id}" class="post-title-link">${post.title}</a>
+            </div>
+            <div class="post-meta">
+              ${post.weather ? `<span>${post.weather} ・ </span>` : ''}
+              <span>${new Date(post.created_at).toLocaleDateString('zh-TW')}</span>
+              <span> ・ 閱讀約 ${post.reading_time} 分鐘</span>
+            </div>
+            <p class="post-preview">${post.content.replace(/[*_#\[\]()]/g, '').substring(0, 80)}...</p>
+            ${isAdmin ? `
+              <div class="post-item-actions admin-only" style="display: flex;">
+                <button class="btn-inline-edit" data-post='${JSON.stringify(post).replace(/'/g, "&apos;")}'>編輯</button>
+                <button class="btn-inline-delete" data-id="${post.id}">刪除</button>
+              </div>
+            ` : ''}
+          </div>
+        `;
+        container?.insertAdjacentHTML('afterbegin', postHtml);
+      });
+    }
+    
+    bindActions();
+  }
+
+  fetchPrivatePosts();
+</script>
+
+<style>
+  @import "../../styles/posts.css";
+</style>

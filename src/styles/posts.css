@@ -1,0 +1,446 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;500&display=swap');
+
+/* =========================================
+   日夜間變數與全域設定
+========================================= */
+:root {
+  /* 白天模式變數 (預設) */
+  --nb-bg: rgba(248, 245, 235, 0.72);
+  --nb-border: rgba(255, 255, 255, 0.65);
+  --nb-spine: linear-gradient(90deg, #3a8ec8, #1a6ea8, #0e5e98);
+  --nb-text-title: #083a6a;
+  --nb-text-body: #1a4a78;
+  --nb-text-muted: #7ab0d8;
+  
+  --tag-public: #1e7850;
+  --tag-friends: #8a6414;
+  --tag-private: #8a3232;
+}
+
+html.theme-night {
+  /* 夜晚模式變數 */
+  --nb-bg: rgba(10, 20, 36, 0.8);
+  --nb-border: rgba(100, 150, 200, 0.18);
+  --nb-spine: linear-gradient(90deg, #1a3a5a, #0e2840, #0a1e30);
+  --nb-text-title: #c8e0f8;
+  --nb-text-body: #4a6a88;
+  --nb-text-muted: #2a4a6a;
+  
+  --tag-public: #5DCAA5;
+  --tag-friends: #EF9F27;
+  --tag-private: #F09595;
+}
+
+/* 強制覆蓋 Layout.astro 的背景色 */
+body.posts-page {
+  margin: 0;
+  min-height: 100vh;
+  font-family: 'Noto Serif TC', serif;
+  position: relative;
+  overflow-x: hidden;
+  background-color: transparent !important; /* 讓 .bg-layer 顯示出來 */
+  transition: background-color 1.8s ease;
+}
+
+/* =========================================
+   背景：日夜漸層與星月過渡
+========================================= */
+.bg-layer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: -10; /* 置於最底層 */
+  transition: opacity 1.8s ease;
+  pointer-events: none;
+}
+
+/* 白天背景與太陽 */
+.bg-day {
+  background: linear-gradient(180deg,
+    #d4eeff 0%, #a8d8f8 10%, #72bef0 22%,
+    #3ea8e8 36%, #1a90d8 50%, #0e7ac0 64%,
+    #0868a8 78%, #065490 90%, #044070 100%);
+  opacity: 1;
+}
+html.theme-night .bg-day { opacity: 0; }
+
+.halo-sun {
+  position: fixed;
+  top: 0; left: 50%;
+  transform: translateX(-50%);
+  width: 700px; height: 280px;
+  background:
+    radial-gradient(ellipse 180px 90px at 50% 0%, rgba(255,252,220,0.55) 0%, rgba(255,235,150,0.22) 40%, transparent 100%),
+    radial-gradient(ellipse 350px 160px at 50% 0%, rgba(255,220,100,0.18) 0%, rgba(255,200,80,0.06) 55%, transparent 100%),
+    radial-gradient(ellipse 600px 240px at 50% 0%, rgba(255,200,80,0.07) 0%, transparent 100%);
+  z-index: -1;
+  transition: opacity 1.8s ease;
+  pointer-events: none;
+}
+html.theme-night .halo-sun { opacity: 0; }
+
+/* 夜晚背景與月亮 */
+.bg-night {
+  background: linear-gradient(180deg,
+    #020b18 0%, #041220 15%, #061a2e 30%,
+    #08203a 48%, #0a2848 62%, #0c3058 75%,
+    #0e3868 88%, #103870 100%);
+  opacity: 0;
+}
+html.theme-night .bg-night { opacity: 1; }
+
+.halo-moon {
+  position: fixed;
+  top: -60px;
+  right: -60px;
+  width: 280px;
+  height: 280px;
+  background:
+    radial-gradient(ellipse 38px 38px at 64% 36%, rgba(240,232,200,0.7) 0%, rgba(220,205,160,0.35) 40%, transparent 70%),
+    radial-gradient(ellipse 90px 90px at 64% 36%, rgba(200,185,140,0.15) 0%, transparent 70%),
+    radial-gradient(ellipse 200px 200px at 64% 36%, rgba(180,165,120,0.05) 0%, transparent 80%);
+  background-color: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 1.8s ease;
+  pointer-events: none;
+  will-change: opacity;
+  transform: translateZ(0);
+}
+html.theme-night .halo-moon { opacity: 1; }
+
+/* =========================================
+   筆記本玻璃卡片介面
+========================================= */
+.notebook-container {
+  max-width: 800px;
+  margin: 60px auto;
+  position: relative;
+  display: flex;
+  border-radius: 4px 12px 12px 4px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+  z-index: 1;
+}
+
+.notebook-spine {
+  width: 40px;
+  flex-shrink: 0;
+  background: var(--nb-spine);
+  transition: background 1.8s ease;
+  position: relative;
+  z-index: 2;
+}
+
+.notebook-page {
+  flex-grow: 1;
+  position: relative;
+  min-height: 85vh;
+  padding: 50px 60px 80px 70px;
+  background-color: var(--nb-bg) !important; /* 確保使用半透明變數 */
+  border: 0.5px solid var(--nb-border);
+  border-left: none;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: background-color 1.8s ease, border-color 1.8s ease;
+  
+  /* 橫線格 */
+  background-image: repeating-linear-gradient(
+    transparent, 
+    transparent 31px, 
+    rgba(80,140,200,0.07) 31px, 
+    rgba(80,140,200,0.07) 32px
+  );
+  background-position: 0 40px;
+  background-attachment: local;
+}
+
+/* 左側紅色天頂線 */
+.notebook-page::before {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0; left: 40px;
+  width: 1px;
+  background: rgba(180,100,100,0.13);
+  z-index: 0;
+}
+
+.notebook-content {
+  position: relative;
+  z-index: 1; /* 確保內容在紅線上層 */
+}
+
+/* =========================================
+   排版與字體
+========================================= */
+.page-title {
+  color: var(--nb-text-title);
+  font-weight: 500;
+  font-size: 2rem;
+  margin-top: 0;
+  margin-bottom: 2rem;
+  transition: color 1.8s ease;
+  text-align: center;
+  letter-spacing: 0.1em;
+}
+
+/* 列表樣式 */
+.post-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.post-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.post-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.visibility-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-public { background-color: var(--tag-public); }
+.dot-friends { background-color: var(--tag-friends); }
+.dot-private { background-color: var(--tag-private); }
+
+.post-title-link {
+  color: var(--nb-text-title);
+  font-weight: 500;
+  font-size: 1.25rem;
+  text-decoration: none;
+  transition: opacity 0.3s, color 1.8s ease;
+}
+
+.post-title-link:hover {
+  opacity: 0.7;
+}
+
+.post-meta {
+  color: var(--nb-text-muted);
+  font-size: 0.85rem;
+  font-weight: 300;
+  padding-left: 18px; /* 對齊標題 */
+  transition: color 1.8s ease;
+}
+
+.post-preview {
+  color: var(--nb-text-body);
+  font-weight: 300;
+  line-height: 2.1;
+  font-size: 0.95rem;
+  padding-left: 18px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  transition: color 1.8s ease;
+}
+
+/* 無資料狀態 */
+.empty-state {
+  text-align: center;
+  color: var(--nb-text-muted);
+  font-weight: 300;
+  margin-top: 3rem;
+  font-style: italic;
+}
+
+/* 導航列 */
+.posts-nav {
+  margin-bottom: 3rem;
+  display: flex;
+  justify-content: space-between;
+}
+.nav-link {
+  color: var(--nb-text-muted);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: opacity 0.3s;
+}
+.nav-link:hover {
+  opacity: 0.7;
+}
+
+/* =========================================
+   前台管理功能 (登入後顯示)
+========================================= */
+.admin-only {
+  display: none;
+}
+
+.add-post-section {
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px dashed var(--nb-text-muted);
+  opacity: 0.9;
+}
+
+.admin-header-actions {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.btn-add-post {
+  background: rgba(255, 255, 255, 0.1);
+  border: 0.5px solid var(--nb-text-muted);
+  color: var(--nb-text-title);
+  padding: 8px 24px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+}
+
+.btn-add-post:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
+}
+
+.admin-form-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--nb-border);
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-top: 1rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  color: var(--nb-text-muted);
+}
+
+.form-group input, 
+.form-group textarea, 
+.form-group select {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--nb-border);
+  color: var(--nb-text-body);
+  padding: 0.6rem;
+  border-radius: 4px;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.form-group input:focus, 
+.form-group textarea:focus {
+  outline: none;
+  border-color: var(--nb-text-muted);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.btn-submit {
+  background: var(--nb-text-title);
+  color: var(--nb-bg);
+  border: none;
+  padding: 8px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.btn-cancel {
+  background: transparent;
+  border: 1px solid var(--nb-text-muted);
+  color: var(--nb-text-muted);
+  padding: 8px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* 列表項目的管理按鈕 */
+.post-item-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 0.5rem;
+  padding-left: 18px;
+}
+
+.btn-inline-edit, .btn-inline-delete {
+  background: transparent;
+  border: none;
+  color: var(--nb-text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.btn-inline-edit:hover, .btn-inline-delete:hover {
+  opacity: 1;
+}
+
+.btn-inline-delete {
+  color: var(--tag-private);
+}
+
+.inline-edit-container {
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 8px;
+  border-left: 3px solid var(--nb-text-muted);
+}
+
+.login-hint {
+  text-align: center;
+  margin-top: 4rem;
+  margin-bottom: 2rem;
+  opacity: 0.5;
+  transition: opacity 0.3s;
+}
+
+.login-hint:hover {
+  opacity: 1;
+}
+
+.login-hint .nav-link {
+  font-size: 11px;
+  color: var(--nb-text-muted);
+  text-decoration: none;
+  letter-spacing: 0.1em;
+}

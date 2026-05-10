@@ -1,0 +1,68 @@
+<button id="theme-toggle" class="theme-toggle" aria-label="切換日夜模式">
+  <span class="mode-text">切換夜晚模式</span>
+  <span class="mode-icon">🌙</span>
+</button>
+
+<script>
+  const THEME_KEY = 'tcr-theme';
+  const html = document.documentElement;
+  const toggleBtn = document.getElementById('theme-toggle');
+  const modeText = toggleBtn?.querySelector('.mode-text');
+  const modeIcon = toggleBtn?.querySelector('.mode-icon');
+
+  function updateToggleUI(theme: string) {
+    if (!modeText || !modeIcon) return;
+    if (theme === 'night') {
+      modeText.textContent = '切換白天模式';
+      modeIcon.textContent = '☀️';
+    } else {
+      modeText.textContent = '切換夜晚模式';
+      modeIcon.textContent = '🌙';
+    }
+  }
+
+  // 1. 初始化主題
+  const savedTheme = localStorage.getItem(THEME_KEY) || 'day';
+  html.classList.toggle('theme-night', savedTheme === 'night');
+  updateToggleUI(savedTheme);
+
+  // 2. 點擊切換邏輯
+  toggleBtn?.addEventListener('click', () => {
+    const isNight = html.classList.toggle('theme-night');
+    const newTheme = isNight ? 'night' : 'day';
+    localStorage.setItem(THEME_KEY, newTheme);
+    updateToggleUI(newTheme);
+  });
+</script>
+
+<style>
+  .theme-toggle {
+    background: rgba(255, 255, 255, 0.15);
+    border: 0.5px solid rgba(255, 255, 255, 0.35);
+    color: rgba(255, 255, 255, 0.92);
+    border-radius: 30px;
+    padding: 8px 20px;
+    cursor: pointer;
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition: all 0.3s ease;
+    font-size: 0.9rem;
+    font-family: inherit;
+  }
+
+  .theme-toggle:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-2px);
+  }
+
+  .theme-toggle:active {
+    transform: translateY(0);
+  }
+</style>

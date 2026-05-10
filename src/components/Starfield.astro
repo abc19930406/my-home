@@ -1,0 +1,55 @@
+<div id="starfield" class="starfield"></div>
+
+<script>
+  function createStars() {
+    const starfield = document.getElementById('starfield');
+    if (!starfield) return;
+    
+    // 清空現有星星（避免重複呼叫時累積）
+    starfield.innerHTML = '';
+    
+    const starCount = 55;
+    for (let i = 0; i < starCount; i++) {
+      const star = document.createElement('div');
+      star.className = 'star';
+      
+      const size = 0.6 + Math.random() * 1.8;
+      const opacity = 0.15 + Math.random() * 0.6;
+      const left = Math.random() * 100;
+      const top = Math.random() * 65; // 分佈在畫面上半部 65%
+      
+      star.style.cssText = `
+        position: absolute;
+        width: ${size}px;
+        height: ${size}px;
+        background: white;
+        border-radius: 50%;
+        opacity: ${opacity};
+        left: ${left}%;
+        top: ${top}%;
+      `;
+      starfield.appendChild(star);
+    }
+  }
+
+  // 初始化星星
+  createStars();
+</script>
+
+<style>
+  .starfield {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -5; /* 置於背景漸層之上，但日記本之下 */
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 1.8s ease;
+  }
+
+  :global(html.theme-night) .starfield {
+    opacity: 1;
+  }
+</style>
