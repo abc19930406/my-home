@@ -29,7 +29,7 @@ export const linksData: CardLink[] = [
     title: "短文",
     icon: "feather",
     description: "隨筆・觀察・不成文的想法",
-    url: ""
+    url: "/posts"
   },
   {
     section: "知識與創作",
