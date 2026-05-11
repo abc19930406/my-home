@@ -4,6 +4,7 @@ import Starfield from '../../components/Starfield.astro';
 import ThemeToggle from '../../components/ThemeToggle.astro';
 import { supabase } from '../../lib/supabase-client';
 import { marked } from 'marked';
+import '../../styles/posts.css';
 
 export async function getStaticPaths() {
   // Build Time: 抓取所有文章（包含私有，但我們只會靜態渲染公開內容）
@@ -44,7 +45,7 @@ try {
     }
   }
 } catch (err) {
-  console.error('Fetch post failed:', err);
+  console.warn('⚠️ Build Warning: 單篇短文 Supabase 連線失敗。');
 }
 
 const visibilityMap = {
@@ -61,7 +62,7 @@ const visibilityMap = {
   <div class="halo-moon"></div>
   <Starfield />
 
-  <body class="posts-body">
+  <div class="posts-body">
     <div class="notebook-container">
       <div class="notebook-spine"></div>
       <div class="notebook-page">
@@ -111,7 +112,7 @@ const visibilityMap = {
     </div>
 
     <ThemeToggle />
-  </body>
+  </div>
 </Layout>
 
 <script is:inline define:vars={{ postId: id, initialVisibility: post?.visibility }}>
@@ -156,7 +157,6 @@ const visibilityMap = {
 </script>
 
 <style>
-  @import "../../styles/posts.css";
 
   .nav-page-num {
     color: var(--nb-text-muted);

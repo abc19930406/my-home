@@ -18,7 +18,7 @@ try {
     publicPosts = data;
   }
 } catch (err) {
-  console.error('Build-time fetch failed:', err);
+  console.warn('⚠️ Build Warning: 短文列表 Supabase 連線失敗，將顯示空列表。');
 }
 
 const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
@@ -361,5 +361,3 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   // 保留初始呼叫作為備用
   fetchPrivatePosts();
 </script>
-
-
