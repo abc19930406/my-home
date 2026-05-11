@@ -133,9 +133,13 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   </Layout>
 
 <script define:vars={{ webhookUrl }}>
+  window.__WEBHOOK_URL__ = webhookUrl;
+</script>
+
+<script>
   import { supabase } from '../../lib/supabase-client';
 
-  const deployWebhookUrl = webhookUrl;
+  const deployWebhookUrl = (window as any).__WEBHOOK_URL__ || '';
   const toast = document.getElementById('toast');
 
   function showToast(message: string) {
