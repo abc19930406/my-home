@@ -347,6 +347,14 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     bindActions();
   }
 
+  // 監聽 Auth 狀態變化，確保登入跳轉後能即時反應
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+      fetchPrivatePosts();
+    }
+  });
+
+  // 保留初始呼叫作為備用
   fetchPrivatePosts();
 </script>
 
