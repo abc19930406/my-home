@@ -444,3 +444,156 @@ html.theme-night .halo-moon { opacity: 1; }
   text-decoration: none;
   letter-spacing: 0.1em;
 }
+
+/* =========================================
+   多圖上傳與相簿展示
+========================================= */
+.image-previews-grid {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 10px 5px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--nb-text-muted) transparent;
+}
+
+.preview-item {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.preview-item img {
+  width: 120px;
+  height: 90px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--nb-border);
+}
+
+.btn-remove-img {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: var(--tag-private);
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  transition: transform 0.2s;
+}
+
+.btn-remove-img:hover {
+  transform: scale(1.1);
+}
+
+/* 單篇文章內的幻燈片相簿 (Instagram 風格) */
+.post-slideshow {
+  max-width: 100%;
+  position: relative;
+  margin: 1.5rem auto;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.03);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.slide {
+  display: none;
+  width: 100%;
+  animation: fade 0.5s;
+}
+
+@keyframes fade {
+  from { opacity: 0.4; } 
+  to { opacity: 1; }
+}
+
+.slide img {
+  max-width: 70%;
+  max-height: 400px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+  border-radius: 4px;
+}
+
+/* 箭頭按鈕 */
+.ss-prev, .ss-next {
+  cursor: pointer;
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 18px;
+  transition: 0.3s ease;
+  border-radius: 50%;
+  user-select: none;
+  background-color: rgba(58, 142, 200, 0.4); /* 使用日記本藍色系 */
+  border: none;
+  z-index: 10;
+}
+
+.ss-next { right: 10px; }
+.ss-prev { left: 10px; }
+
+.ss-prev:hover, .ss-next:hover {
+  background-color: rgba(58, 142, 200, 0.8);
+}
+
+/* 圓點指示器 */
+.ss-dots-container {
+  text-align: center;
+  padding: 10px;
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  background: linear-gradient(transparent, rgba(0,0,0,0.1));
+}
+
+.ss-dot {
+  cursor: pointer;
+  height: 8px;
+  width: 8px;
+  margin: 0 4px;
+  background-color: transparent;
+  border: 1px solid rgba(58, 142, 200, 0.6);
+  border-radius: 50%;
+  display: inline-block;
+  transition: all 0.3s ease;
+}
+
+.ss-dot.active, .ss-dot:hover {
+  background-color: rgba(58, 142, 200, 0.8);
+  transform: scale(1.2);
+}
+
+.post-main-image {
+  max-width: 70%;
+  max-height: 400px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 6px;
+  display: block;
+  margin: 0 auto;
+}
+
+

@@ -80,13 +80,13 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
                     </select>
                   </div>
                   <div class="form-group">
-                    <label>照片 (選填)</label>
-                    <input type="file" id="post-image" accept="image/*" />
-                    <input type="hidden" id="post-image-url" />
+                    <label>照片 (選填，支援多張)</label>
+                    <input type="file" id="post-image" accept="image/*" multiple />
+                    <input type="hidden" id="post-image-urls" />
                   </div>
                 </div>
-                <div id="image-preview-container" style="display: none; margin-bottom: 1rem;">
-                  <img id="image-preview" src="" style="max-width: 100px; border-radius: 4px;" />
+                <div id="image-previews-container" class="image-previews-grid" style="display: none; margin-bottom: 1rem;">
+                  <!-- JS 動態插入預覽圖 -->
                 </div>
                 <div class="form-actions">
                   <button type="button" id="close-add-form" class="btn-cancel">取消</button>
@@ -187,9 +187,8 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   const addPostSection = document.getElementById('add-post-section');
   const postForm = document.getElementById('post-form') as HTMLFormElement;
   const savePostBtn = document.getElementById('save-post-btn');
+  const imagePreviewContainer = document.getElementById('image-previews-container');
   const postImageInput = document.getElementById('post-image') as HTMLInputElement;
-  const imagePreview = document.getElementById('image-preview') as HTMLImageElement;
-  const imagePreviewContainer = document.getElementById('image-preview-container');
 
   openAddFormBtn?.addEventListener('click', () => {
     if (addPostSection) addPostSection.style.display = 'block';
@@ -205,30 +204,60 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     if (openAddFormBtn) openAddFormBtn.style.display = 'flex';
     postForm.reset();
     (document.getElementById('post-id') as HTMLInputElement).value = '';
-    (document.getElementById('post-image-url') as HTMLInputElement).value = '';
-    if (imagePreviewContainer) imagePreviewContainer.style.display = 'none';
+    currentImageUrls = [];
+    renderPreviews();
     if (savePostBtn) savePostBtn.textContent = '發布文章';
+  }
+
+  let currentImageUrls: string[] = [];
+
+  function renderPreviews() {
+    if (!imagePreviewContainer) return;
+    if (currentImageUrls.length > 0) {
+      imagePreviewContainer.style.display = 'grid';
+      imagePreviewContainer.innerHTML = currentImageUrls.map((url, index) => `
+        <div class="preview-item">
+          <img src="${url}" />
+          <button type="button" class="btn-remove-img" data-index="${index}">×</button>
+        </div>
+      `).join('');
+
+      // 綁定移除按鈕
+      imagePreviewContainer.querySelectorAll('.btn-remove-img').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const index = parseInt((e.currentTarget as HTMLElement).dataset.index || '0');
+          currentImageUrls.splice(index, 1);
+          renderPreviews();
+        });
+      });
+    } else {
+      imagePreviewContainer.style.display = 'none';
+    }
   }
 
   // 圖片上傳
   postImageInput?.addEventListener('change', async (e) => {
-    const file = (e.target as HTMLInputElement).files?.[0];
-    if (!file) return;
+    const files = (e.target as HTMLInputElement).files;
+    if (!files || files.length === 0) return;
 
-    const fileName = `${Math.random().toString(36).substring(2)}.${file.name.split('.').pop()}`;
-    const filePath = `post_images/${fileName}`;
+    showToast(`正在上傳 ${files.length} 張圖片...`);
+    
+    for (const file of Array.from(files)) {
+      const fileName = `${Math.random().toString(36).substring(2)}.${file.name.split('.').pop()}`;
+      const filePath = `post_images/${fileName}`;
 
-    const { data, error } = await supabase.storage.from('post_images').upload(filePath, file);
-    if (error) {
-      alert('上傳失敗');
-      return;
+      const { data, error } = await supabase.storage.from('post_images').upload(filePath, file);
+      if (error) {
+        alert('上傳失敗');
+        continue;
+      }
+
+      const { data: { publicUrl } } = supabase.storage.from('post_images').getPublicUrl(filePath);
+      currentImageUrls.push(publicUrl);
     }
 
-    const { data: { publicUrl } } = supabase.storage.from('post_images').getPublicUrl(filePath);
-    (document.getElementById('post-image-url') as HTMLInputElement).value = publicUrl;
-    if (imagePreview) imagePreview.src = publicUrl;
-    if (imagePreviewContainer) imagePreviewContainer.style.display = 'block';
-    showToast('圖片已上傳');
+    renderPreviews();
+    showToast('圖片上傳完成');
   });
 
   // 提交表單
@@ -241,10 +270,16 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     const content = (document.getElementById('post-content') as HTMLTextAreaElement).value;
     const weather = (document.getElementById('post-weather') as HTMLInputElement).value;
     const visibility = (document.getElementById('post-visibility') as HTMLSelectElement).value;
-    const image_url = (document.getElementById('post-image-url') as HTMLInputElement).value;
     const reading_time = Math.max(1, Math.ceil(content.length / 300));
 
-    const postData = { title, content, weather, visibility, image_url, reading_time };
+    const postData: any = { title, content, weather, visibility, reading_time };
+    
+    // 優先使用多圖陣列
+    postData.image_urls = currentImageUrls;
+    // 為了向下相容，將第一張圖存入單數欄位
+    if (currentImageUrls.length > 0) {
+      postData.image_url = currentImageUrls[0];
+    }
 
     let error;
     if (id) {
@@ -264,45 +299,46 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     }
   });
 
-  // 列表按鈕事件
+  // 列表按鈕事件 (採用事件委派，解決重複詢問問題)
+  const postsContainer = document.getElementById('posts-container');
+  postsContainer?.addEventListener('click', async (e) => {
+    const target = e.target as HTMLElement;
+    
+    // 編輯功能
+    if (target.classList.contains('btn-inline-edit')) {
+      const post = JSON.parse(target.dataset.post || '{}');
+      (document.getElementById('post-id') as HTMLInputElement).value = post.id;
+      (document.getElementById('post-title') as HTMLInputElement).value = post.title;
+      (document.getElementById('post-content') as HTMLTextAreaElement).value = post.content;
+      (document.getElementById('post-weather') as HTMLInputElement).value = post.weather || '';
+      (document.getElementById('post-visibility') as HTMLSelectElement).value = post.visibility;
+      
+      // 載入圖片陣列
+      currentImageUrls = post.image_urls || (post.image_url ? [post.image_url] : []);
+      renderPreviews();
+      
+      if (savePostBtn) savePostBtn.textContent = '更新文章';
+      if (addPostSection) addPostSection.style.display = 'block';
+      if (openAddFormBtn) openAddFormBtn.style.display = 'none';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+    
+    // 刪除功能
+    if (target.classList.contains('btn-inline-delete')) {
+      if (!confirm('確定刪除？')) return;
+      const id = target.dataset.id;
+      const { error } = await supabase.from('posts').delete().eq('id', id);
+      if (!error) {
+        showToast('已刪除');
+        fetch(deployWebhookUrl, { method: 'POST' }).catch(() => {});
+        setTimeout(() => window.location.reload(), 1000);
+      }
+    }
+  });
+
   async function bindActions() {
-    const isAdmin = await checkAdmin();
-    if (!isAdmin) return;
-
-    document.querySelectorAll('.btn-inline-edit').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const post = JSON.parse((e.currentTarget as HTMLElement).dataset.post || '{}');
-        (document.getElementById('post-id') as HTMLInputElement).value = post.id;
-        (document.getElementById('post-title') as HTMLInputElement).value = post.title;
-        (document.getElementById('post-content') as HTMLTextAreaElement).value = post.content;
-        (document.getElementById('post-weather') as HTMLInputElement).value = post.weather || '';
-        (document.getElementById('post-visibility') as HTMLSelectElement).value = post.visibility;
-        (document.getElementById('post-image-url') as HTMLInputElement).value = post.image_url || '';
-        
-        if (post.image_url) {
-          if (imagePreview) imagePreview.src = post.image_url;
-          if (imagePreviewContainer) imagePreviewContainer.style.display = 'block';
-        }
-        
-        if (savePostBtn) savePostBtn.textContent = '更新文章';
-        if (addPostSection) addPostSection.style.display = 'block';
-        if (openAddFormBtn) openAddFormBtn.style.display = 'none';
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      });
-    });
-
-    document.querySelectorAll('.btn-inline-delete').forEach(btn => {
-      btn.addEventListener('click', async (e) => {
-        if (!confirm('確定刪除？')) return;
-        const id = (e.currentTarget as HTMLElement).dataset.id;
-        const { error } = await supabase.from('posts').delete().eq('id', id);
-        if (!error) {
-          showToast('已刪除');
-          fetch(deployWebhookUrl, { method: 'POST' }).catch(() => {});
-          setTimeout(() => window.location.reload(), 1000);
-        }
-      });
-    });
+    await checkAdmin();
+    // 事件已委派至 postsContainer，此處僅需處理權限顯示
   }
 
   // 4. Client Side: 抓取私密文章並顯示
