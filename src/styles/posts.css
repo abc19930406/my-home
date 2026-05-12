@@ -635,17 +635,27 @@ html.theme-night .halo-moon { opacity: 1; }
 
 /* 文章內容行距調整 */
 .post-detail-content p,
-.single-body p {
-  margin-bottom: 0.4rem;
-}
+
 
 .post-detail-content,
+
+
+
+
+
+.scene.day 
+.scene.night 
+
 .single-body {
-  line-height: 1.7;
+  font-size: 14px;
+  line-height: 1.6;
+  font-family: 'Noto Serif TC', var(--font-serif), serif;
+  transition: color 1.8s ease;
 }
-
-
-.single-body { font-size: 13px; line-height: 1.0; font-family: 'Noto Serif TC', var(--font-serif), serif; transition: color 1.8s ease; }
-.single-body p { margin-bottom: 0.5em; line-height: 1.0; }
+.single-body p {
+  margin-top: 0;
+  margin-bottom: 0.8em;
+  line-height: 1.6;
+}
 .scene.day .single-body { color: #1a4a78; }
 .scene.night .single-body { color: #4a6a88; }
