@@ -632,3 +632,15 @@ html.theme-night .halo-moon { opacity: 1; }
     padding: 6px 14px;
   }
 }
+
+/* 文章內容行距調整 */
+.post-detail-content p,
+.single-body p {
+  margin-bottom: 0.4rem;
+}
+
+.post-detail-content,
+.single-body {
+  line-height: 1.7;
+}
+

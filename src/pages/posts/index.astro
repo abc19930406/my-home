@@ -282,22 +282,78 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     }
 
     let error;
+    let newPost: any = null;
+
     if (id) {
       const { error: err } = await supabase.from('posts').update(postData).eq('id', id);
       error = err;
     } else {
-      const { error: err } = await supabase.from('posts').insert([postData]);
+      const { data, error: err } = await supabase.from('posts').insert([postData]).select().single();
       error = err;
+      newPost = data;
     }
 
     if (error) {
       alert('儲存失敗');
+      if (savePostBtn) (savePostBtn as HTMLButtonElement).disabled = false;
     } else {
-      showToast('儲存成功，正在重新編譯...');
+      // 靜默呼叫 Webhook
       fetch(deployWebhookUrl, { method: 'POST' }).catch(() => {});
-      setTimeout(() => window.location.reload(), 1500);
+
+      if (id) {
+        // 更新 UI
+        const item = document.querySelector(`.post-item[data-id="${id}"]`);
+        if (item) {
+          const postToUpdate = { id, ...postData, created_at: (item as any).dataset.createdAt || new Date().toISOString() };
+          item.querySelector('.post-title-link')!.textContent = title;
+          item.querySelector('.post-meta')!.innerHTML = `
+            ${weather ? `<span>${weather} ・ </span>` : ''}
+            <span>${new Date(postToUpdate.created_at).toLocaleDateString('zh-TW')}</span>
+            <span> ・ 閱讀約 ${reading_time} 分鐘</span>
+          `;
+          item.querySelector('.post-preview')!.textContent = content.replace(/[*_#\[\]()]/g, '').substring(0, 80) + '...';
+          const editBtn = item.querySelector('.btn-inline-edit') as HTMLElement;
+          editBtn.dataset.post = JSON.stringify(postToUpdate);
+        }
+        showToast('已更新');
+      } else if (newPost) {
+        // 新增 UI
+        const { data: { session } } = await supabase.auth.getSession();
+        const html = createPostHtml(newPost, !!session);
+        const container = document.getElementById('posts-container');
+        const emptyMsg = document.getElementById('empty-msg');
+        if (emptyMsg) emptyMsg.style.display = 'none';
+        container?.insertAdjacentHTML('afterbegin', html);
+        showToast('已發布');
+      }
+      
+      resetForm();
     }
   });
+
+  // 輔助函數：生成文章 HTML
+  function createPostHtml(post: any, isAdmin: boolean) {
+    return `
+      <div class="post-item" data-id="${post.id}" data-created-at="${post.created_at}">
+        <div class="post-header">
+          <div class="visibility-dot dot-${post.visibility}" title="${post.visibility === 'public' ? '公開' : post.visibility === 'friends' ? '朋友' : '私人'}"></div>
+          <a href="/posts/${post.id}" class="post-title-link">${post.title}</a>
+        </div>
+        <div class="post-meta">
+          ${post.weather ? `<span>${post.weather} ・ </span>` : ''}
+          <span>${new Date(post.created_at).toLocaleDateString('zh-TW')}</span>
+          <span> ・ 閱讀約 ${post.reading_time} 分鐘</span>
+        </div>
+        <p class="post-preview">${post.content.replace(/[*_#\[\]()]/g, '').substring(0, 80)}...</p>
+        ${isAdmin ? `
+          <div class="post-item-actions admin-only" style="display: flex;">
+            <button class="btn-inline-edit" data-post='${JSON.stringify(post).replace(/'/g, "&apos;")}'>編輯</button>
+            <button class="btn-inline-delete" data-id="${post.id}">刪除</button>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  }
 
   // 列表按鈕事件 (採用事件委派，解決重複詢問問題)
   const postsContainer = document.getElementById('posts-container');
@@ -331,7 +387,8 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       if (!error) {
         showToast('已刪除');
         fetch(deployWebhookUrl, { method: 'POST' }).catch(() => {});
-        setTimeout(() => window.location.reload(), 1000);
+        const item = target.closest('.post-item');
+        item?.remove();
       }
     }
   });
@@ -359,27 +416,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 
       data.forEach(post => {
         if (document.querySelector(`[data-id="${post.id}"]`)) return;
-
-        const postHtml = `
-          <div class="post-item" data-id="${post.id}">
-            <div class="post-header">
-              <div class="visibility-dot dot-${post.visibility}" title="${post.visibility === 'friends' ? '朋友' : '私人'}"></div>
-              <a href="/posts/${post.id}" class="post-title-link">${post.title}</a>
-            </div>
-            <div class="post-meta">
-              ${post.weather ? `<span>${post.weather} ・ </span>` : ''}
-              <span>${new Date(post.created_at).toLocaleDateString('zh-TW')}</span>
-              <span> ・ 閱讀約 ${post.reading_time} 分鐘</span>
-            </div>
-            <p class="post-preview">${post.content.replace(/[*_#\[\]()]/g, '').substring(0, 80)}...</p>
-            ${isAdmin ? `
-              <div class="post-item-actions admin-only" style="display: flex;">
-                <button class="btn-inline-edit" data-post='${JSON.stringify(post).replace(/'/g, "&apos;")}'>編輯</button>
-                <button class="btn-inline-delete" data-id="${post.id}">刪除</button>
-              </div>
-            ` : ''}
-          </div>
-        `;
+        const postHtml = createPostHtml(post, isAdmin);
         container?.insertAdjacentHTML('afterbegin', postHtml);
       });
     }
