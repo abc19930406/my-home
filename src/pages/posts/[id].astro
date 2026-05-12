@@ -45,7 +45,7 @@ try {
   if (!error && data) {
     if (data.visibility === 'public') {
       post = data;
-      htmlContent = await marked.parse(data.content || '');
+      htmlContent = await marked.parse((data.content || '').replace(/\n/g, '\n\n'));
     } else {
       // 非公開文章，僅保留 meta 資料，內容留空等客戶端抓取
       post = { ...data, content: '' }; 
@@ -177,7 +177,8 @@ const visibilityMap = {
       .single();
 
     if (!error && data && postBody) {
-      const html = await marked.parse(data.content);
+      const contentWithBreaks = data.content.replace(/\n/g, '\n\n');
+      const html = await marked.parse(contentWithBreaks);
       postBody.innerHTML = `<div>${html}</div>`;
       initSlideshow();
     } else if (error) {
