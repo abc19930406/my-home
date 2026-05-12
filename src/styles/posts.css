@@ -597,3 +597,34 @@ html.theme-night .halo-moon { opacity: 1; }
 }
 
 
+
+@media (max-width: 768px) {
+  .notebook-container {
+    margin: 20px auto;
+    border-radius: 2px 8px 8px 2px;
+  }
+  .notebook-spine {
+    width: 6px;
+  }
+  .notebook-page {
+    padding: 30px 20px 50px 24px;
+    background-position: 0 30px;
+  }
+  .notebook-page::before {
+    left: 24px;
+  }
+  .page-title {
+    font-size: 1.5rem;
+    margin-bottom: 1.2rem;
+  }
+  .post-title-link {
+    font-size: 1rem;
+  }
+  .post-preview {
+    font-size: 0.85rem;
+  }
+  .btn-add-post {
+    font-size: 12px;
+    padding: 6px 14px;
+  }
+}
