@@ -43,7 +43,7 @@ export const linksData: CardLink[] = [
     title: "語錄收藏",
     icon: "quote",
     description: "喜歡的句子・值得記住的話",
-    url: ""
+    url: "/quotes"
   },
 
   // === 生活記錄 ===

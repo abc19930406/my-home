@@ -1,0 +1,415 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import ThemeToggle from '../../components/ThemeToggle.astro';
+import { supabase } from '../../lib/supabase-client';
+import '../../styles/quotes.css';
+
+// 1. Build Time: 抓取 public 語錄
+let publicQuotes = [];
+try {
+  const { data, error } = await supabase
+    .from('quotes')
+    .select('*')
+    .eq('visibility', 'public')
+    .order('created_at', { ascending: false });
+    
+  if (!error && data) {
+    publicQuotes = data;
+  }
+} catch (err) {
+  console.warn('⚠️ Build Warning: 語錄列表 Supabase 連線失敗。');
+}
+
+const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
+---
+
+<Layout title="語錄收藏 | The Corner Table">
+  <!-- 全域背景覆蓋 -->
+  <style is:global>
+    html, body { background-color: transparent !important; }
+  </style>
+
+  <!-- SVG 紙張濾鏡定義 -->
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <filter id="paper" x="-5%" y="-5%" width="110%" height="110%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.65 0.75" numOctaves="4" seed="3" result="noise"/>
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="2.5" xChannelSelector="R" yChannelSelector="G" result="displaced"/>
+        <feColorMatrix in="displaced" type="saturate" values="0.95" result="desat"/>
+        <feBlend in="SourceGraphic" in2="desat" mode="multiply"/>
+      </filter>
+      <filter id="paper-light" x="-5%" y="-5%" width="110%" height="110%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.9 0.85" numOctaves="3" seed="7" result="noise"/>
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+    </defs>
+  </svg>
+
+  <div class="quotes-body">
+    <div class="quotes-container">
+      <header class="quotes-header">
+        <a href="/" class="nav-back">← Back</a>
+        <h1 class="page-title">語 錄</h1>
+        <p class="page-subtitle">句子、想法、與值得記住的話</p>
+      </header>
+
+      <!-- 管理員操作：新增語錄按鈕 -->
+      <div class="admin-actions admin-only" style="display: none;">
+        <button id="open-add-quote" class="btn-add-quote">
+          新增<br/>語錄
+        </button>
+      </div>
+
+      <!-- 新增/編輯表單 -->
+      <div id="quote-form-section" class="quote-form-section" style="display: none;">
+        <form id="quote-form">
+          <input type="hidden" id="quote-id" />
+          <div class="form-group">
+            <label>語錄內容</label>
+            <textarea id="quote-content" rows="4" required placeholder="在此輸入令人動容的句子..."></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>來源 (書名/電影/作者)</label>
+              <input type="text" id="quote-source" placeholder="例如：太宰治《人間失格》" />
+            </div>
+            <div class="form-group">
+              <label>類型</label>
+              <select id="quote-source-type">
+                <option value="book">書籍</option>
+                <option value="film">電影</option>
+                <option value="self">自己</option>
+                <option value="other">其他</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>分類標籤</label>
+              <input type="text" id="quote-category" placeholder="例如：成長、孤獨" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>權限</label>
+              <select id="quote-visibility">
+                <option value="public">公開</option>
+                <option value="friends">朋友</option>
+                <option value="private">私人</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="button" id="close-quote-form" class="btn-cancel">取消</button>
+            <button type="submit" id="save-quote-btn" class="btn-submit">保存語錄</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- 搜尋與篩選區 -->
+      <section class="search-fold-section">
+        <div id="fold-header" class="fold-header">
+          <i class="ti ti-book-2"></i>
+          <span>翻頁</span>
+          <i class="ti ti-chevron-down chevron"></i>
+        </div>
+        <div id="fold-content" class="fold-content">
+          <div class="search-input-wrapper">
+            <input type="text" id="search-input" placeholder="搜尋語錄關鍵字或來源..." />
+          </div>
+          <div class="category-tags" id="category-tags">
+            <button class="tag-btn active" data-cat="all">全部</button>
+            <button class="tag-btn" data-cat="成長">成長</button>
+            <button class="tag-btn" data-cat="關係">關係</button>
+            <button class="tag-btn" data-cat="當下">當下</button>
+            <button class="tag-btn" data-cat="孤獨">孤獨</button>
+            <button class="tag-btn" data-cat="自己">自己</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 語錄列表 -->
+      <div id="quotes-grid" class="quotes-grid">
+        {publicQuotes.map((quote, index) => (
+          <div class="quote-card" data-id={quote.id} data-category={quote.category} data-source={quote.source} data-content={quote.content}>
+            <div class="card-corner"></div>
+            <div class="card-sidebar">
+              <span class="page-num">p.{publicQuotes.length - index}</span>
+            </div>
+            <div class="card-main">
+              <div class="quote-content">
+                {quote.content}
+              </div>
+              <div class="quote-footer">
+                <div class="quote-source">
+                  <i class={`ti ti-${quote.source_type === 'book' ? 'book' : quote.source_type === 'film' ? 'movie' : 'pencil'}`}></i>
+                  <span>{quote.source || '佚名'}</span>
+                </div>
+                <div class="quote-meta-right">
+                  {quote.category && <span class="quote-category">{quote.category}</span>}
+                  <div class="quote-actions admin-only" style="display: none;">
+                    <button class="btn-inline-edit" data-quote={JSON.stringify(quote)}>編輯</button>
+                    <button class="btn-inline-delete" data-id={quote.id}>刪除</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {publicQuotes.length === 0 && <p class="empty-state" id="empty-msg">尚未收藏任何語錄</p>}
+      </div>
+    </div>
+  </div>
+
+  <ThemeToggle />
+  <div id="toast" class="toast"></div>
+</Layout>
+
+<script define:vars={{ webhookUrl }}>
+  window.__WEBHOOK_URL__ = webhookUrl;
+</script>
+
+<script>
+  import { supabase } from '../../lib/supabase-client';
+
+  const deployWebhookUrl = (window as any).__WEBHOOK_URL__ || '';
+  const toast = document.getElementById('toast');
+
+  function showToast(message: string) {
+    if (!toast) return;
+    toast.textContent = message;
+    toast.setAttribute('style', [
+      'display: block',
+      'position: fixed',
+      'bottom: 20px',
+      'left: 50%',
+      'transform: translateX(-50%)',
+      'background: rgba(0,0,0,0.8)',
+      'color: #fff',
+      'padding: 8px 16px',
+      'border-radius: 20px',
+      'z-index: 1000'
+    ].join('; '));
+    setTimeout(() => { if (toast) toast.style.display = 'none'; }, 1500);
+  }
+
+  // 1. 翻頁展開邏輯
+  const foldHeader = document.getElementById('fold-header');
+  const foldContent = document.getElementById('fold-content');
+  foldHeader?.addEventListener('click', () => {
+    const isActive = foldHeader.classList.toggle('active');
+    if (foldContent) foldContent.style.display = isActive ? 'block' : 'none';
+  });
+
+  // 2. 權限檢查與管理功能
+  async function checkAdmin() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      document.querySelectorAll('.admin-only').forEach(el => {
+        (el as HTMLElement).style.display = 'flex';
+      });
+      return true;
+    }
+    return false;
+  }
+
+  // 3. 表單邏輯
+  const openFormBtn = document.getElementById('open-add-quote');
+  const closeFormBtn = document.getElementById('close-quote-form');
+  const formSection = document.getElementById('quote-form-section');
+  const quoteForm = document.getElementById('quote-form') as HTMLFormElement;
+  const saveBtn = document.getElementById('save-quote-btn');
+
+  openFormBtn?.addEventListener('click', () => {
+    if (formSection) formSection.style.display = 'block';
+    openFormBtn.style.display = 'none';
+  });
+
+  closeFormBtn?.addEventListener('click', () => {
+    resetForm();
+  });
+
+  function resetForm() {
+    if (formSection) formSection.style.display = 'none';
+    if (openFormBtn) openFormBtn.style.display = 'flex';
+    quoteForm.reset();
+    (document.getElementById('quote-id') as HTMLInputElement).value = '';
+    if (saveBtn) saveBtn.textContent = '保存語錄';
+  }
+
+  // 提交表單
+  quoteForm?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (saveBtn) (saveBtn as HTMLButtonElement).disabled = true;
+
+    const id = (document.getElementById('quote-id') as HTMLInputElement).value;
+    const content = (document.getElementById('quote-content') as HTMLTextAreaElement).value;
+    const source = (document.getElementById('quote-source') as HTMLInputElement).value;
+    const source_type = (document.getElementById('quote-source-type') as HTMLSelectElement).value;
+    const category = (document.getElementById('quote-category') as HTMLInputElement).value;
+    const visibility = (document.getElementById('quote-visibility') as HTMLSelectElement).value;
+
+    const quoteData = { content, source, source_type, category, visibility };
+
+    let error;
+    let newQuote: any = null;
+
+    if (id) {
+      const { error: err } = await supabase.from('quotes').update(quoteData).eq('id', id);
+      error = err;
+    } else {
+      const { data, error: err } = await supabase.from('quotes').insert([quoteData]).select().single();
+      error = err;
+      newQuote = data;
+    }
+
+    if (error) {
+      alert('儲存失敗');
+      if (saveBtn) (saveBtn as HTMLButtonElement).disabled = false;
+    } else {
+      fetch(deployWebhookUrl, { method: 'POST' }).catch(() => {});
+      if (id) {
+        // 更新 UI
+        const item = document.querySelector(`.quote-card[data-id="${id}"]`);
+        if (item) {
+          item.querySelector('.quote-content')!.textContent = content;
+          item.querySelector('.quote-source span')!.textContent = source || '佚名';
+          const icon = item.querySelector('.quote-source i');
+          if (icon) icon.className = `ti ti-${source_type === 'book' ? 'book' : source_type === 'film' ? 'movie' : 'pencil'}`;
+          const catSpan = item.querySelector('.quote-category');
+          if (catSpan) catSpan.textContent = category;
+        }
+        showToast('已更新');
+      } else if (newQuote) {
+        // 新增 UI
+        const { data: { session } } = await supabase.auth.getSession();
+        const html = createQuoteHtml(newQuote, !!session, 0); // 簡化處理
+        const grid = document.getElementById('quotes-grid');
+        const emptyMsg = document.getElementById('empty-msg');
+        if (emptyMsg) emptyMsg.style.display = 'none';
+        grid?.insertAdjacentHTML('afterbegin', html);
+        showToast('已收藏');
+      }
+      resetForm();
+      if (saveBtn) (saveBtn as HTMLButtonElement).disabled = false;
+    }
+  });
+
+  function createQuoteHtml(quote: any, isAdmin: boolean, index: number) {
+    return `
+      <div class="quote-card" data-id="${quote.id}" data-category="${quote.category}" data-source="${quote.source}" data-content="${quote.content}">
+        <div class="card-corner"></div>
+        <div class="card-sidebar">
+          <span class="page-num">new</span>
+        </div>
+        <div class="card-main">
+          <div class="quote-content">${quote.content}</div>
+          <div class="quote-footer">
+            <div class="quote-source">
+              <i class="ti ti-${quote.source_type === 'book' ? 'book' : quote.source_type === 'film' ? 'movie' : 'pencil'}"></i>
+              <span>${quote.source || '佚名'}</span>
+            </div>
+            <div class="quote-meta-right">
+              ${quote.category ? `<span class="quote-category">${quote.category}</span>` : ''}
+              ${isAdmin ? `
+                <div class="quote-actions admin-only" style="display: flex;">
+                  <button class="btn-inline-edit" data-quote='${JSON.stringify(quote).replace(/'/g, "&apos;")}'>編輯</button>
+                  <button class="btn-inline-delete" data-id="${quote.id}">刪除</button>
+                </div>
+              ` : ''}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // 4. 搜尋與篩選邏輯
+  const searchInput = document.getElementById('search-input') as HTMLInputElement;
+  const tagBtns = document.querySelectorAll('.tag-btn');
+  let currentCategory = 'all';
+
+  function filterQuotes() {
+    const term = searchInput.value.toLowerCase();
+    const cards = document.querySelectorAll('.quote-card');
+    
+    cards.forEach(card => {
+      const c = card as HTMLElement;
+      const content = (c.dataset.content || '').toLowerCase();
+      const source = (c.dataset.source || '').toLowerCase();
+      const category = (c.dataset.category || '');
+      
+      const matchTerm = content.includes(term) || source.includes(term);
+      const matchCat = currentCategory === 'all' || category === currentCategory;
+      
+      c.style.display = (matchTerm && matchCat) ? 'flex' : 'none';
+    });
+  }
+
+  searchInput?.addEventListener('input', filterQuotes);
+  tagBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      tagBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentCategory = (btn as HTMLElement).dataset.cat || 'all';
+      filterQuotes();
+    });
+  });
+
+  // 5. 事件委派：編輯與刪除
+  const grid = document.getElementById('quotes-grid');
+  grid?.addEventListener('click', async (e) => {
+    const target = e.target as HTMLElement;
+    
+    if (target.classList.contains('btn-inline-edit')) {
+      const quote = JSON.parse(target.dataset.quote || '{}');
+      (document.getElementById('quote-id') as HTMLInputElement).value = quote.id;
+      (document.getElementById('quote-content') as HTMLTextAreaElement).value = quote.content;
+      (document.getElementById('quote-source') as HTMLInputElement).value = quote.source || '';
+      (document.getElementById('quote-source-type') as HTMLSelectElement).value = quote.source_type;
+      (document.getElementById('quote-category') as HTMLInputElement).value = quote.category || '';
+      (document.getElementById('quote-visibility') as HTMLSelectElement).value = quote.visibility;
+      
+      if (saveBtn) saveBtn.textContent = '更新語錄';
+      if (formSection) formSection.style.display = 'block';
+      if (openFormBtn) openFormBtn.style.display = 'none';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    if (target.classList.contains('btn-inline-delete')) {
+      if (!confirm('確定刪除此語錄？')) return;
+      const id = target.dataset.id;
+      const { error } = await supabase.from('quotes').delete().eq('id', id);
+      if (!error) {
+        showToast('已刪除');
+        target.closest('.quote-card')?.remove();
+        fetch(deployWebhookUrl, { method: 'POST' }).catch(() => {});
+      }
+    }
+  });
+
+  // 6. Client Side: 抓取私密語錄
+  async function fetchPrivateQuotes() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const { data, error } = await supabase
+      .from('quotes')
+      .select('*')
+      .neq('visibility', 'public')
+      .order('created_at', { ascending: false });
+
+    if (!error && data && data.length > 0) {
+      const grid = document.getElementById('quotes-grid');
+      const emptyMsg = document.getElementById('empty-msg');
+      if (emptyMsg) emptyMsg.style.display = 'none';
+
+      data.forEach(quote => {
+        if (document.querySelector(`.quote-card[data-id="${quote.id}"]`)) return;
+        const html = createQuoteHtml(quote, true, 0);
+        grid?.insertAdjacentHTML('afterbegin', html);
+      });
+    }
+    checkAdmin();
+  }
+
+  fetchPrivateQuotes();
+</script>
