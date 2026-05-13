@@ -119,9 +119,10 @@
   position: absolute;
   left: 0;
   width: 100%;
-  height: 14px;
-  background-image: radial-gradient(var(--sprocket-color) 6px, transparent 6px);
-  background-size: 32px 32px;
+  height: 9px;
+  /* 使用 SVG 繪製具備圓角的長方形齒孔 (14x9px, rx=2px, 間距 32px) */
+  background-image: url("data:image/svg+xml,%3Csvg width='32' height='9' xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='14' height='9' rx='2' fill='%230A0806'/%3E%3C/svg%3E");
+  background-repeat: repeat-x;
   background-position: 10px 0;
 }
 
