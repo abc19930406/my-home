@@ -341,6 +341,29 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     align-items: center;
   }
 
+  #edit-status-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: rgba(160, 125, 65, 0.20);
+    border: 1px solid rgba(160, 125, 65, 0.35);
+    border-radius: 50%;
+    cursor: pointer;
+    opacity: 0.7;
+    font-size: 13px;
+    z-index: 10;
+  }
+
+  #edit-status-btn:hover {
+    opacity: 1;
+    background: rgba(160, 125, 65, 0.35);
+  }
+
   .logout-btn {
     background: transparent;
     border: 1px solid #4A3525;
