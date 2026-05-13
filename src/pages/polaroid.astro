@@ -83,6 +83,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
         </div>
       </section>
     </div>
+
+    <div id="login-hint" class="login-hint">
+      <a href="/login?from=/polaroid" class="nav-link">管理</a>
+    </div>
   </div>
 
   <div id="toast" class="toast"></div>
@@ -113,6 +117,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   const submitBtn = document.getElementById('submit-daily');
   const overviewList = document.getElementById('overview-list');
   const monthText = document.getElementById('current-month-text');
+  const loginHint = document.getElementById('login-hint');
   const toast = document.getElementById('toast');
 
   // 4. 輔助函數
@@ -284,11 +289,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     if (session) {
       isAdmin = true;
       if (adminZone) adminZone.style.display = 'block';
+      if (loginHint) loginHint.style.display = 'none';
       // 重新載入當前日期資料以更新輸入框
       loadDateData();
     } else {
       isAdmin = false;
       if (adminZone) adminZone.style.display = 'none';
+      if (loginHint) loginHint.style.display = 'block';
     }
   }
 
