@@ -6,11 +6,28 @@
 import CardSection from './CardSection.astro';
 import type { CardLink } from '../data/links';
 
+import '../styles/status.css';
+import { supabase } from '../lib/supabase-client';
+
 interface Props {
   groupedCards: { name: string; cards: CardLink[] }[];
+  initialStatus: {
+    reading: string;
+    music: string;
+    mood: string;
+    doing: string;
+    updated_at: string;
+  };
+  webhookUrl?: string;
 }
 
-const { groupedCards } = Astro.props;
+const { groupedCards, initialStatus, webhookUrl = '' } = Astro.props;
+
+// 格式化日期：5.13 更新
+const formatShortDate = (dateStr: string) => {
+  const d = new Date(dateStr);
+  return `${d.getMonth() + 1}.${d.getDate()} 更新`;
+};
 ---
 
 <div class="page-wrapper">
@@ -34,27 +51,56 @@ const { groupedCards } = Astro.props;
     ))}
   </main>
 
-  <!-- ===== 現在狀態 ===== -->
+  <!-- ===== 現在狀態 (便條紙風格) ===== -->
   <section class="status-section">
-    <h3 class="status-heading">— 現在狀態 —</h3>
-    <div class="status-card">
-      <div class="status-grid">
+    <div class="status-postit" id="status-postit">
+      <!-- 管理員編輯按鈕 -->
+      <button id="edit-status-btn" class="status-edit-btn admin-only" style="display: none;" title="編輯狀態">
+        <i class="ti ti-edit"></i>
+      </button>
+
+      <div class="status-content" id="status-display">
         <div class="status-item">
-          <span class="status-label">📖 閱讀中</span>
-          <span class="status-value"><!-- 請手動填寫 --></span>
+          <span class="status-emoji">📖</span>
+          <span class="status-text" id="display-reading">{initialStatus.reading}</span>
         </div>
         <div class="status-item">
-          <span class="status-label">🧠 正在學</span>
-          <span class="status-value"><!-- 請手動填寫 --></span>
+          <span class="status-emoji">🎵</span>
+          <span class="status-text" id="display-music">{initialStatus.music}</span>
         </div>
         <div class="status-item">
-          <span class="status-label">📍 最近去了</span>
-          <span class="status-value"><!-- 請手動填寫 --></span>
+          <span class="status-emoji">💬</span>
+          <span class="status-text" id="display-mood">{initialStatus.mood}</span>
         </div>
         <div class="status-item">
-          <span class="status-label">🎵 聽歌中</span>
-          <span class="status-value"><!-- 請手動填寫 --></span>
+          <span class="status-emoji">🔨</span>
+          <span class="status-text" id="display-doing">{initialStatus.doing}</span>
         </div>
+      </div>
+
+      <!-- 編輯模式 (預設隱藏) -->
+      <div id="status-edit-form" style="display: none;">
+        <div class="status-item">
+          <span class="status-emoji">📖</span>
+          <input type="text" id="input-reading" class="status-input" value={initialStatus.reading} />
+        </div>
+        <div class="status-item">
+          <span class="status-emoji">🎵</span>
+          <input type="text" id="input-music" class="status-input" value={initialStatus.music} />
+        </div>
+        <div class="status-item">
+          <span class="status-emoji">💬</span>
+          <input type="text" id="input-mood" class="status-input" value={initialStatus.mood} />
+        </div>
+        <div class="status-item">
+          <span class="status-emoji">🔨</span>
+          <input type="text" id="input-doing" class="status-input" value={initialStatus.doing} />
+        </div>
+      </div>
+
+      <div class="status-footer">
+        <span id="status-updated-at">{formatShortDate(initialStatus.updated_at)}</span>
+        <button id="save-status-btn" class="status-save-btn" style="display: none;">儲存</button>
       </div>
     </div>
   </section>
@@ -73,8 +119,93 @@ const { groupedCards } = Astro.props;
 
 </div>
 
-<!-- 動態產生今天日期 -->
-<script>
+<!-- 現在狀態管理邏輯 -->
+<script define:vars={{ webhookUrl }}>
+  import { supabase } from '../lib/supabase-client';
+
+  // 1. 偵測登入狀態
+  async function checkAuth() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
+    }
+  }
+  checkAuth();
+
+  // 2. 編輯與儲存邏輯
+  const editBtn = document.getElementById('edit-status-btn');
+  const saveBtn = document.getElementById('save-status-btn');
+  const displayArea = document.getElementById('status-display');
+  const editForm = document.getElementById('status-edit-form');
+  const updatedAtEl = document.getElementById('status-updated-at');
+
+  const inputs = {
+    reading: document.getElementById('input-reading'),
+    music: document.getElementById('input-music'),
+    mood: document.getElementById('input-mood'),
+    doing: document.getElementById('input-doing')
+  };
+
+  const displays = {
+    reading: document.getElementById('display-reading'),
+    music: document.getElementById('display-music'),
+    mood: document.getElementById('display-mood'),
+    doing: document.getElementById('display-doing')
+  };
+
+  if (editBtn) {
+    editBtn.addEventListener('click', () => {
+      displayArea.style.display = 'none';
+      editForm.style.display = 'block';
+      editBtn.style.display = 'none';
+      saveBtn.style.display = 'inline-block';
+    });
+  }
+
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      const newData = {
+        reading: inputs.reading.value,
+        music: inputs.music.value,
+        mood: inputs.mood.value,
+        doing: inputs.doing.value,
+        updated_at: new Date().toISOString()
+      };
+
+      // Optimistic UI
+      Object.keys(newData).forEach(key => {
+        if (displays[key]) displays[key].textContent = newData[key];
+      });
+      const d = new Date();
+      updatedAtEl.textContent = `${d.getMonth() + 1}.${d.getDate()} 更新`;
+
+      // 切換回顯示模式
+      displayArea.style.display = 'block';
+      editForm.style.display = 'none';
+      editBtn.style.display = 'block';
+      saveBtn.style.display = 'none';
+
+      // 儲存至資料庫
+      try {
+        const { error } = await supabase
+          .from('status')
+          .update(newData)
+          .eq('id', 1);
+
+        if (error) throw error;
+
+        // 背景觸發部署
+        if (webhookUrl) {
+          fetch(webhookUrl, { method: 'POST', mode: 'no-cors' }).catch(() => {});
+        }
+      } catch (err) {
+        console.error('儲存失敗:', err);
+        alert('儲存失敗，請檢查權限');
+      }
+    });
+  }
+
+  // 日期邏輯
   const dateEl = document.getElementById('current-date');
   if (dateEl) {
     const now = new Date();

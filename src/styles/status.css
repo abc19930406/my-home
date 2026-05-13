@@ -1,0 +1,125 @@
+/* =========================================
+   現在狀態便條紙 (Current Status Post-it)
+========================================= */
+
+.status-section {
+  display: flex;
+  justify-content: center;
+  margin: 4rem 0 3rem;
+  padding: 0 20px;
+}
+
+.status-postit {
+  width: 100%;
+  max-width: 320px;
+  background: #F5EDD0;
+  padding: 35px 25px 20px;
+  position: relative;
+  box-shadow: 2px 3px 10px rgba(0,0,0,0.1);
+  border-radius: 3px;
+  transform: rotate(-1.2deg);
+  color: #4A3010;
+  /* 模擬便條紙橫線格紋 */
+  background-image: repeating-linear-gradient(
+    transparent,
+    transparent 27px,
+    rgba(160, 125, 65, 0.1) 27px,
+    rgba(160, 125, 65, 0.1) 28px
+  );
+  background-position: 0 10px;
+}
+
+/* 頂部紙膠帶 */
+.status-postit::before {
+  content: "";
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 120px;
+  height: 20px;
+  background: rgba(200, 170, 100, 0.5);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  z-index: 2;
+}
+
+.status-content {
+  font-size: 0.95rem;
+  line-height: 28px; /* 配合背景格線 */
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 0;
+  min-height: 28px;
+}
+
+.status-emoji {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.status-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 編輯模式 Input */
+.status-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed rgba(160, 125, 65, 0.3);
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: #4A3010;
+  padding: 0;
+  margin: 0;
+  outline: none;
+}
+
+.status-footer {
+  margin-top: 15px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  font-size: 0.7rem;
+  color: rgba(74, 48, 16, 0.5);
+}
+
+.status-edit-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+  padding: 5px;
+}
+
+.status-edit-btn:hover {
+  opacity: 1;
+}
+
+.status-save-btn {
+  background: rgba(160, 125, 65, 0.2);
+  border: 1px solid rgba(160, 125, 65, 0.3);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  cursor: pointer;
+  margin-left: 10px;
+}
+
+/* 響應式 */
+@media (max-width: 600px) {
+  .status-section {
+    margin: 3rem 0 2rem;
+  }
+}

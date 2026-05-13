@@ -19,14 +19,34 @@ try {
   console.warn('⚠️ Build Warning: Supabase 連線失敗，將使用本地 links.ts 作為 fallback。');
 }
 
+// 抓取現在狀態 (id=1)
+let initialStatus = {
+  reading: '尚未填寫',
+  music: '尚未填寫',
+  mood: '尚未填寫',
+  doing: '尚未填寫',
+  updated_at: new Date().toISOString()
+};
+
+try {
+  const { data, error } = await supabase.from('status').select('*').eq('id', 1).single();
+  if (!error && data) {
+    initialStatus = data;
+  }
+} catch (err) {
+  console.warn('⚠️ Build Warning: 無法取得現在狀態資料。');
+}
+
 // 依照指定順序，將卡片分組
 const sectionOrder = ["知識與創作", "生活記錄", "工具"];
 const groupedCards = sectionOrder.map(section => ({
   name: section,
   cards: finalCards.filter(card => card.section === section)
 }));
+
+const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 ---
 
 <Layout>
-	<Welcome groupedCards={groupedCards} />
+	<Welcome groupedCards={groupedCards} initialStatus={initialStatus} webhookUrl={webhookUrl} />
 </Layout>
