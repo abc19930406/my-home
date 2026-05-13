@@ -52,7 +52,7 @@ export const linksData: CardLink[] = [
     title: "視覺日記",
     icon: "camera",
     description: "照片・日常・光與影",
-    url: ""
+    url: "/polaroid"
   },
   {
     section: "生活記錄",

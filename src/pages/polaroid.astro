@@ -1,0 +1,292 @@
+---
+import Layout from '../layouts/Layout.astro';
+import '../styles/polaroid.css';
+
+const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
+---
+
+<Layout title="Polaroid | 一天一句">
+  <style is:global>
+    html, body { background-color: #1A1410 !important; }
+  </style>
+
+  <div class="polaroid-body">
+    <div class="polaroid-container">
+      <header class="polaroid-header">
+        <a href="/" class="nav-back">← Back</a>
+        <h1 class="page-title">Polaroid</h1>
+        <p class="page-subtitle">一天一句，積累成歲歲年年</p>
+        <hr class="header-divider" />
+      </header>
+
+      <!-- 日期導覽 -->
+      <section class="date-nav">
+        <button id="prev-day" class="nav-arrow" title="前一天">
+          <i class="ti ti-chevron-left"></i>
+        </button>
+        <div id="current-date-text" class="current-date-display">
+          載入中...
+        </div>
+        <button id="next-day" class="nav-arrow" title="後一天">
+          <i class="ti ti-chevron-right"></i>
+        </button>
+      </section>
+
+      <!-- 底片區塊 -->
+      <section class="film-strip-section">
+        <div class="film-grid">
+          <!-- 今年 -->
+          <div class="film-frame frame-this">
+            <div class="year-label" id="year-this">2024</div>
+            <div class="frame-content" id="content-this">
+              <div class="frame-empty">載入中...</div>
+            </div>
+          </div>
+          <!-- 去年 -->
+          <div class="film-frame frame-last">
+            <div class="year-label" id="year-last">2023</div>
+            <div class="frame-content" id="content-last">
+              <div class="frame-empty">載入中...</div>
+            </div>
+          </div>
+          <!-- 前年 -->
+          <div class="film-frame frame-before">
+            <div class="year-label" id="year-before">2022</div>
+            <div class="frame-content" id="content-before">
+              <div class="frame-empty">載入中...</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 輸入區 (管理員登入後顯示) -->
+      <section id="admin-input-zone" class="input-section" style="display: none;">
+        <div class="input-group">
+          <textarea id="daily-text" class="daily-input" placeholder="寫下今天的一句話..." rows="1"></textarea>
+          <button id="submit-daily" class="btn-submit">記下</button>
+        </div>
+      </section>
+
+      <!-- 本月縱覽 -->
+      <section class="overview-section">
+        <div class="overview-header">
+          <h2>本月縱覽</h2>
+          <div class="month-nav">
+            <button id="prev-month" class="nav-arrow"><i class="ti ti-chevron-left"></i></button>
+            <span id="current-month-text">2024.05</span>
+            <button id="next-month" class="nav-arrow"><i class="ti ti-chevron-right"></i></button>
+          </div>
+        </div>
+        <div id="overview-list" class="overview-list">
+          <!-- JS 動態插入 -->
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+</Layout>
+
+<script define:vars={{ supabaseUrl, supabaseAnonKey }}>
+(async () => {
+  // 1. 初始化 Supabase
+  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+  // 2. 狀態管理
+  let selectedDate = new Date(); // 選中的日期
+  let currentMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1); // 縱覽顯示的月份
+  let isAdmin = false;
+  let monthRecords = {}; // 暫存當月紀錄
+
+  // 3. UI 元素
+  const dateText = document.getElementById('current-date-text');
+  const frameThis = document.getElementById('content-this');
+  const frameLast = document.getElementById('content-last');
+  const frameBefore = document.getElementById('content-before');
+  const yearThis = document.getElementById('year-this');
+  const yearLast = document.getElementById('year-last');
+  const yearBefore = document.getElementById('year-before');
+  const adminZone = document.getElementById('admin-input-zone');
+  const dailyInput = document.getElementById('daily-text');
+  const submitBtn = document.getElementById('submit-daily');
+  const overviewList = document.getElementById('overview-list');
+  const monthText = document.getElementById('current-month-text');
+  const toast = document.getElementById('toast');
+
+  // 4. 輔助函數
+  const formatDate = (date) => date.toISOString().split('T')[0];
+  const formatDisplayDate = (date) => {
+    const days = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
+    return `${date.getMonth() + 1}月${date.getDate()}日 ${days[date.getDay()]}`;
+  };
+  const showToast = (msg) => {
+    toast.textContent = msg;
+    toast.style.display = 'block';
+    setTimeout(() => toast.style.display = 'none', 2000);
+  };
+
+  // 5. 核心邏輯：載入日期資料
+  async function loadDateData() {
+    const y = selectedDate.getFullYear();
+    const m = selectedDate.getMonth();
+    const d = selectedDate.getDate();
+
+    const datesToFetch = [
+      formatDate(selectedDate),
+      formatDate(new Date(y - 1, m, d)),
+      formatDate(new Date(y - 2, m, d))
+    ];
+
+    dateText.textContent = formatDisplayDate(selectedDate);
+    yearThis.textContent = y;
+    yearLast.textContent = y - 1;
+    yearBefore.textContent = y - 2;
+
+    // 清空顯示
+    [frameThis, frameLast, frameBefore].forEach(el => el.innerHTML = '<div class="frame-empty">載入中...</div>');
+
+    const { data, error } = await supabase
+      .from('daily')
+      .select('date, content')
+      .in('date', datesToFetch);
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    const records = {};
+    data.forEach(r => records[r.date] = r.content);
+
+    const updateFrame = (el, dateStr) => {
+      if (records[dateStr]) {
+        el.textContent = records[dateStr];
+      } else {
+        el.innerHTML = '<div class="frame-empty">（尚無記錄）</div>';
+      }
+    };
+
+    updateFrame(frameThis, datesToFetch[0]);
+    updateFrame(frameLast, datesToFetch[1]);
+    updateFrame(frameBefore, datesToFetch[2]);
+
+    // 更新輸入框內容 (若是今天)
+    if (isAdmin) {
+      dailyInput.value = records[datesToFetch[0]] || '';
+      submitBtn.textContent = records[datesToFetch[0]] ? '編輯' : '記下';
+    }
+  }
+
+  // 6. 核心邏輯：載入月份縱覽
+  async function loadMonthOverview() {
+    const y = currentMonth.getFullYear();
+    const m = currentMonth.getMonth();
+    monthText.textContent = `${y}.${(m + 1).toString().padStart(2, '0')}`;
+
+    const firstDay = new Date(y, m, 1);
+    const lastDay = new Date(y, m + 1, 0);
+    
+    const { data, error } = await supabase
+      .from('daily')
+      .select('date, content')
+      .gte('date', formatDate(firstDay))
+      .lte('date', formatDate(lastDay));
+
+    const records = {};
+    if (data) data.forEach(r => records[r.date] = r.content);
+    monthRecords = records;
+
+    // 生成列表
+    let html = '';
+    const daysInMonth = lastDay.getDate();
+    for (let i = 1; i <= daysInMonth; i++) {
+      const dateObj = new Date(y, m, i);
+      const dateStr = formatDate(dateObj);
+      const isSelected = dateStr === formatDate(selectedDate);
+      const content = records[dateStr];
+
+      html += `
+        <div class="overview-row ${isSelected ? 'active' : ''}" data-date="${dateStr}">
+          <div class="row-date">${m + 1}/${i}</div>
+          <div class="row-content ${!content ? 'row-empty' : ''}">
+            ${content || '—'}
+          </div>
+        </div>
+      `;
+    }
+    overviewList.innerHTML = html;
+  }
+
+  // 7. 事件監聽
+  document.getElementById('prev-day').onclick = () => {
+    selectedDate.setDate(selectedDate.getDate() - 1);
+    loadDateData();
+    updateOverviewActive();
+  };
+  document.getElementById('next-day').onclick = () => {
+    selectedDate.setDate(selectedDate.getDate() + 1);
+    loadDateData();
+    updateOverviewActive();
+  };
+  document.getElementById('prev-month').onclick = () => {
+    currentMonth.setMonth(currentMonth.getMonth() - 1);
+    loadMonthOverview();
+  };
+  document.getElementById('next-month').onclick = () => {
+    currentMonth.setMonth(currentMonth.getMonth() + 1);
+    loadMonthOverview();
+  };
+
+  overviewList.onclick = (e) => {
+    const row = e.target.closest('.overview-row');
+    if (row) {
+      selectedDate = new Date(row.dataset.date);
+      loadDateData();
+      updateOverviewActive();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  function updateOverviewActive() {
+    const targetDate = formatDate(selectedDate);
+    document.querySelectorAll('.overview-row').forEach(row => {
+      row.classList.toggle('active', row.dataset.date === targetDate);
+    });
+  }
+
+  // 提交紀錄
+  submitBtn.onclick = async () => {
+    const content = dailyInput.value.trim();
+    if (!content) return;
+
+    submitBtn.disabled = true;
+    const dateStr = formatDate(selectedDate);
+
+    const { error } = await supabase
+      .from('daily')
+      .upsert({ date: dateStr, content: content }, { onConflict: 'date' });
+
+    if (error) {
+      showToast('儲存失敗：' + error.message);
+    } else {
+      showToast('已記下歲月');
+      loadDateData();
+      loadMonthOverview();
+    }
+    submitBtn.disabled = false;
+  };
+
+  // 8. 權限檢查
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) {
+    isAdmin = true;
+    adminZone.style.display = 'block';
+  }
+
+  // 9. 初始化
+  loadDateData();
+  loadMonthOverview();
+})();
+</script>
