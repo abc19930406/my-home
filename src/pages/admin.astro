@@ -35,6 +35,10 @@ const formatShortDate = (dateStr: string) => {
   const d = new Date(dateStr);
   return `${d.getMonth() + 1}.${d.getDate()} 更新`;
 };
+
+const deployWebhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK || '';
+const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 ---
 
 <Layout>
@@ -58,44 +62,44 @@ const formatShortDate = (dateStr: string) => {
 
     <!-- ===== MAIN 主體：三個卡片分區 ===== -->
     <main class="main-content">
+      <!-- ===== 現在狀態 (便條紙風格) ===== -->
+      <section class="status-section">
+        <div class="status-note" id="status-postit">
+          <div class="status-tape"></div>
+          
+          <!-- 管理員編輯按鈕 -->
+          <button id="edit-status-btn" class="status-edit-btn" title="編輯狀態">
+            <i class="ti ti-edit"></i>
+          </button>
+
+          <div class="status-fields" id="status-display">
+            <div class="status-field">📖 <span id="display-reading">{initialStatus.reading}</span></div>
+            <div class="status-field">🎵 <span id="display-music">{initialStatus.music}</span></div>
+            <div class="status-field">💬 <span id="display-mood">{initialStatus.mood}</span></div>
+            <div class="status-field">🔨 <span id="display-doing">{initialStatus.doing}</span></div>
+          </div>
+
+          <!-- 編輯模式 (預設隱藏) -->
+          <div id="status-edit-form" class="status-fields" style="display: none;">
+            <div class="status-field">📖 <input type="text" id="input-reading" class="status-input" value={initialStatus.reading} /></div>
+            <div class="status-field">🎵 <input type="text" id="input-music" class="status-input" value={initialStatus.music} /></div>
+            <div class="status-field">💬 <input type="text" id="input-mood" class="status-input" value={initialStatus.mood} /></div>
+            <div class="status-field">🔨 <input type="text" id="input-doing" class="status-input" value={initialStatus.doing} /></div>
+          </div>
+
+          <div class="status-updated">
+            <span id="status-updated-at">{formatShortDate(initialStatus.updated_at)}</span>
+            <button id="save-status-btn" class="status-save-btn" style="display: none;">儲存</button>
+          </div>
+        </div>
+      </section>
+
       {groupedCards.map(({ name, cards }) => (
         <CardSection section={name} cards={cards} isLoggedIn={true} />
       ))}
     </main>
 
 
-
-    <!-- ===== 現在狀態 (便條紙風格) ===== -->
-    <section class="status-section">
-      <div class="status-note" id="status-postit">
-        <div class="status-tape"></div>
-        
-        <!-- 管理員編輯按鈕 -->
-        <button id="edit-status-btn" class="status-edit-btn" title="編輯狀態">
-          <i class="ti ti-edit"></i>
-        </button>
-
-        <div class="status-fields" id="status-display">
-          <div class="status-field">📖 <span id="display-reading">{initialStatus.reading}</span></div>
-          <div class="status-field">🎵 <span id="display-music">{initialStatus.music}</span></div>
-          <div class="status-field">💬 <span id="display-mood">{initialStatus.mood}</span></div>
-          <div class="status-field">🔨 <span id="display-doing">{initialStatus.doing}</span></div>
-        </div>
-
-        <!-- 編輯模式 (預設隱藏) -->
-        <div id="status-edit-form" class="status-fields" style="display: none;">
-          <div class="status-field">📖 <input type="text" id="input-reading" class="status-input" value={initialStatus.reading} /></div>
-          <div class="status-field">🎵 <input type="text" id="input-music" class="status-input" value={initialStatus.music} /></div>
-          <div class="status-field">💬 <input type="text" id="input-mood" class="status-input" value={initialStatus.mood} /></div>
-          <div class="status-field">🔨 <input type="text" id="input-doing" class="status-input" value={initialStatus.doing} /></div>
-        </div>
-
-        <div class="status-updated">
-          <span id="status-updated-at">{formatShortDate(initialStatus.updated_at)}</span>
-          <button id="save-status-btn" class="status-save-btn" style="display: none;">儲存</button>
-        </div>
-      </div>
-    </section>
 
     <!-- ===== FOOTER 底部 ===== -->
     <footer class="footer">
@@ -143,11 +147,12 @@ const formatShortDate = (dateStr: string) => {
   <div id="toast" class="toast"></div>
 </Layout>
 
-<script>
-  import { supabase } from '../lib/supabase-client';
+<script define:vars={{ deployWebhookUrl, supabaseUrl, supabaseAnonKey }}>
+  // 動態匯入 Supabase SDK
+  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
   const adminContent = document.getElementById('admin-content');
-  const deployWebhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK || '';
 
   // 1. 檢查權限
   async function checkAuth() {
