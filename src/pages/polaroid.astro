@@ -65,6 +65,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
         <div class="input-group">
           <textarea id="daily-text" class="daily-input" placeholder="寫下今天的一句話..." rows="1"></textarea>
           <button id="submit-daily" class="btn-submit">記下</button>
+          <button id="delete-daily" class="btn-delete" style="display: none;" title="刪除今日紀錄">
+            <i class="ti ti-trash"></i>
+          </button>
         </div>
       </section>
 
@@ -115,13 +118,20 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   const adminZone = document.getElementById('admin-input-zone');
   const dailyInput = document.getElementById('daily-text');
   const submitBtn = document.getElementById('submit-daily');
+  const deleteBtn = document.getElementById('delete-daily');
   const overviewList = document.getElementById('overview-list');
   const monthText = document.getElementById('current-month-text');
   const loginHint = document.getElementById('login-hint');
   const toast = document.getElementById('toast');
 
   // 4. 輔助函數
-  const formatDate = (date) => date.toISOString().split('T')[0];
+  // 修正時區偏移：改用本地 YYYY-MM-DD
+  const formatDate = (date) => {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  };
   const formatDisplayDate = (date) => {
     const days = ['週日', '週一', '週二', '週三', '週四', '週五', '週六'];
     return `${date.getMonth() + 1}月${date.getDate()}日 ${days[date.getDay()]}`;
@@ -145,9 +155,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     ];
 
     dateText.textContent = formatDisplayDate(selectedDate);
-    yearThis.textContent = y;
-    yearLast.textContent = y - 1;
-    yearBefore.textContent = y - 2;
+    
+    // 顯示完整日期：2026 · 5 · 13
+    const formatFrameDate = (date) => `${date.getFullYear()} · ${date.getMonth() + 1} · ${date.getDate()}`;
+    yearThis.textContent = formatFrameDate(selectedDate);
+    yearLast.textContent = formatFrameDate(new Date(y - 1, m, d));
+    yearBefore.textContent = formatFrameDate(new Date(y - 2, m, d));
 
     // 清空顯示
     [frameThis, frameLast, frameBefore].forEach(el => el.innerHTML = '<div class="frame-empty">載入中...</div>');
@@ -177,10 +190,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     updateFrame(frameLast, datesToFetch[1]);
     updateFrame(frameBefore, datesToFetch[2]);
 
-    // 更新輸入框內容 (若是今天)
+    // 更新輸入框內容與刪除按鈕 (若是管理員)
     if (isAdmin) {
-      dailyInput.value = records[datesToFetch[0]] || '';
-      submitBtn.textContent = records[datesToFetch[0]] ? '編輯' : '記下';
+      const todayContent = records[datesToFetch[0]];
+      dailyInput.value = todayContent || '';
+      submitBtn.textContent = todayContent ? '編輯' : '記下';
+      if (deleteBtn) deleteBtn.style.display = todayContent ? 'flex' : 'none';
     }
   }
 
@@ -282,6 +297,24 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     }
     submitBtn.disabled = false;
   };
+
+  // 刪除紀錄
+  if (deleteBtn) {
+    deleteBtn.onclick = async () => {
+      if (!confirm('確定刪除這筆紀錄？')) return;
+      
+      const dateStr = formatDate(selectedDate);
+      const { error } = await supabase.from('daily').delete().eq('date', dateStr);
+
+      if (error) {
+        showToast('刪除失敗：' + error.message);
+      } else {
+        showToast('紀錄已抹去');
+        loadDateData();
+        loadMonthOverview();
+      }
+    };
+  }
 
   // 8. 權限檢查
   async function checkAuth() {

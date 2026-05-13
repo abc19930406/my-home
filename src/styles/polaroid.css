@@ -233,6 +233,26 @@
   cursor: not-allowed;
 }
 
+.btn-delete {
+  background: rgba(138, 50, 50, 0.15);
+  border: 1px solid rgba(138, 50, 50, 0.3);
+  color: #F09595;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.btn-delete:hover {
+  background: rgba(138, 50, 50, 0.3);
+  border-color: #F09595;
+}
+
 /* 本月縱覽 */
 .overview-section {
   border-top: 1px solid var(--input-border);
