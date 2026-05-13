@@ -279,13 +279,26 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   };
 
   // 8. 權限檢查
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session) {
-    isAdmin = true;
-    adminZone.style.display = 'block';
+  async function checkAuth() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      isAdmin = true;
+      if (adminZone) adminZone.style.display = 'block';
+      // 重新載入當前日期資料以更新輸入框
+      loadDateData();
+    } else {
+      isAdmin = false;
+      if (adminZone) adminZone.style.display = 'none';
+    }
   }
 
+  // 監聽登入狀態變化
+  supabase.auth.onAuthStateChange((event, session) => {
+    checkAuth();
+  });
+
   // 9. 初始化
+  await checkAuth();
   loadDateData();
   loadMonthOverview();
 })();
