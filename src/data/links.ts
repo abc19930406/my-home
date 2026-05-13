@@ -82,7 +82,7 @@ export const linksData: CardLink[] = [
     title: "記帳系統",
     icon: "coin",
     description: "個人收支・每月概況",
-    url: ""
+    url: "/ledger"
   },
   {
     section: "工具",

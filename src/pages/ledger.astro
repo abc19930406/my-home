@@ -1,0 +1,356 @@
+---
+import Layout from '../layouts/Layout.astro';
+import '../styles/ledger.css';
+
+const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
+---
+
+<Layout title="記帳系統 | The Corner Table">
+  <div class="ledger-body">
+    <div class="ledger-container">
+      <header class="ledger-header">
+        <a href="/" class="nav-back">← Back</a>
+        <h1 class="page-title">記帳</h1>
+        <p class="page-subtitle">收支紀錄・薪資來源</p>
+        <hr class="header-divider" />
+      </header>
+
+      <!-- 月份導航 -->
+      <section class="month-nav">
+        <button id="prev-month" class="nav-arrow" title="上個月">
+          <i class="ti ti-chevron-left"></i>
+        </button>
+        <div id="current-month-text" class="current-month-display">
+          載入中...
+        </div>
+        <button id="next-month" class="nav-arrow" title="下個月">
+          <i class="ti ti-chevron-right"></i>
+        </button>
+      </section>
+
+      <!-- 指標卡片 -->
+      <section class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-label">本月收入</div>
+          <div id="total-income" class="stat-value income">$0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">本月支出</div>
+          <div id="total-expense" class="stat-value expense">$0</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">本月結餘</div>
+          <div id="total-balance" class="stat-value balance">$0</div>
+        </div>
+      </section>
+
+      <!-- 收入來源分佈 -->
+      <section class="distribution-section">
+        <h2 class="section-title">收入來源分佈</h2>
+        <div id="income-chart" class="distribution-list">
+          <!-- JS 動態插入 -->
+        </div>
+      </section>
+
+      <!-- 支出分類分佈 -->
+      <section class="distribution-section">
+        <h2 class="section-title">支出分類分佈</h2>
+        <div id="expense-chart" class="distribution-list">
+          <!-- JS 動態插入 -->
+        </div>
+      </section>
+
+      <!-- 明細列表 -->
+      <section class="list-section">
+        <div class="list-header">
+          <h2 class="section-title">本月明細</h2>
+          <button id="btn-add-transaction" class="btn-add">+ 新增</button>
+        </div>
+        <div id="transaction-list" class="transaction-list">
+          <!-- JS 動態插入 -->
+        </div>
+      </section>
+
+      <!-- 底部連結 -->
+      <div id="login-hint" class="login-hint" style="display: none;">
+        <a href="/login?from=/ledger" class="nav-link">管理</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增/編輯 Modal -->
+  <div id="transaction-modal" class="modal-overlay">
+    <div class="modal-content">
+      <h3 id="modal-title" class="modal-title">新增紀錄</h3>
+      <div class="type-switch">
+        <button id="type-income" class="type-btn active income" data-type="income">收入</button>
+        <button id="type-expense" class="type-btn expense" data-type="expense">支出</button>
+      </div>
+      <form id="transaction-form">
+        <input type="hidden" id="edit-id" />
+        <div class="form-group">
+          <label for="category-select">分類</label>
+          <select id="category-select" class="form-control" required></select>
+        </div>
+        <div class="form-group">
+          <label for="amount-input">金額 (NTD)</label>
+          <input type="number" id="amount-input" class="form-control" required placeholder="請輸入金額" />
+        </div>
+        <div class="form-group">
+          <label for="date-input">日期</label>
+          <input type="date" id="date-input" class="form-control" required />
+        </div>
+        <div class="form-group">
+          <label for="note-input" id="note-label">備註</label>
+          <input type="text" id="note-input" class="form-control" placeholder="選填" />
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="btn-delete-transaction" class="btn-delete-record" style="display: none;">刪除</button>
+          <button type="button" id="btn-cancel" class="btn-cancel">取消</button>
+          <button type="submit" class="btn-save">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+</Layout>
+
+<script define:vars={{ supabaseUrl, supabaseAnonKey }}>
+(async () => {
+  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+  // 1. 權限保護
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    window.location.href = '/login?from=/ledger';
+    return;
+  }
+
+  // 2. 狀態管理
+  let currentMonth = new Date(); // 目前選中的月份
+  let transactions = [];
+  let editingId = null;
+  const categories = {
+    income: ['樂驛', '豐苒', '少觀所', '仁愛之家', '演講', '其他'],
+    expense: ['固定支出', '飲食', '交通', '娛樂', '其他']
+  };
+
+  // 3. UI 元素
+  const monthText = document.getElementById('current-month-text');
+  const incomeList = document.getElementById('income-chart');
+  const expenseList = document.getElementById('expense-chart');
+  const listContainer = document.getElementById('transaction-list');
+  const totalIncomeEl = document.getElementById('total-income');
+  const totalExpenseEl = document.getElementById('total-expense');
+  const totalBalanceEl = document.getElementById('total-balance');
+  
+  const modal = document.getElementById('transaction-modal');
+  const form = document.getElementById('transaction-form');
+  const typeBtns = document.querySelectorAll('.type-btn');
+  const categorySelect = document.getElementById('category-select');
+  const amountInput = document.getElementById('amount-input');
+  const dateInput = document.getElementById('date-input');
+  const noteInput = document.getElementById('note-input');
+  const noteLabel = document.getElementById('note-label');
+  const deleteBtn = document.getElementById('btn-delete-transaction');
+  const toast = document.getElementById('toast');
+
+  // 4. 輔助函數
+  const formatDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  const formatCurrency = (val) => '$' + Math.abs(val).toLocaleString();
+  const showToast = (msg) => {
+    toast.textContent = msg;
+    toast.style.display = 'block';
+    setTimeout(() => toast.style.display = 'none', 2000);
+  };
+
+  // 5. 核心邏輯：載入資料
+  async function loadData() {
+    const y = currentMonth.getFullYear();
+    const m = currentMonth.getMonth();
+    monthText.textContent = `${y} 年 ${m + 1} 月`;
+
+    const firstDay = formatDate(new Date(y, m, 1));
+    const lastDay = formatDate(new Date(y, m + 1, 0));
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .gte('date', firstDay)
+      .lte('date', lastDay)
+      .order('date', { ascending: false });
+
+    if (error) {
+      showToast('載入失敗');
+      return;
+    }
+    transactions = data || [];
+    render();
+  }
+
+  function render() {
+    let incomeSum = 0;
+    let expenseSum = 0;
+    const incomeMap = {};
+    const expenseMap = {};
+
+    transactions.forEach(t => {
+      if (t.type === 'income') {
+        incomeSum += t.amount;
+        incomeMap[t.category] = (incomeMap[t.category] || 0) + t.amount;
+      } else {
+        expenseSum += t.amount;
+        expenseMap[t.category] = (expenseMap[t.category] || 0) + t.amount;
+      }
+    });
+
+    // 頂部指標
+    totalIncomeEl.textContent = formatCurrency(incomeSum);
+    totalExpenseEl.textContent = formatCurrency(expenseSum);
+    totalBalanceEl.textContent = formatCurrency(incomeSum - expenseSum);
+
+    // 分佈圖表
+    const renderChart = (map, container, total, type) => {
+      const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
+      container.innerHTML = sorted.map(([cat, val]) => {
+        const percent = total > 0 ? (val / total * 100) : 0;
+        return `
+          <div class="chart-item">
+            <div class="chart-info">
+              <span>${cat}</span>
+              <span>${formatCurrency(val)}</span>
+            </div>
+            <div class="chart-bar-bg">
+              <div class="chart-bar-fill ${type}-bar" style="width: ${percent}%"></div>
+            </div>
+          </div>
+        `;
+      }).join('') || '<div class="text-muted">本月尚無紀錄</div>';
+    };
+    renderChart(incomeMap, incomeList, incomeSum, 'income');
+    renderChart(expenseMap, expenseList, expenseSum, 'expense');
+
+    // 明細列表
+    listContainer.innerHTML = transactions.map(t => `
+      <div class="transaction-item" data-id="${t.id}">
+        <div class="item-date">${t.date.split('-').slice(1).join('/')}</div>
+        <div class="item-note">${t.note || t.category}</div>
+        <div class="item-category">${t.category}</div>
+        <div class="item-amount ${t.type}">${t.type === 'income' ? '+' : '-'}${t.amount.toLocaleString()}</div>
+      </div>
+    `).join('') || '<div class="text-muted" style="text-align:center; padding: 2rem;">本月尚無明細</div>';
+  }
+
+  // 6. Modal 與 表單邏輯
+  function openModal(item = null) {
+    editingId = item ? item.id : null;
+    document.getElementById('modal-title').textContent = item ? '編輯紀錄' : '新增紀錄';
+    deleteBtn.style.display = item ? 'block' : 'none';
+
+    const type = item ? item.type : 'expense';
+    updateTypeUI(type);
+    updateCategories(type, item ? item.category : '');
+    
+    amountInput.value = item ? item.amount : '';
+    dateInput.value = item ? item.date : formatDate(new Date());
+    noteInput.value = item ? item.note : '';
+    
+    modal.style.display = 'flex';
+  }
+
+  function updateTypeUI(type) {
+    typeBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.type === type);
+    });
+  }
+
+  function updateCategories(type, selectedValue = '') {
+    const list = categories[type];
+    categorySelect.innerHTML = list.map(c => `<option value="${c}" ${c === selectedValue ? 'selected' : ''}>${c}</option>`).join('');
+    checkNoteRequired();
+  }
+
+  function checkNoteRequired() {
+    const isOther = categorySelect.value === '其他';
+    noteLabel.innerHTML = isOther ? '備註 <span style="color:var(--expense-color)">*</span>' : '備註';
+    noteInput.required = isOther;
+    noteInput.placeholder = isOther ? '請說明具體來源/類別' : '選填';
+  }
+
+  categorySelect.onchange = checkNoteRequired;
+
+  typeBtns.forEach(btn => {
+    btn.onclick = () => {
+      updateTypeUI(btn.dataset.type);
+      updateCategories(btn.dataset.type);
+    };
+  });
+
+  document.getElementById('btn-add-transaction').onclick = () => openModal();
+  document.getElementById('btn-cancel').onclick = () => modal.style.display = 'none';
+
+  listContainer.onclick = (e) => {
+    const itemEl = e.target.closest('.transaction-item');
+    if (itemEl) {
+      const id = itemEl.dataset.id;
+      const item = transactions.find(t => t.id == id);
+      openModal(item);
+    }
+  };
+
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    const type = document.querySelector('.type-btn.active').dataset.type;
+    const payload = {
+      type,
+      category: categorySelect.value,
+      amount: parseInt(amountInput.value),
+      date: dateInput.value,
+      note: noteInput.value
+    };
+
+    let res;
+    if (editingId) {
+      res = await supabase.from('transactions').update(payload).eq('id', editingId);
+    } else {
+      res = await supabase.from('transactions').insert(payload);
+    }
+
+    if (res.error) {
+      showToast('儲存失敗');
+    } else {
+      showToast('儲存成功');
+      modal.style.display = 'none';
+      loadData();
+    }
+  };
+
+  deleteBtn.onclick = async () => {
+    if (!confirm('確定要刪除這筆紀錄？')) return;
+    const { error } = await supabase.from('transactions').delete().eq('id', editingId);
+    if (error) {
+      showToast('刪除失敗');
+    } else {
+      showToast('已刪除');
+      modal.style.display = 'none';
+      loadData();
+    }
+  };
+
+  // 7. 月份導航
+  document.getElementById('prev-month').onclick = () => {
+    currentMonth.setMonth(currentMonth.getMonth() - 1);
+    loadData();
+  };
+  document.getElementById('next-month').onclick = () => {
+    currentMonth.setMonth(currentMonth.getMonth() + 1);
+    loadData();
+  };
+
+  // 8. 初始化
+  loadData();
+})();
+</script>
