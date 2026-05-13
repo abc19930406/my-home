@@ -50,56 +50,6 @@
   margin-bottom: 3rem;
 }
 
-/* ===== 現在狀態 ===== */
-.status-section {
-  margin-bottom: 3rem;
-}
-
-.status-heading {
-  text-align: center;
-  font-size: 0.8rem;
-  letter-spacing: 0.3em;
-  color: #8A6E52;
-  font-weight: 400;
-  margin-bottom: 1.5rem;
-}
-
-.status-card {
-  background: #3A2818;
-  border: 1px solid #4A3525;
-  border-radius: 10px;
-  padding: 1.5rem;
-}
-
-.status-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1.25rem;
-}
-
-@media (min-width: 768px) {
-  .status-grid {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-.status-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.status-label {
-  color: #A08060;
-  font-size: 0.75rem;
-}
-
-.status-value {
-  color: #F5E6CC;
-  font-size: 0.8rem;
-  min-height: 1.2em;
-}
-
 /* ===== FOOTER ===== */
 .footer {
   text-align: center;

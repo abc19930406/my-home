@@ -1,7 +1,9 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import CardSection from '../components/CardSection.astro';
-import { linksData } from '../data/links';
+import { linksData, type CardLink } from '../data/links';
+import { supabase } from '../lib/supabase-client';
+import '../styles/status.css';
 
 // 依照指定順序，將卡片分組
 const sectionOrder = ["知識與創作", "生活記錄", "工具"];
@@ -9,6 +11,30 @@ const groupedCards = sectionOrder.map(section => ({
   name: section,
   cards: linksData.filter(card => card.section === section)
 }));
+
+// 抓取現在狀態 (id=1)
+let initialStatus = {
+  reading: '尚未填寫',
+  music: '尚未填寫',
+  mood: '尚未填寫',
+  doing: '尚未填寫',
+  updated_at: new Date().toISOString()
+};
+
+try {
+  const { data, error } = await supabase.from('status').select('*').eq('id', 1).single();
+  if (!error && data) {
+    initialStatus = data;
+  }
+} catch (err) {
+  console.warn('⚠️ Build Warning: 無法取得現在狀態資料。');
+}
+
+// 格式化日期：5.13 更新
+const formatShortDate = (dateStr: string) => {
+  const d = new Date(dateStr);
+  return `${d.getMonth() + 1}.${d.getDate()} 更新`;
+};
 ---
 
 <Layout>
@@ -39,27 +65,34 @@ const groupedCards = sectionOrder.map(section => ({
 
 
 
-    <!-- ===== 現在狀態 ===== -->
+    <!-- ===== 現在狀態 (便條紙風格) ===== -->
     <section class="status-section">
-      <h3 class="status-heading">— 現在狀態 —</h3>
-      <div class="status-card">
-        <div class="status-grid">
-          <div class="status-item">
-            <span class="status-label">📖 閱讀中</span>
-            <span class="status-value"><!-- 請手動填寫 --></span>
-          </div>
-          <div class="status-item">
-            <span class="status-label">🧠 正在學</span>
-            <span class="status-value"><!-- 請手動填寫 --></span>
-          </div>
-          <div class="status-item">
-            <span class="status-label">📍 最近去了</span>
-            <span class="status-value"><!-- 請手動填寫 --></span>
-          </div>
-          <div class="status-item">
-            <span class="status-label">🎵 聽歌中</span>
-            <span class="status-value"><!-- 請手動填寫 --></span>
-          </div>
+      <div class="status-note" id="status-postit">
+        <div class="status-tape"></div>
+        
+        <!-- 管理員編輯按鈕 -->
+        <button id="edit-status-btn" class="status-edit-btn" title="編輯狀態">
+          <i class="ti ti-edit"></i>
+        </button>
+
+        <div class="status-fields" id="status-display">
+          <div class="status-field">📖 <span id="display-reading">{initialStatus.reading}</span></div>
+          <div class="status-field">🎵 <span id="display-music">{initialStatus.music}</span></div>
+          <div class="status-field">💬 <span id="display-mood">{initialStatus.mood}</span></div>
+          <div class="status-field">🔨 <span id="display-doing">{initialStatus.doing}</span></div>
+        </div>
+
+        <!-- 編輯模式 (預設隱藏) -->
+        <div id="status-edit-form" class="status-fields" style="display: none;">
+          <div class="status-field">📖 <input type="text" id="input-reading" class="status-input" value={initialStatus.reading} /></div>
+          <div class="status-field">🎵 <input type="text" id="input-music" class="status-input" value={initialStatus.music} /></div>
+          <div class="status-field">💬 <input type="text" id="input-mood" class="status-input" value={initialStatus.mood} /></div>
+          <div class="status-field">🔨 <input type="text" id="input-doing" class="status-input" value={initialStatus.doing} /></div>
+        </div>
+
+        <div class="status-updated">
+          <span id="status-updated-at">{formatShortDate(initialStatus.updated_at)}</span>
+          <button id="save-status-btn" class="status-save-btn" style="display: none;">儲存</button>
         </div>
       </div>
     </section>
@@ -224,6 +257,67 @@ const groupedCards = sectionOrder.map(section => ({
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = '儲存';
+    }
+  });
+
+  // --- 現在狀態便條紙編輯邏輯 ---
+  const statusEditBtn = document.getElementById('edit-status-btn');
+  const statusSaveBtn = document.getElementById('save-status-btn');
+  const statusDisplay = document.getElementById('status-display');
+  const statusEditForm = document.getElementById('status-edit-form');
+  const statusUpdatedAtEl = document.getElementById('status-updated-at');
+
+  const statusInputs = {
+    reading: document.getElementById('input-reading') as HTMLInputElement,
+    music: document.getElementById('input-music') as HTMLInputElement,
+    mood: document.getElementById('input-mood') as HTMLInputElement,
+    doing: document.getElementById('input-doing') as HTMLInputElement
+  };
+
+  const statusDisplays = {
+    reading: document.getElementById('display-reading'),
+    music: document.getElementById('display-music'),
+    mood: document.getElementById('display-mood'),
+    doing: document.getElementById('display-doing')
+  };
+
+  statusEditBtn?.addEventListener('click', () => {
+    if (statusDisplay) statusDisplay.style.display = 'none';
+    if (statusEditForm) statusEditForm.style.display = 'flex';
+    if (statusEditBtn) statusEditBtn.style.display = 'none';
+    if (statusSaveBtn) statusSaveBtn.style.display = 'inline-block';
+  });
+
+  statusSaveBtn?.addEventListener('click', async () => {
+    const newData = {
+      reading: statusInputs.reading.value,
+      music: statusInputs.music.value,
+      mood: statusInputs.mood.value,
+      doing: statusInputs.doing.value,
+      updated_at: new Date().toISOString()
+    };
+
+    // Optimistic UI
+    Object.keys(newData).forEach(key => {
+      // @ts-ignore
+      if (statusDisplays[key]) statusDisplays[key].textContent = newData[key];
+    });
+    const d = new Date();
+    if (statusUpdatedAtEl) statusUpdatedAtEl.textContent = `${d.getMonth() + 1}.${d.getDate()} 更新`;
+
+    if (statusDisplay) statusDisplay.style.display = 'flex';
+    if (statusEditForm) statusEditForm.style.display = 'none';
+    if (statusEditBtn) statusEditBtn.style.display = 'block';
+    if (statusSaveBtn) statusSaveBtn.style.display = 'none';
+
+    try {
+      const { error } = await supabase.from('status').update(newData).eq('id', 1);
+      if (error) throw error;
+      fetch(deployWebhookUrl, { method: 'POST', mode: 'no-cors' }).catch(() => {});
+      showToast('狀態已更新！');
+    } catch (err) {
+      console.error('Status update failed:', err);
+      showToast('狀態更新失敗');
     }
   });
 
