@@ -155,12 +155,12 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
         ))}
         {publicQuotes.length === 0 && <p class="empty-state" id="empty-msg">尚未收藏任何語錄</p>}
       </div>
+      <div id="login-hint" class="login-hint">
+        <a href="/login?from=/quotes" class="nav-link">管理</a>
+      </div>
     </div>
   </div>
 
-  <div id="login-hint" class="login-hint">
-    <a href="/login?from=/quotes" class="nav-link">管理</a>
-  </div>
   <div id="toast" class="toast"></div>
 </Layout>
 
