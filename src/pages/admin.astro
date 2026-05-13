@@ -148,22 +148,19 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 </Layout>
 
 <script define:vars={{ deployWebhookUrl, supabaseUrl, supabaseAnonKey }}>
-  // 動態匯入 Supabase SDK
+(async () => {
   const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
   const adminContent = document.getElementById('admin-content');
 
   // 1. 檢查權限
-  async function checkAuth() {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      window.location.href = '/login'; // 未登入，踢回登入頁
-    } else {
-      if (adminContent) adminContent.style.display = 'block'; // 已登入，顯示畫面
-    }
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) {
+    window.location.href = '/login';
+    return;
   }
-  checkAuth();
+  if (adminContent) adminContent.style.display = 'block';
 
   // 日期邏輯
   const dateEl = document.getElementById('current-date');
@@ -328,6 +325,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
       showToast('狀態更新失敗');
     }
   });
+})();
 </script>
 
 <style>
