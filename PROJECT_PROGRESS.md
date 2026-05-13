@@ -44,37 +44,17 @@
 - posts 資料表含 image_urls text[] 欄位
 - post_images Storage Bucket（PUBLIC）
 
----
-
-## 二、下一個任務：語錄收藏模組
-
-視覺已確認，準備實作。
-
-**風格**：牛皮紙書頁摺角，SVG 濾鏡皺摺效果
-- 背景：#E8D5A8 加細緻格紋
-- 書頁左側邊欄（頁碼+橫線），右上摺角
-- 奇數卡片 filter:url(#paper)，偶數 filter:url(#paper-light)
-- SVG 濾鏡定義：
-  - #paper：feTurbulence baseFrequency="0.65 0.75" numOctaves="4" seed="3"，feDisplacementMap scale="2.5"
-  - #paper-light：feTurbulence baseFrequency="0.9 0.85" numOctaves="3" seed="7"，feDisplacementMap scale="1.5"
-- 「翻頁」收合搜尋區（ti-book-2 圖示，預設收合）
-
-**資料表** quotes（待執行 SQL）：
-- id, content, source, source_type(book/film/self/other), category, visibility(public/friends/private), created_at
-- RLS 政策與 posts 資料表相同
-
-**功能**：
-- 路由：/quotes（列表頁，無單篇頁）
-- 關鍵字搜尋 + 分類篩選（全部、成長、關係、當下、孤獨、自己）
-- 管理：新增/編輯/刪除，登入後顯示
-- 來源圖示：ti-book / ti-movie / ti-pencil
-- 完成後把 links.ts 的語錄收藏 url 改為 /quotes
-
-**CSS 規則**：
-- 樣式寫在 src/styles/quotes.css，frontmatter import 載入
-- 頁面頂部加 <style is:global> 覆蓋 Layout 背景色
+### ✅ 語錄收藏模組（/quotes）
+- [x] 牛皮紙書頁摺角設計，含 SVG 皺摺濾鏡效果
+- [x] 列表頁：SSG 渲染公開語錄，登入後補齊私密內容
+- [x] 「翻頁」收合搜尋區，支援關鍵字與標籤即時篩選
+- [x] 琥珀金紙膠帶風格管理介面（新增/編輯/刪除）
+- [x] 整合至首頁卡片連結
+- [x] 行高 1.7，段落間距 0.4rem
 
 ---
+
+## 二、下一個任務：讀書筆記模組
 
 ## 三、規劃中功能
 
