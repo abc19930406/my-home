@@ -327,17 +327,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
       console.error('Status update failed:', err);
       showToast('狀態更新失敗');
     }
-  // 日期邏輯
-  const dateEl = document.getElementById('current-date');
-  if (dateEl) {
-    const now = new Date();
-    dateEl.textContent = now.toLocaleDateString('zh-TW', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      weekday: 'long',
-    });
-  }
+  });
 </script>
 
 <style>
