@@ -46,64 +46,42 @@ const formatShortDate = (dateStr: string) => {
 
   <!-- ===== MAIN 主體：三個卡片分區 ===== -->
   <main class="main-content">
+    <!-- ===== 現在狀態 (便條紙風格) ===== -->
+    <section class="status-section">
+      <div class="status-note" id="status-postit">
+        <div class="status-tape"></div>
+        
+        <!-- 管理員編輯按鈕 -->
+        <button id="edit-status-btn" class="status-edit-btn admin-only" style="display: none;" title="編輯狀態">
+          <i class="ti ti-edit"></i>
+        </button>
+
+        <div class="status-fields" id="status-display">
+          <div class="status-field">📖 <span id="display-reading">{initialStatus.reading}</span></div>
+          <div class="status-field">🎵 <span id="display-music">{initialStatus.music}</span></div>
+          <div class="status-field">💬 <span id="display-mood">{initialStatus.mood}</span></div>
+          <div class="status-field">🔨 <span id="display-doing">{initialStatus.doing}</span></div>
+        </div>
+
+        <!-- 編輯模式 (預設隱藏) -->
+        <div id="status-edit-form" class="status-fields" style="display: none;">
+          <div class="status-field">📖 <input type="text" id="input-reading" class="status-input" value={initialStatus.reading} /></div>
+          <div class="status-field">🎵 <input type="text" id="input-music" class="status-input" value={initialStatus.music} /></div>
+          <div class="status-field">💬 <input type="text" id="input-mood" class="status-input" value={initialStatus.mood} /></div>
+          <div class="status-field">🔨 <input type="text" id="input-doing" class="status-input" value={initialStatus.doing} /></div>
+        </div>
+
+        <div class="status-updated">
+          <span id="status-updated-at">{formatShortDate(initialStatus.updated_at)} 更新</span>
+          <button id="save-status-btn" class="status-save-btn" style="display: none;">儲存</button>
+        </div>
+      </div>
+    </section>
+
     {groupedCards.map(({ name, cards }) => (
       <CardSection section={name} cards={cards} />
     ))}
   </main>
-
-  <!-- ===== 現在狀態 (便條紙風格) ===== -->
-  <section class="status-section">
-    <div class="status-postit" id="status-postit">
-      <!-- 管理員編輯按鈕 -->
-      <button id="edit-status-btn" class="status-edit-btn admin-only" style="display: none;" title="編輯狀態">
-        <i class="ti ti-edit"></i>
-      </button>
-
-      <div class="status-content" id="status-display">
-        <div class="status-item">
-          <span class="status-emoji">📖</span>
-          <span class="status-text" id="display-reading">{initialStatus.reading}</span>
-        </div>
-        <div class="status-item">
-          <span class="status-emoji">🎵</span>
-          <span class="status-text" id="display-music">{initialStatus.music}</span>
-        </div>
-        <div class="status-item">
-          <span class="status-emoji">💬</span>
-          <span class="status-text" id="display-mood">{initialStatus.mood}</span>
-        </div>
-        <div class="status-item">
-          <span class="status-emoji">🔨</span>
-          <span class="status-text" id="display-doing">{initialStatus.doing}</span>
-        </div>
-      </div>
-
-      <!-- 編輯模式 (預設隱藏) -->
-      <div id="status-edit-form" style="display: none;">
-        <div class="status-item">
-          <span class="status-emoji">📖</span>
-          <input type="text" id="input-reading" class="status-input" value={initialStatus.reading} />
-        </div>
-        <div class="status-item">
-          <span class="status-emoji">🎵</span>
-          <input type="text" id="input-music" class="status-input" value={initialStatus.music} />
-        </div>
-        <div class="status-item">
-          <span class="status-emoji">💬</span>
-          <input type="text" id="input-mood" class="status-input" value={initialStatus.mood} />
-        </div>
-        <div class="status-item">
-          <span class="status-emoji">🔨</span>
-          <input type="text" id="input-doing" class="status-input" value={initialStatus.doing} />
-        </div>
-      </div>
-
-      <div class="status-footer">
-        <span id="status-updated-at">{formatShortDate(initialStatus.updated_at)}</span>
-        <button id="save-status-btn" class="status-save-btn" style="display: none;">儲存</button>
-      </div>
-    </div>
-  </section>
 
   <!-- ===== FOOTER 底部 ===== -->
   <footer class="footer">
