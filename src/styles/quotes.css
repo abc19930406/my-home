@@ -404,3 +404,25 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* =========================================
+   低調登入連結
+========================================= */
+.login-hint {
+  text-align: center;
+  margin-top: 4rem;
+  margin-bottom: 2rem;
+  opacity: 0.5;
+  transition: opacity 0.3s;
+}
+
+.login-hint:hover {
+  opacity: 1;
+}
+
+.login-hint .nav-link {
+  font-size: 11px;
+  color: var(--quotes-muted);
+  text-decoration: none;
+  letter-spacing: 0.1em;
+}

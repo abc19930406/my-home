@@ -1,6 +1,5 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import ThemeToggle from '../../components/ThemeToggle.astro';
 import { supabase } from '../../lib/supabase-client';
 import '../../styles/quotes.css';
 
@@ -159,7 +158,9 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     </div>
   </div>
 
-  <ThemeToggle />
+  <div id="login-hint" class="login-hint">
+    <a href="/login?from=/quotes" class="nav-link">管理</a>
+  </div>
   <div id="toast" class="toast"></div>
 </Layout>
 
@@ -202,12 +203,16 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   // 2. 權限檢查與管理功能
   async function checkAdmin() {
     const { data: { session } } = await supabase.auth.getSession();
+    const loginHint = document.getElementById('login-hint');
+
     if (session) {
       document.querySelectorAll('.admin-only').forEach(el => {
         (el as HTMLElement).style.display = 'flex';
       });
+      if (loginHint) loginHint.style.display = 'none';
       return true;
     }
+    if (loginHint) loginHint.style.display = 'block';
     return false;
   }
 
