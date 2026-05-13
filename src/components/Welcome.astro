@@ -105,7 +105,10 @@ const formatShortDate = (dateStr: string) => {
   async function checkAuth() {
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
-      document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
+      document.querySelectorAll('.admin-only').forEach(el => {
+        // @ts-ignore
+        el.style.display = el.tagName === 'BUTTON' ? 'flex' : 'block';
+      });
     }
   }
   checkAuth();
