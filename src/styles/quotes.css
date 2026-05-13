@@ -80,17 +80,14 @@
 
 .btn-add-quote {
   background: rgba(200, 170, 100, 0.55);
-  border-left: 1.5px solid rgba(160, 125, 65, 0.35);
-  border-right: 1.5px solid rgba(160, 125, 65, 0.35);
-  border-top: none;
-  border-bottom: none;
+  border: none;
   border-radius: 2px;
-  padding: 8px 22px;
+  padding: 8px 24px;
   font-size: 13px;
   color: #4A3010;
   letter-spacing: 0.12em;
   cursor: pointer;
-  transform: rotate(-2deg);
+  transform: rotate(-3deg);
   display: inline-block;
   position: relative;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
@@ -114,8 +111,19 @@
   border-radius: 2px;
 }
 
+.btn-add-quote::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(200,170,100,0.4) 0%, transparent 18%),
+    linear-gradient(270deg, rgba(200,170,100,0.4) 0%, transparent 18%);
+  pointer-events: none;
+  border-radius: 2px;
+}
+
 .btn-add-quote:hover {
-  transform: rotate(-1deg);
+  transform: rotate(-1.5deg);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.20);
 }
 
