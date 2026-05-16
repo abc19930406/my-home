@@ -53,21 +53,55 @@
 - 管理：新增/編輯/刪除，登入後顯示
 - 來源圖示：ti-book / ti-movie / ti-pencil
 - 「翻頁」收合搜尋區
-- 日夜切換：右下角「切換白天模式」按鈕
+- 無日夜切換（已移除）
+- 底部低調「管理」登入連結，登入後隱藏
 - 已連結首頁卡片（語錄收藏 url 已改為 /quotes）
 - 樣式在 src/styles/quotes.css
+
+### ✅ Polaroid 底片日記（/polaroid）
+- 路由：/polaroid
+- 視覺：深木色底片風格（#1A1410），上下齒孔（14×9px，#0A0806）
+- 核心功能：同一日期跨年並排（今年最亮 / 去年次之 / 兩年前最暗）
+- 日期導航：左右箭頭切換日期
+- 底片格：顯示完整日期（YYYY · M · D）+ 內文
+- 輸入框：登入後顯示，支援新增／編輯／刪除
+- 刪除前有確認提示
+- 本月縱覽：每行一天，有記錄亮起，空白顯示「—」，點擊切換日期
+- 底部低調「管理」登入連結，登入後隱藏
+- 日期處理用本地時區避免 UTC 偏移
+- 已連結首頁卡片（視覺日記 url 已改為 /polaroid）
+- 樣式在 src/styles/polaroid.css
+
+### ✅ 記帳系統（/ledger）
+- 路由：/ledger
+- 權限：私密，未登入者導向 /login?from=/ledger
+- 貨幣：NTD
+- 收入來源分類：樂驛、豐苒、少觀所、仁愛之家、演講、其他（其他需補充備註）
+- 支出分類：固定支出、飲食、交通、娛樂、其他
+- 頁面結構：
+  - 月份導航（左右切換）
+  - 三張指標卡片：本月收入（綠）/ 本月支出（紅）/ 本月結餘（金）
+  - 收入來源分布橫條圖（按金額排列）
+  - 支出分類分布橫條圖（按金額排列）
+  - 本月明細列表（收入綠色正號、支出紅色負號）
+  - 新增／編輯／刪除 Modal
+- 日期處理用本地時區避免 UTC 偏移
+- 已連結首頁卡片（記帳系統 url 已改為 /ledger）
+- 樣式在 src/styles/ledger.css
 
 ### ✅ 資料庫
 - posts 資料表含 image_urls text[] 欄位
 - post_images Storage Bucket（PUBLIC）
 - quotes 資料表已建立（含 RLS）
 - status 資料表已建立（固定一筆 id=1，含 RLS）
+- daily 資料表已建立（date UNIQUE，含 RLS）
+- transactions 資料表已建立（含 RLS，僅管理員可讀寫）
 
 ---
 
 ## 二、規劃中功能（尚未開始）
 
-讀書筆記、視覺日記、年度回顧、作品集、書籤收藏、記帳系統、習慣打卡、語言學習、旅行地圖
+讀書筆記、食記、年度回顧、作品集、書籤收藏、習慣打卡、語言學習、旅行地圖
 
 ---
 
@@ -77,10 +111,14 @@
 2. 有自訂背景的頁面需在頂部加 `<style is:global> html, body { background-color: transparent !important; } </style>`
 3. 各頁面 CSS 用 import 在 frontmatter 載入，不放在 `<style>` 標籤
 4. `<script define:vars>` 不支援頂層 await，所有非同步邏輯必須包在 `(async () => { ... })()` 內
-5. `<script define:vars>` 內不能用 import 語句，Supabase 用 CDN 動態匯入
+5. `<script define:vars>` 內不能用 import 語句，Supabase 用 CDN 動態匯入：
+   `const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm')`
 6. define:vars 傳入 supabaseUrl、supabaseAnonKey、webhookUrl
 7. .halo-moon 容器需 280x280px 才不會出現方形邊框
 8. /admin 頁面的 page-wrapper 預設 display:none，IIFE 確認 session 後顯示
+9. 所有日期處理用本地時區，避免 UTC 偏移：
+   `const localDate = \`\${d.getFullYear()}-\${String(d.getMonth()+1).padStart(2,'0')}-\${String(d.getDate()).padStart(2,'0')}\``
+10. 私密頁面（如 /ledger）在 IIFE 開頭確認 session，無 session 立即導向 /login?from=/xxx
 
 ---
 
