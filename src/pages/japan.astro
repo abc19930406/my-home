@@ -1025,7 +1025,10 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: query.trim() })
       });
+      
+      console.log('res.status:', res.status);
       const data = await res.json();
+      console.log('data:', JSON.stringify(data));
       
       if (exploreResults) {
         if (data.items && data.items.length > 0) {
