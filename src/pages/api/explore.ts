@@ -15,7 +15,7 @@ export async function POST({ request }) {
       });
     }
 
-    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${googleKey}&cx=${googleCx}&q=${encodeURIComponent(query + ' 日本')}&num=5&lr=lang_zh-TW&gl=tw`;
+    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${googleKey}&cx=${googleCx}&q=${encodeURIComponent(query)}&num=5`;
     
     const searchRes = await fetch(searchUrl);
     const searchData = await searchRes.json();
