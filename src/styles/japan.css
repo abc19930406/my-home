@@ -33,6 +33,7 @@
   padding: 50px 20px 80px;
   font-family: 'Noto Serif TC', 'Georgia', serif;
   box-sizing: border-box;
+  overflow-y: auto;
 }
 
 .japan-container {
@@ -359,23 +360,21 @@
 }
 
 /* ==========================================================
-   磚牆卡片區 (Masonry Card Grid)
+   卡片網格區 (Card Grid)
    ========================================================== */
-.japan-masonry {
-  columns: 3;
-  column-gap: 20px;
-  width: 100%;
+.items-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+  align-items: start;
 }
 
 .japan-card {
-  break-inside: avoid;
   background: var(--japan-card-bg);
   border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 8px;
   padding: 16px;
-  margin-bottom: 20px;
   box-shadow: var(--japan-card-shadow);
-  display: inline-block;
   width: 100%;
   box-sizing: border-box;
   transition: transform 0.3s cubic-bezier(0.165, 0.84, 0.44, 1), box-shadow 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
@@ -769,18 +768,18 @@
    RSP (Responsive Breakpoints)
    ========================================================== */
 @media (max-width: 900px) {
-  .japan-masonry {
-    columns: 2;
-  }
   .japan-header .page-title {
     font-size: 2.2rem;
   }
 }
 
-@media (max-width: 600px) {
-  .japan-masonry {
-    columns: 1;
+@media (max-width: 768px) {
+  .items-grid {
+    grid-template-columns: repeat(2, 1fr);
   }
+}
+
+@media (max-width: 600px) {
   .japan-header .page-title {
     font-size: 1.8rem;
   }
@@ -793,6 +792,12 @@
   }
   .japan-body {
     padding: 30px 15px 50px;
+  }
+}
+
+@media (max-width: 480px) {
+  .items-grid {
+    grid-template-columns: 1fr;
   }
 }
 

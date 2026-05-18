@@ -50,6 +50,8 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   <style is:global>
     html, body {
       background-color: #E8EEF5 !important;
+      overflow-y: auto !important;
+      height: auto !important;
     }
   </style>
 
@@ -108,7 +110,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       </section>
 
       <!-- 4. 磚牆式卡片區 -->
-      <main class="japan-masonry" id="japan-items-grid">
+      <main class="items-grid" id="japan-items-grid">
         {items.map(item => {
           // 找出分類名稱
           const cat = categories.find(c => c.id === item.category_id);
