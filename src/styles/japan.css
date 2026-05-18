@@ -398,16 +398,17 @@
   position: relative;
 }
 
-.card-img {
+.item-image {
   width: 100%;
-  height: auto;
-  max-height: 320px;
+  height: 200px;
   object-fit: cover;
+  border-radius: 8px 8px 0 0;
   display: block;
   transition: transform 0.5s ease;
+  cursor: zoom-in;
 }
 
-.japan-card:hover .card-img {
+.japan-card:hover .item-image {
   transform: scale(1.03);
 }
 
@@ -790,4 +791,41 @@
   .japan-body {
     padding: 30px 15px 50px;
   }
+}
+
+/* ==========================================================
+   點擊照片放大檢視 (Lightbox)
+   ========================================================== */
+#lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#lightbox-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+  cursor: pointer;
+}
+#lightbox-img {
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 4px;
+  z-index: 1;
+}
+#lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 24px;
+  cursor: pointer;
+  z-index: 2;
 }

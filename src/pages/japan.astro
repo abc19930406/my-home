@@ -135,7 +135,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
               <!-- 照片區 -->
               <div class="card-img-wrap">
                 {item.image_url ? (
-                  <img src={item.image_url} alt={item.name} class="card-img" loading="lazy" />
+                  <img src={item.image_url} alt={item.name} class="item-image" loading="lazy" />
                 ) : (
                   <div class="card-img-placeholder">
                     <i class="ti ti-photo-off"></i>
@@ -234,6 +234,13 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       </footer>
 
     </div>
+  </div>
+
+  <!-- Lightbox 圖片放大檢視 -->
+  <div id="lightbox" style="display:none;">
+    <div id="lightbox-overlay"></div>
+    <img id="lightbox-img" src="" alt="" />
+    <button id="lightbox-close">✕</button>
   </div>
 
   <!-- Toast 訊息通知 -->
@@ -442,7 +449,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       const cat = categoriesCache.find(c => String(c.id) === String(item.category_id));
       const catName = cat ? cat.name : '未分類';
       const imgTag = item.image_url 
-        ? `<img src="${item.image_url}" alt="${item.name}" class="card-img" loading="lazy" />` 
+        ? `<img src="${item.image_url}" alt="${item.name}" class="item-image" loading="lazy" />` 
         : `
           <div class="card-img-placeholder">
             <i class="ti ti-photo-off"></i>
@@ -905,6 +912,30 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
         console.warn('Webhook trigger failed:', err);
       });
   }
+
+  // --- 點擊照片放大檢視 (Lightbox) ---
+  const lightbox = document.getElementById('lightbox');
+  const lightboxImg = document.getElementById('lightbox-img') as HTMLImageElement;
+
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('item-image')) {
+      if (lightboxImg && lightbox) {
+        lightboxImg.src = (target as HTMLImageElement).src;
+        lightbox.style.display = 'flex';
+      }
+    }
+  });
+
+  document.getElementById('lightbox-overlay')?.addEventListener('click', () => {
+    if (lightbox) lightbox.style.display = 'none';
+  });
+  document.getElementById('lightbox-close')?.addEventListener('click', () => {
+    if (lightbox) lightbox.style.display = 'none';
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && lightbox) lightbox.style.display = 'none';
+  });
 
   // 頁面加載完成後啟動初始化
   init();
