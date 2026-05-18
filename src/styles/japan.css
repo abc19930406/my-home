@@ -400,12 +400,15 @@
 
 .item-image {
   width: 100%;
-  height: 200px;
-  object-fit: cover;
+  height: auto;
+  min-height: 120px;
+  max-height: 400px;
+  object-fit: contain;
   border-radius: 8px 8px 0 0;
   display: block;
-  transition: transform 0.5s ease;
+  background: rgba(100,120,160,0.06);
   cursor: zoom-in;
+  transition: transform 0.5s ease;
 }
 
 .japan-card:hover .item-image {
