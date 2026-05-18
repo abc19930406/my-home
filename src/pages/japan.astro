@@ -1,4 +1,5 @@
 ---
+export const prerender = true;
 import Layout from '../layouts/Layout.astro';
 import { supabase } from '../lib/supabase-client';
 import '../styles/japan.css';
@@ -67,6 +68,26 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
         <p class="page-subtitle">藥妝・零食・伴手禮・景點</p>
       </header>
 
+      <!-- 探索日本搜尋區 -->
+      <section class="explore-section">
+        <div class="explore-header">🔍 探索日本</div>
+        <p class="explore-sub">搜尋最新網路資訊・網友熱門推薦</p>
+        <div class="explore-input-row">
+          <input type="text" id="explore-input" 
+            placeholder="例如：最近熱門藥妝、京都必去景點..."/>
+          <button id="explore-btn">搜尋</button>
+        </div>
+        <!-- 快速標籤 -->
+        <div class="explore-tags">
+          <span class="explore-tag">防曬推薦</span>
+          <span class="explore-tag">京都景點</span>
+          <span class="explore-tag">北海道零食</span>
+          <span class="explore-tag">藥妝必買</span>
+        </div>
+        <!-- 結果區（預設隱藏） -->
+        <div id="explore-results" style="display:none;"></div>
+      </section>
+
       <!-- 2. 分類篩選列 -->
       <section class="japan-filter-bar">
         <div class="filter-row">
@@ -76,6 +97,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
             {categories.filter(c => c.parent_id === null).map(cat => (
               <button class="tag-btn" data-cat-id={cat.id}>{cat.name}</button>
             ))}
+            <button class="tag-btn" data-cat-id="recommend">網友推薦</button>
           </div>
 
           <!-- 登入後管理按鈕 (預設隱藏) -->
@@ -245,6 +267,30 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     <button id="lightbox-close">✕</button>
   </div>
 
+  <!-- 網友推薦收藏分類選擇 Modal -->
+  <div id="collect-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>📌 選擇收藏分類</h3>
+        <button type="button" class="btn-modal-close" id="btn-collect-modal-close">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 24px;">
+        <p style="margin: 0 0 16px 0; font-size: 0.9rem; color: var(--japan-text); line-height: 1.5;">請選擇要將「<span id="collect-item-name-preview" style="font-weight: 600; color: var(--japan-primary);"></span>」加入的分類：</p>
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 8px;">
+          <label for="collect-category-select" style="font-size: 0.85rem; font-weight: 500; color: var(--japan-text-muted);">選擇分類 <span style="color: var(--japan-danger)">*</span></label>
+          <select id="collect-category-select" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(112, 144, 184, 0.3); font-family: inherit; font-size: 0.9rem; color: var(--japan-text); background: white; outline: none; transition: border-color 0.2s;">
+            <option value="">-- 請選擇分類 --</option>
+            <!-- JS 動態插入所有主分類與子分類 -->
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding: 20px 24px; border-top: 1px solid rgba(112, 144, 184, 0.15); display: flex; justify-content: flex-end; gap: 12px; background: rgba(100, 120, 160, 0.02);">
+        <button type="button" id="btn-collect-cancel" class="btn-action">取消</button>
+        <button type="button" id="btn-collect-confirm" class="btn-action-primary">確認收藏</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast 訊息通知 -->
   <div id="toast" class="toast">已成功儲存</div>
 </Layout>
@@ -344,6 +390,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     mainCats.forEach(cat => {
       html += `<button class="tag-btn ${String(cat.id) === String(activeId) ? 'active' : ''}" data-cat-id="${cat.id}">${cat.name}</button>`;
     });
+    html += `<button class="tag-btn ${activeId === 'recommend' ? 'active' : ''}" data-cat-id="recommend">網友推薦</button>`;
     mainContainer.innerHTML = html;
 
     // 綁定主分類點擊事件
@@ -362,7 +409,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     const subContainer = document.getElementById('sub-categories-filter');
     if (!subContainer) return;
 
-    if (currentMainFilter === 'all') {
+    if (currentMainFilter === 'all' || currentMainFilter === 'recommend') {
       subContainer.style.display = 'none';
       subContainer.innerHTML = '';
       return;
@@ -419,7 +466,9 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 
     let filtered = [...itemsCache];
 
-    if (currentMainFilter !== 'all') {
+    if (currentMainFilter === 'recommend') {
+      filtered = itemsCache.filter(item => item.note === '網友推薦');
+    } else if (currentMainFilter !== 'all') {
       // 獲取該主分類下的所有子分類 ID
       const subIds = categoriesCache
         .filter(c => String(c.parent_id) === String(currentMainFilter))
@@ -937,6 +986,215 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && lightbox) lightbox.style.display = 'none';
+  });
+
+  // ==========================================================
+  // 探索日本搜尋與直接收藏邏輯 (Explore Japan Search & Direct Collect)
+  // ==========================================================
+  
+  let pendingCollectItem: { name: string; link: string; description: string } | null = null;
+  
+  const exploreInput = document.getElementById('explore-input') as HTMLInputElement;
+  const exploreBtn = document.getElementById('explore-btn') as HTMLButtonElement;
+  const exploreResults = document.getElementById('explore-results');
+  const collectModal = document.getElementById('collect-modal');
+  const collectSelect = document.getElementById('collect-category-select') as HTMLSelectElement;
+  const collectItemPreview = document.getElementById('collect-item-name-preview');
+  const btnCollectConfirm = document.getElementById('btn-collect-confirm') as HTMLButtonElement;
+
+  // 1. 執行搜尋主邏輯
+  async function executeExploreSearch(query: string) {
+    if (!query.trim()) return;
+    
+    // UI Loading 狀態
+    if (exploreBtn) exploreBtn.disabled = true;
+    if (exploreInput) exploreInput.disabled = true;
+    if (exploreResults) {
+      exploreResults.style.display = 'block';
+      exploreResults.innerHTML = `
+        <div class="explore-loading">
+          <div class="explore-spinner"></div>
+          <span>🔍 正在為您搜尋日本熱門資訊與推薦...</span>
+        </div>
+      `;
+    }
+
+    try {
+      const res = await fetch('/api/explore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: query.trim() })
+      });
+      const data = await res.json();
+      
+      if (exploreResults) {
+        if (data.items && data.items.length > 0) {
+          let html = `
+            <div class="explore-results-title">🔍 網路搜尋日本「${query}」推薦結果：</div>
+            <div class="explore-results-list">
+          `;
+          data.items.forEach((item: any) => {
+            html += `
+              <div class="explore-card" data-name="${item.name.replace(/"/g, '&quot;')}" data-link="${item.link}" data-desc="${item.description.replace(/"/g, '&quot;')}">
+                <div class="explore-card-content">
+                  <h4 class="explore-card-title">${item.name}</h4>
+                  <p class="explore-card-desc">${item.description}</p>
+                  <div class="explore-card-meta">
+                    🌐 來源網站：<a href="${item.link}" target="_blank" rel="noopener noreferrer">${item.source}</a>
+                  </div>
+                </div>
+                <button type="button" class="btn-explore-add">
+                  <i class="ti ti-pin"></i> 收藏
+                </button>
+              </div>
+            `;
+          });
+          html += `</div>`;
+          exploreResults.innerHTML = html;
+        } else {
+          exploreResults.innerHTML = `
+            <div class="explore-loading" style="color: var(--japan-text-muted);">
+              <span>📭 沒有找到相關資訊，更換其他關鍵字試試看吧！</span>
+            </div>
+          `;
+        }
+      }
+    } catch (err) {
+      console.error('Search failed:', err);
+      if (exploreResults) {
+        exploreResults.innerHTML = `
+          <div class="explore-loading" style="color: var(--japan-danger);">
+            <span>⚠️ 搜尋發生錯誤，請稍後再試。</span>
+          </div>
+        `;
+      }
+    } finally {
+      if (exploreBtn) exploreBtn.disabled = false;
+      if (exploreInput) exploreInput.disabled = false;
+    }
+  }
+
+  // 搜尋按鈕與 Enter 事件
+  exploreBtn?.addEventListener('click', () => {
+    executeExploreSearch(exploreInput.value);
+  });
+  exploreInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      executeExploreSearch(exploreInput.value);
+    }
+  });
+
+  // 快速標籤點擊事件
+  document.querySelectorAll('.explore-tag').forEach(tag => {
+    tag.addEventListener('click', (e) => {
+      const text = (e.currentTarget as HTMLElement).textContent || '';
+      if (exploreInput) {
+        exploreInput.value = text;
+        executeExploreSearch(text);
+      }
+    });
+  });
+
+  // 2. 結果卡片點擊「收藏」事件 (委派)
+  exploreResults?.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const btnAdd = target.closest('.btn-explore-add');
+    if (!btnAdd) return;
+
+    const card = btnAdd.closest('.explore-card') as HTMLElement;
+    if (!card) return;
+
+    // 檢查權限：只有登入的 admin 才能新增收藏
+    if (!isAdminUser) {
+      showToast('⚠️ 請先登入管理員帳號以加入收藏！');
+      return;
+    }
+
+    const name = card.dataset.name || '';
+    const link = card.dataset.link || '';
+    const description = card.dataset.desc || '';
+
+    pendingCollectItem = { name, link, description };
+
+    // 顯示 Modal
+    if (collectItemPreview) {
+      collectItemPreview.textContent = name;
+    }
+    populateCollectCategoryDropdown();
+    if (collectModal) {
+      collectModal.style.display = 'flex';
+    }
+  });
+
+  // 3. 填充收藏分類下拉選單
+  function populateCollectCategoryDropdown() {
+    if (!collectSelect) return;
+    
+    // 清空，保留第一個預設選項
+    collectSelect.innerHTML = '<option value="">-- 請選擇分類 --</option>';
+
+    const mainCats = categoriesCache.filter(c => c.parent_id === null);
+    mainCats.forEach(mainCat => {
+      // 插入主分類作為標籤
+      const mainOpt = document.createElement('option');
+      mainOpt.value = String(mainCat.id);
+      mainOpt.innerHTML = `🌟 主分類：${mainCat.name}`;
+      collectSelect.appendChild(mainOpt);
+
+      // 插入該主分類下的子分類
+      const subCats = categoriesCache.filter(c => String(c.parent_id) === String(mainCat.id));
+      subCats.forEach(subCat => {
+        const subOpt = document.createElement('option');
+        subOpt.value = String(subCat.id);
+        subOpt.innerHTML = `    └─ 子分類：${subCat.name}`;
+        collectSelect.appendChild(subOpt);
+      });
+    });
+  }
+
+  // 4. Modal 控制按鈕
+  function closeCollectModal() {
+    if (collectModal) collectModal.style.display = 'none';
+    pendingCollectItem = null;
+    if (collectSelect) collectSelect.value = '';
+  }
+
+  document.getElementById('btn-collect-modal-close')?.addEventListener('click', closeCollectModal);
+  document.getElementById('btn-collect-cancel')?.addEventListener('click', closeCollectModal);
+
+  // 5. 確認收藏寫入 Supabase
+  btnCollectConfirm?.addEventListener('click', async () => {
+    if (!pendingCollectItem) return;
+    
+    const categoryId = collectSelect.value;
+    if (!categoryId) {
+      alert('請選擇要收藏的分類！');
+      return;
+    }
+
+    if (btnCollectConfirm) btnCollectConfirm.disabled = true;
+
+    try {
+      const { error } = await supabase.from('japan_items').insert({
+        category_id: parseInt(categoryId),
+        name: pendingCollectItem.name,
+        note: '網友推薦',
+        image_url: '' // 網友推薦不帶實體圖片
+      });
+
+      if (!error) {
+        showToast('🎉 成功加入日本收藏！');
+        closeCollectModal();
+        init(); // 靜默刷新列表與快取
+        triggerBuildWebhook(); // 觸發 Vercel 生產端重建
+      } else {
+        alert('收藏失敗：' + error.message);
+      }
+    } catch (err: any) {
+      alert('收藏發生異常：' + (err.message || err));
+    } finally {
+      if (btnCollectConfirm) btnCollectConfirm.disabled = false;
+    }
   });
 
   // 頁面加載完成後啟動初始化
