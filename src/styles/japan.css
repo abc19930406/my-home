@@ -1,0 +1,793 @@
+/* ==========================================================
+   日本收藏模組樣式 (Japan Collection)
+   設計風格：晨霧富士 (Morning Mist Mt. Fuji) — 淡藍灰清爽
+   ========================================================== */
+
+:root {
+  --japan-bg: #E8EEF5;
+  --japan-grid-color: rgba(100, 120, 160, 0.12);
+  --japan-primary: #7090B8;
+  --japan-primary-hover: #5A7AA3;
+  --japan-primary-light: rgba(112, 144, 184, 0.1);
+  --japan-text: #2D4060;
+  --japan-text-muted: rgba(45, 64, 96, 0.6);
+  --japan-tag-text: rgba(80, 110, 170, 0.7);
+  --japan-tag-bg: rgba(112, 144, 184, 0.08);
+  --japan-card-bg: rgba(255, 255, 255, 0.85);
+  --japan-border: rgba(112, 144, 184, 0.25);
+  --japan-card-shadow: 0 8px 24px rgba(100, 120, 160, 0.08);
+  --japan-card-shadow-hover: 0 16px 36px rgba(100, 120, 160, 0.15);
+  --japan-danger: #D96B6B;
+  --japan-danger-hover: #C55656;
+}
+
+.japan-body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--japan-bg);
+  background-image:
+    linear-gradient(90deg, var(--japan-grid-color) 1px, transparent 1px),
+    linear-gradient(180deg, var(--japan-grid-color) 1px, transparent 1px);
+  background-size: 28px 28px;
+  color: var(--japan-text);
+  padding: 50px 20px 80px;
+  font-family: 'Noto Serif TC', 'Georgia', serif;
+  box-sizing: border-box;
+}
+
+.japan-container {
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+/* ==========================================================
+   標題區 (Header)
+   ========================================================== */
+.japan-header {
+  text-align: center;
+  margin-bottom: 40px;
+  position: relative;
+}
+
+.japan-header .nav-back {
+  position: absolute;
+  top: 0;
+  left: 0;
+  color: var(--japan-text-muted);
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: color 0.2s, transform 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.japan-header .nav-back:hover {
+  color: var(--japan-primary);
+  transform: translateX(-4px);
+}
+
+.japan-header .page-title {
+  font-size: 2.6rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  margin: 0 0 8px 0;
+  color: var(--japan-text);
+}
+
+.japan-header .page-subtitle {
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+  color: var(--japan-text-muted);
+  margin: 0;
+}
+
+.japan-header::after {
+  content: "";
+  display: block;
+  width: 80px;
+  height: 1.5px;
+  background: var(--japan-primary);
+  opacity: 0.6;
+  margin: 24px auto 0;
+}
+
+/* ==========================================================
+   分類篩選列 (Category Filter Bar)
+   ========================================================== */
+.japan-filter-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--japan-card-bg);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 30px;
+  box-shadow: 0 4px 20px rgba(100, 120, 160, 0.05);
+}
+
+.filter-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.main-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.sub-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--japan-border);
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tag-btn {
+  background: transparent;
+  border: 1px solid var(--japan-border);
+  color: var(--japan-text-muted);
+  padding: 6px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: all 0.25s ease;
+  font-family: inherit;
+  user-select: none;
+}
+
+.tag-btn:hover {
+  border-color: var(--japan-primary);
+  color: var(--japan-primary);
+  background: rgba(112, 144, 184, 0.05);
+}
+
+.tag-btn.active {
+  background: var(--japan-primary);
+  color: white;
+  border-color: var(--japan-primary);
+  box-shadow: 0 4px 12px rgba(112, 144, 184, 0.3);
+}
+
+.admin-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-action {
+  background: transparent;
+  border: 1px dashed var(--japan-primary);
+  color: var(--japan-primary);
+  padding: 6px 16px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.25s ease;
+  font-family: inherit;
+  font-weight: 500;
+}
+
+.btn-action:hover {
+  background: var(--japan-primary);
+  color: white;
+  border-style: solid;
+}
+
+.btn-action-primary {
+  background: var(--japan-primary);
+  border: 1px solid var(--japan-primary);
+  color: white;
+  padding: 6px 18px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.25s ease;
+  font-family: inherit;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(112, 144, 184, 0.2);
+}
+
+.btn-action-primary:hover {
+  background: var(--japan-primary-hover);
+  border-color: var(--japan-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(112, 144, 184, 0.3);
+}
+
+/* ==========================================================
+   管理分類面板 (Manage Categories Panel)
+   ========================================================== */
+.manage-panel {
+  background: var(--japan-card-bg);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--japan-primary);
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 30px;
+  box-shadow: 0 10px 30px rgba(100, 120, 160, 0.12);
+  display: none;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.manage-panel h3 {
+  margin: 0 0 20px 0;
+  font-size: 1.25rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--japan-text);
+  border-bottom: 1px solid var(--japan-border);
+  padding-bottom: 10px;
+}
+
+.category-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.category-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  border: 1px solid rgba(112, 144, 184, 0.1);
+}
+
+.main-cat-title {
+  font-weight: 500;
+  color: var(--japan-text);
+  font-size: 0.95rem;
+  min-width: 100px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.btn-delete-main {
+  background: transparent;
+  border: none;
+  color: var(--japan-text-muted);
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 2px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+}
+
+.btn-delete-main:hover {
+  color: var(--japan-danger);
+  background: rgba(217, 107, 107, 0.1);
+}
+
+.sub-tags-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex-grow: 1;
+}
+
+.sub-manage-tag {
+  background: var(--japan-tag-bg);
+  border: 1px solid rgba(112, 144, 184, 0.15);
+  color: var(--japan-text);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-remove-sub {
+  background: transparent;
+  border: none;
+  color: var(--japan-text-muted);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.2s;
+}
+
+.btn-remove-sub:hover {
+  color: var(--japan-danger);
+}
+
+.btn-dashed-add {
+  background: transparent;
+  border: 1px dashed var(--japan-border);
+  color: var(--japan-text-muted);
+  padding: 4px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.btn-dashed-add:hover {
+  border-color: var(--japan-primary);
+  color: var(--japan-primary);
+  background: rgba(112, 144, 184, 0.05);
+}
+
+.panel-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  border-top: 1px solid var(--japan-border);
+  padding-top: 16px;
+}
+
+/* ==========================================================
+   磚牆卡片區 (Masonry Card Grid)
+   ========================================================== */
+.japan-masonry {
+  columns: 3;
+  column-gap: 20px;
+  width: 100%;
+}
+
+.japan-card {
+  break-inside: avoid;
+  background: var(--japan-card-bg);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: var(--japan-card-shadow);
+  display: inline-block;
+  width: 100%;
+  box-sizing: border-box;
+  transition: transform 0.3s cubic-bezier(0.165, 0.84, 0.44, 1), box-shadow 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
+  position: relative;
+  backdrop-filter: blur(6px);
+}
+
+.japan-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--japan-card-shadow-hover);
+  border-color: rgba(112, 144, 184, 0.4);
+}
+
+.card-img-wrap {
+  width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 12px;
+  background: rgba(112, 144, 184, 0.05);
+  position: relative;
+}
+
+.card-img {
+  width: 100%;
+  height: auto;
+  max-height: 320px;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.5s ease;
+}
+
+.japan-card:hover .card-img {
+  transform: scale(1.03);
+}
+
+.card-img-placeholder {
+  width: 100%;
+  height: 130px;
+  background: linear-gradient(135deg, rgba(112, 144, 184, 0.06) 0%, rgba(100, 120, 160, 0.12) 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: rgba(100, 120, 160, 0.35);
+  font-size: 2.2rem;
+  gap: 8px;
+}
+
+.card-img-placeholder span {
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+}
+
+.card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.card-title {
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin: 0;
+  color: var(--japan-text);
+  line-height: 1.4;
+}
+
+.card-tag {
+  background: var(--japan-tag-bg);
+  color: var(--japan-tag-text);
+  font-size: 0.78rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.card-note {
+  font-size: 0.88rem;
+  color: var(--japan-text-muted);
+  line-height: 1.6;
+  margin: 0;
+  white-space: pre-wrap;
+  border-top: 1px dashed rgba(112, 144, 184, 0.15);
+  padding-top: 8px;
+}
+
+/* 編輯刪除浮動按鈕 */
+.card-admin-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 0.25s, transform 0.25s;
+  z-index: 10;
+}
+
+.japan-card:hover .card-admin-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.btn-card-icon {
+  background: white;
+  border: 1px solid rgba(112, 144, 184, 0.2);
+  color: var(--japan-text);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+
+.btn-card-icon:hover {
+  transform: scale(1.1);
+}
+
+.btn-card-icon.btn-edit:hover {
+  color: var(--japan-primary);
+  border-color: var(--japan-primary);
+}
+
+.btn-card-icon.btn-delete:hover {
+  color: var(--japan-danger);
+  border-color: var(--japan-danger);
+}
+
+/* ==========================================================
+   新增/編輯 Modal
+   ========================================================== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(45, 64, 96, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.modal-box {
+  background: white;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 20px 50px rgba(45, 64, 96, 0.25);
+  border: 1px solid rgba(112, 144, 184, 0.2);
+  overflow: hidden;
+  animation: scaleUp 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.15);
+}
+
+@keyframes scaleUp {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.modal-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid rgba(112, 144, 184, 0.15);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 500;
+  color: var(--japan-text);
+}
+
+.btn-modal-close {
+  background: transparent;
+  border: none;
+  color: var(--japan-text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.btn-modal-close:hover {
+  color: var(--japan-text);
+}
+
+.modal-body {
+  padding: 24px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid rgba(112, 144, 184, 0.15);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  background: #F8FAFC;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group:last-child {
+  margin-bottom: 0;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--japan-text);
+}
+
+.form-group input[type="text"],
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(112, 144, 184, 0.3);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  color: var(--japan-text);
+  box-sizing: border-box;
+  background: white;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  outline: none;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  border-color: var(--japan-primary);
+  box-shadow: 0 0 0 3px rgba(112, 144, 184, 0.15);
+}
+
+/* 照片上傳樣式 */
+.file-upload-wrap {
+  position: relative;
+  border: 2px dashed rgba(112, 144, 184, 0.3);
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #FAFCFE;
+}
+
+.file-upload-wrap:hover {
+  border-color: var(--japan-primary);
+  background: rgba(112, 144, 184, 0.02);
+}
+
+.file-upload-wrap input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+}
+
+.upload-icon {
+  font-size: 1.8rem;
+  color: var(--japan-primary);
+  margin-bottom: 8px;
+}
+
+.upload-text {
+  font-size: 0.85rem;
+  color: var(--japan-text-muted);
+  margin: 0;
+}
+
+.upload-preview {
+  margin-top: 12px;
+  position: relative;
+  display: none;
+  max-width: 120px;
+  margin-left: auto;
+  margin-right: auto;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+}
+
+.upload-preview img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.btn-remove-preview {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  border: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 0.75rem;
+}
+
+/* ==========================================================
+   底部低調管理連結 & Toast
+   ========================================================== */
+.login-hint {
+  text-align: center;
+  margin-top: 80px;
+  margin-bottom: 20px;
+  opacity: 0.4;
+  transition: opacity 0.3s;
+}
+
+.login-hint:hover {
+  opacity: 1;
+}
+
+.login-hint .nav-link {
+  font-size: 0.75rem;
+  color: var(--japan-text-muted);
+  text-decoration: none;
+  letter-spacing: 0.15em;
+  font-weight: 500;
+}
+
+.toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: rgba(45, 64, 96, 0.95);
+  color: white;
+  padding: 10px 24px;
+  border-radius: 30px;
+  font-size: 0.9rem;
+  box-shadow: 0 10px 25px rgba(45, 64, 96, 0.2);
+  z-index: 2000;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--japan-text-muted);
+  font-style: italic;
+  font-size: 1rem;
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+/* ==========================================================
+   RSP (Responsive Breakpoints)
+   ========================================================== */
+@media (max-width: 900px) {
+  .japan-masonry {
+    columns: 2;
+  }
+  .japan-header .page-title {
+    font-size: 2.2rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .japan-masonry {
+    columns: 1;
+  }
+  .japan-header .page-title {
+    font-size: 1.8rem;
+  }
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .admin-actions {
+    justify-content: flex-end;
+  }
+  .japan-body {
+    padding: 30px 15px 50px;
+  }
+}

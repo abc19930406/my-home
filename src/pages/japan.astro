@@ -1,0 +1,911 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { supabase } from '../lib/supabase-client';
+import '../styles/japan.css';
+
+// 1. Build Time: 靜態抓取所有分類與品項，確保極速載入
+let initialCategories = [];
+let initialItems = [];
+
+try {
+  // 抓取分類
+  const { data: catData, error: catError } = await supabase
+    .from('japan_categories')
+    .select('*')
+    .order('sort_order', { ascending: true });
+  
+  if (!catError && catData) {
+    initialCategories = catData;
+  }
+
+  // 抓取品項
+  const { data: itemData, error: itemError } = await supabase
+    .from('japan_items')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (!itemError && itemData) {
+    initialItems = itemData;
+  }
+} catch (err) {
+  console.warn('⚠️ Build Warning: 日本收藏 Supabase 讀取失敗，使用備用資料。', err);
+}
+
+// 備用資料 (以防資料庫在 build 時無法連線)
+const fallbackCategories = [
+  { id: 1, name: '藥妝', parent_id: null, sort_order: 1 },
+  { id: 2, name: '零食', parent_id: null, sort_order: 2 },
+  { id: 3, name: '伴手禮', parent_id: null, sort_order: 3 },
+  { id: 4, name: '景點', parent_id: null, sort_order: 4 }
+];
+
+const categories = initialCategories.length > 0 ? initialCategories : fallbackCategories;
+const items = initialItems;
+
+const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
+---
+
+<Layout title="日本收藏 | The Corner Table">
+  <!-- 全域背景覆蓋：確保 Layout 的深色背景被晨霧富士的粉藍灰覆蓋 -->
+  <style is:global>
+    html, body {
+      background-color: #E8EEF5 !important;
+    }
+  </style>
+
+  <div class="japan-body">
+    <div class="japan-container">
+      
+      <!-- 1. 標題區 -->
+      <header class="japan-header">
+        <a href="/" class="nav-back">
+          <i class="ti ti-chevron-left"></i> 返回首頁
+        </a>
+        <h1 class="page-title">日本收藏</h1>
+        <p class="page-subtitle">藥妝・零食・伴手禮・景點</p>
+      </header>
+
+      <!-- 2. 分類篩選列 -->
+      <section class="japan-filter-bar">
+        <div class="filter-row">
+          <!-- 主分類標籤區 -->
+          <div class="main-categories" id="main-categories-filter">
+            <button class="tag-btn active" data-cat-id="all">全部</button>
+            {categories.filter(c => c.parent_id === null).map(cat => (
+              <button class="tag-btn" data-cat-id={cat.id}>{cat.name}</button>
+            ))}
+          </div>
+
+          <!-- 登入後管理按鈕 (預設隱藏) -->
+          <div class="admin-actions admin-only" style="display: none;">
+            <button id="btn-toggle-manage" class="btn-action">
+              <i class="ti ti-settings"></i> 管理分類
+            </button>
+            <button id="btn-open-add-modal" class="btn-action-primary">
+              <i class="ti ti-plus"></i> 新增品項
+            </button>
+          </div>
+        </div>
+
+        <!-- 子分類展開區 (JS 動態控制隱顯) -->
+        <div class="sub-categories" id="sub-categories-filter" style="display: none;">
+          <!-- JS 動態插入子分類標籤 -->
+        </div>
+      </section>
+
+      <!-- 3. 管理分類面板 (點「管理分類」展開) -->
+      <section id="manage-category-panel" class="manage-panel">
+        <h3><i class="ti ti-category"></i> 分類管理面板</h3>
+        <div class="category-rows" id="manage-category-rows">
+          <!-- JS 動態生成主分類與對應的子分類列 -->
+        </div>
+        <div class="panel-footer">
+          <button id="btn-add-main-cat" class="btn-dashed-add">
+            <i class="ti ti-plus"></i> 新增主分類
+          </button>
+          <button id="btn-close-manage" class="btn-action-primary">完成</button>
+        </div>
+      </section>
+
+      <!-- 4. 磚牆式卡片區 -->
+      <main class="japan-masonry" id="japan-items-grid">
+        {items.map(item => {
+          // 找出分類名稱
+          const cat = categories.find(c => c.id === item.category_id);
+          const catName = cat ? cat.name : '未分類';
+          return (
+            <div 
+              class="japan-card" 
+              data-id={item.id} 
+              data-category-id={item.category_id}
+              data-name={item.name}
+              data-note={item.note || ''}
+              data-image-url={item.image_url || ''}
+            >
+              <!-- 登入後編輯/刪除圖示 -->
+              <div class="card-admin-actions admin-only" style="display: none;">
+                <button class="btn-card-icon btn-edit" title="編輯">
+                  <i class="ti ti-pencil"></i>
+                </button>
+                <button class="btn-card-icon btn-delete" title="刪除">
+                  <i class="ti ti-trash"></i>
+                </button>
+              </div>
+
+              <!-- 照片區 -->
+              <div class="card-img-wrap">
+                {item.image_url ? (
+                  <img src={item.image_url} alt={item.name} class="card-img" loading="lazy" />
+                ) : (
+                  <div class="card-img-placeholder">
+                    <i class="ti ti-photo-off"></i>
+                    <span>NO IMAGE</span>
+                  </div>
+                )}
+              </div>
+
+              <!-- 品項資訊 -->
+              <div class="card-info">
+                <div class="card-title-row">
+                  <h4 class="card-title">{item.name}</h4>
+                  <span class="card-tag">{catName}</span>
+                </div>
+                {item.note && <p class="card-note">{item.note}</p>}
+              </div>
+            </div>
+          );
+        })}
+        {items.length === 0 && (
+          <div class="empty-state" id="empty-state-msg">
+            目前沒有任何收藏品項，登入後即可開始新增！
+          </div>
+        )}
+      </main>
+
+      <!-- 5. 新增/編輯 Modal -->
+      <div id="item-modal" class="modal-overlay">
+        <div class="modal-box">
+          <div class="modal-header">
+            <h3 id="modal-title">新增品項</h3>
+            <button id="btn-modal-close" class="btn-modal-close">&times;</button>
+          </div>
+          <form id="item-form">
+            <div class="modal-body">
+              <input type="hidden" id="form-item-id" />
+              
+              <!-- 品項名稱 -->
+              <div class="form-group">
+                <label for="form-item-name">品項名稱 <span style="color: var(--japan-danger)">*</span></label>
+                <input type="text" id="form-item-name" required placeholder="請輸入品項名稱，例如：合利他命 EX Plus" />
+              </div>
+
+              <!-- 主分類下拉選單 -->
+              <div class="form-group">
+                <label for="form-main-cat">主分類</label>
+                <select id="form-main-cat">
+                  <option value="">請選擇主分類</option>
+                  <!-- JS 動態插入 -->
+                </select>
+              </div>
+
+              <!-- 子分類下拉選單 (選完主分類後動態顯示) -->
+              <div class="form-group" id="form-sub-cat-group" style="display: none;">
+                <label for="form-sub-cat">子分類</label>
+                <select id="form-sub-cat">
+                  <option value="">請選擇子分類</option>
+                  <!-- JS 動態插入 -->
+                </select>
+              </div>
+
+              <!-- 備註 -->
+              <div class="form-group">
+                <label for="form-item-note">備註</label>
+                <textarea id="form-item-note" rows="3" placeholder="例如：代購熱門款、每日兩錠、購買地點等..."></textarea>
+              </div>
+
+              <!-- 照片上傳 -->
+              <div class="form-group">
+                <label>照片上傳</label>
+                <div class="file-upload-wrap">
+                  <i class="ti ti-cloud-upload upload-icon"></i>
+                  <p class="upload-text">點擊或拖曳照片至此上傳</p>
+                  <input type="file" id="form-item-image-file" accept="image/*" />
+                </div>
+                <input type="hidden" id="form-item-image-url" />
+                <div class="upload-preview" id="image-upload-preview">
+                  <!-- 上傳預覽圖 -->
+                  <img src="" id="image-preview-img" alt="Preview" />
+                  <button type="button" class="btn-remove-preview" id="btn-remove-image">&times;</button>
+                </div>
+              </div>
+            </div>
+            
+            <div class="modal-footer">
+              <button type="button" id="btn-modal-cancel" class="btn-action">取消</button>
+              <button type="submit" id="btn-modal-save" class="btn-action-primary">儲存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- 6. 底部低調「管理」登入連結 -->
+      <footer class="login-hint" id="login-hint">
+        <a href="/login?from=/japan" class="nav-link">管理</a>
+      </footer>
+
+    </div>
+  </div>
+
+  <!-- Toast 訊息通知 -->
+  <div id="toast" class="toast">已成功儲存</div>
+</Layout>
+
+<!-- 環境變數傳遞 -->
+<script define:vars={{ webhookUrl }} is:inline>
+  window.__WEBHOOK_URL__ = webhookUrl;
+</script>
+
+<!-- IIFE 客戶端互動與 Supabase 連線邏輯 -->
+<script is:inline>
+  (async () => {
+    // 1. CDN 動態導入 Supabase 庫
+    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
+    
+    // 從 Window 取得 Astro 傳遞的環境變數，或從 global 取得 Supabase URL
+    // 主站已經在全球配置了 Supabase，我們可以從 Supabase 客戶端中繼承，或者直接配置。
+    // 為了安全和通用性，我們先檢查主站是否有全域的 Supabase 配置。
+    // 主站的 supabase-client.ts 是在編譯期載入的，但在網頁前端中，我們可以用 anon key 連線。
+    // 讓我們先發起連線
+    const supabaseUrl = 'https://ltmrkdldmgysczfnidra.supabase.co';
+    // 這裡我們直接用公共 anon key 連接
+    const { data: envData, error: envError } = await fetch('/api/config').then(res => res.json()).catch(() => ({}));
+    
+    // 我們可以從 localStorage 或 session 讀取 supabase token，
+    // 只要用主站的 anonymous key 即可。主站的 anon key 存儲在 meta 或 global 中。
+    // 由於 global.css/Layout.astro 沒有載入 anon key，我們可以使用一個安全而巧妙的辦法：
+    // 主站 client-side bundle 會把 supabaseUrl 和 supabaseAnonKey 編譯進去，我們可以用 localStorage
+    // 或是直接讀取 cookies。其實，更簡單的做法是直接使用主站 supabase instance。
+    // 等等！我們可以在 frontmatter 中取得 anon key，並透過 define:vars 傳入！
+    // 讓我們修改 frontmatter，將 PUBLIC_SUPABASE_URL 和 PUBLIC_SUPABASE_ANON_KEY 一併傳入！
+  })();
+</script>
+
+<script>
+  import { supabase } from '../lib/supabase-client';
+  
+  const deployWebhookUrl = (window as any).__WEBHOOK_URL__ || '';
+  const toast = document.getElementById('toast');
+
+  // 本地快取狀態
+  let categoriesCache: any[] = [];
+  let itemsCache: any[] = [];
+  let currentMainFilter: string = 'all';
+  let currentSubFilter: string = 'all';
+  let isAdminUser = false;
+
+  // --- Utility Functions ---
+  function showToast(message: string) {
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 2000);
+  }
+
+  // --- 讀取資料庫快取與驗證 ---
+  async function init() {
+    // 1. 抓取資料以維持最新狀態
+    const { data: cats } = await supabase.from('japan_categories').select('*').order('sort_order', { ascending: true });
+    const { data: items } = await supabase.from('japan_items').select('*').order('created_at', { ascending: false });
+    
+    categoriesCache = cats || [];
+    itemsCache = items || [];
+
+    // 2. 身分驗證檢查
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      isAdminUser = true;
+      document.querySelectorAll('.admin-only').forEach(el => {
+        (el as HTMLElement).style.display = 'flex';
+      });
+      const loginHint = document.getElementById('login-hint');
+      if (loginHint) loginHint.style.display = 'none';
+
+      // 載入管理選單與 Modal 相關下拉
+      renderManageCategoryRows();
+      populateMainCategoryDropdown();
+    }
+
+    // 3. 重繪篩選器與卡片 (確保 Client Side 最新)
+    renderFilterBar();
+    filterAndRenderItems();
+  }
+
+  // --- 渲染分類篩選列 ---
+  function renderFilterBar() {
+    const mainContainer = document.getElementById('main-categories-filter');
+    if (!mainContainer) return;
+
+    // 保留 "全部"
+    const activeId = currentMainFilter;
+    const mainCats = categoriesCache.filter(c => c.parent_id === null);
+
+    let html = `<button class="tag-btn ${activeId === 'all' ? 'active' : ''}" data-cat-id="all">全部</button>`;
+    mainCats.forEach(cat => {
+      html += `<button class="tag-btn ${String(cat.id) === String(activeId) ? 'active' : ''}" data-cat-id="${cat.id}">${cat.name}</button>`;
+    });
+    mainContainer.innerHTML = html;
+
+    // 綁定主分類點擊事件
+    mainContainer.querySelectorAll('.tag-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).dataset.catId || 'all';
+        selectMainCategory(id);
+      });
+    });
+
+    // 渲染子分類
+    renderSubFilterBar();
+  }
+
+  function renderSubFilterBar() {
+    const subContainer = document.getElementById('sub-categories-filter');
+    if (!subContainer) return;
+
+    if (currentMainFilter === 'all') {
+      subContainer.style.display = 'none';
+      subContainer.innerHTML = '';
+      return;
+    }
+
+    const subs = categoriesCache.filter(c => String(c.parent_id) === String(currentMainFilter));
+    if (subs.length === 0) {
+      subContainer.style.display = 'none';
+      subContainer.innerHTML = '';
+      return;
+    }
+
+    subContainer.style.display = 'flex';
+    let html = `<button class="tag-btn ${currentSubFilter === 'all' ? 'active' : ''}" data-sub-id="all">全部</button>`;
+    subs.forEach(sub => {
+      html += `<button class="tag-btn ${String(sub.id) === String(currentSubFilter) ? 'active' : ''}" data-sub-id="${sub.id}">${sub.name}</button>`;
+    });
+    subContainer.innerHTML = html;
+
+    // 綁定子分類點擊事件
+    subContainer.querySelectorAll('.tag-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const subId = (e.currentTarget as HTMLElement).dataset.subId || 'all';
+        currentSubFilter = subId;
+        subContainer.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('active'));
+        (e.currentTarget as HTMLElement).classList.add('active');
+        filterAndRenderItems();
+      });
+    });
+  }
+
+  function selectMainCategory(id: string) {
+    currentMainFilter = id;
+    currentSubFilter = 'all'; // 重設子分類
+    
+    // 更新主分類樣式
+    const mainContainer = document.getElementById('main-categories-filter');
+    mainContainer?.querySelectorAll('.tag-btn').forEach(btn => {
+      if ((btn as HTMLElement).dataset.catId === id) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+
+    renderSubFilterBar();
+    filterAndRenderItems();
+  }
+
+  // --- 卡片過濾與繪製 (磚牆式 Masonry) ---
+  function filterAndRenderItems() {
+    const grid = document.getElementById('japan-items-grid');
+    if (!grid) return;
+
+    let filtered = [...itemsCache];
+
+    if (currentMainFilter !== 'all') {
+      // 獲取該主分類下的所有子分類 ID
+      const subIds = categoriesCache
+        .filter(c => String(c.parent_id) === String(currentMainFilter))
+        .map(c => String(c.id));
+      
+      if (currentSubFilter === 'all') {
+        // 顯示主分類品項 + 所有子分類品項
+        filtered = itemsCache.filter(item => 
+          String(item.category_id) === String(currentMainFilter) || 
+          subIds.includes(String(item.category_id))
+        );
+      } else {
+        // 僅顯示特定子分類品項
+        filtered = itemsCache.filter(item => String(item.category_id) === String(currentSubFilter));
+      }
+    }
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `
+        <div class="empty-state" id="empty-state-msg">
+          此分類下目前沒有任何品項！
+        </div>
+      `;
+      return;
+    }
+
+    let html = '';
+    filtered.forEach(item => {
+      const cat = categoriesCache.find(c => String(c.id) === String(item.category_id));
+      const catName = cat ? cat.name : '未分類';
+      const imgTag = item.image_url 
+        ? `<img src="${item.image_url}" alt="${item.name}" class="card-img" loading="lazy" />` 
+        : `
+          <div class="card-img-placeholder">
+            <i class="ti ti-photo-off"></i>
+            <span>NO IMAGE</span>
+          </div>
+        `;
+
+      const noteTag = item.note ? `<p class="card-note">${item.note}</p>` : '';
+
+      html += `
+        <div 
+          class="japan-card" 
+          data-id="${item.id}" 
+          data-category-id="${item.category_id}"
+          data-name="${item.name}"
+          data-note="${item.note || ''}"
+          data-image-url="${item.image_url || ''}"
+        >
+          <div class="card-admin-actions admin-only" style="display: ${isAdminUser ? 'flex' : 'none'};">
+            <button class="btn-card-icon btn-edit" title="編輯">
+              <i class="ti ti-pencil"></i>
+            </button>
+            <button class="btn-card-icon btn-delete" title="刪除">
+              <i class="ti ti-trash"></i>
+            </button>
+          </div>
+          <div class="card-img-wrap">
+            ${imgTag}
+          </div>
+          <div class="card-info">
+            <div class="card-title-row">
+              <h4 class="card-title">${item.name}</h4>
+              <span class="card-tag">${catName}</span>
+            </div>
+            ${noteTag}
+          </div>
+        </div>
+      `;
+    });
+
+    grid.innerHTML = html;
+  }
+
+  // --- 管理分類面板渲染 ---
+  function renderManageCategoryRows() {
+    const container = document.getElementById('manage-category-rows');
+    if (!container) return;
+
+    const mainCats = categoriesCache.filter(c => c.parent_id === null);
+    let html = '';
+
+    mainCats.forEach(main => {
+      const subs = categoriesCache.filter(c => String(c.parent_id) === String(main.id));
+      let subTags = '';
+      
+      subs.forEach(sub => {
+        subTags += `
+          <span class="sub-manage-tag">
+            ${sub.name}
+            <button class="btn-remove-sub" data-sub-id="${sub.id}">&times;</button>
+          </span>
+        `;
+      });
+
+      html += `
+        <div class="category-row" data-main-id="${main.id}">
+          <div class="main-cat-title">
+            <span>${main.name}</span>
+            <button class="btn-delete-main" data-main-id="${main.id}" title="刪除此主分類及其子分類">
+              <i class="ti ti-trash"></i>
+            </button>
+          </div>
+          <div class="sub-tags-wrap">
+            ${subTags}
+            <button class="btn-dashed-add btn-add-sub-cat" data-parent-id="${main.id}">
+              <i class="ti ti-plus"></i> 子分類
+            </button>
+          </div>
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
+
+    // 綁定刪除主分類事件
+    container.querySelectorAll('.btn-delete-main').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).dataset.mainId;
+        if (!id) return;
+        if (confirm('確定要刪除此主分類嗎？這會連同其下的所有子分類一併刪除，且無法復原！')) {
+          const { error } = await supabase.from('japan_categories').delete().eq('id', id);
+          if (!error) {
+            showToast('主分類已刪除');
+            categoriesCache = categoriesCache.filter(c => String(c.id) !== String(id) && String(c.parent_id) !== String(id));
+            renderManageCategoryRows();
+            renderFilterBar();
+            populateMainCategoryDropdown();
+            filterAndRenderItems();
+            triggerBuildWebhook();
+          } else {
+            alert('刪除失敗：' + error.message);
+          }
+        }
+      });
+    });
+
+    // 綁定刪除子分類事件
+    container.querySelectorAll('.btn-remove-sub').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).dataset.subId;
+        if (!id) return;
+        if (confirm('確定要刪除此子分類嗎？')) {
+          const { error } = await supabase.from('japan_categories').delete().eq('id', id);
+          if (!error) {
+            showToast('子分類已刪除');
+            categoriesCache = categoriesCache.filter(c => String(c.id) !== String(id));
+            renderManageCategoryRows();
+            renderFilterBar();
+            populateMainCategoryDropdown();
+            filterAndRenderItems();
+            triggerBuildWebhook();
+          } else {
+            alert('刪除失敗：' + error.message);
+          }
+        }
+      });
+    });
+
+    // 綁定新增子分類事件
+    container.querySelectorAll('.btn-add-sub-cat').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const parentId = (e.currentTarget as HTMLElement).dataset.parentId;
+        if (!parentId) return;
+        const name = prompt('請輸入子分類名稱：');
+        if (!name || name.trim() === '') return;
+
+        const { data, error } = await supabase
+          .from('japan_categories')
+          .insert([{ name: name.trim(), parent_id: parseInt(parentId), sort_order: 10 }])
+          .select()
+          .single();
+
+        if (!error && data) {
+          showToast('已新增子分類');
+          categoriesCache.push(data);
+          renderManageCategoryRows();
+          renderFilterBar();
+          populateMainCategoryDropdown();
+          triggerBuildWebhook();
+        } else {
+          alert('新增失敗：' + (error?.message || '未知錯誤'));
+        }
+      });
+    });
+  }
+
+  // --- 新增主分類 ---
+  const btnAddMainCat = document.getElementById('btn-add-main-cat');
+  btnAddMainCat?.addEventListener('click', async () => {
+    const name = prompt('請輸入主分類名稱：');
+    if (!name || name.trim() === '') return;
+
+    // 計算 sort_order
+    const mainCats = categoriesCache.filter(c => c.parent_id === null);
+    const maxSort = mainCats.reduce((max, c) => Math.max(max, c.sort_order || 0), 0);
+
+    const { data, error } = await supabase
+      .from('japan_categories')
+      .insert([{ name: name.trim(), parent_id: null, sort_order: maxSort + 1 }])
+      .select()
+      .single();
+
+    if (!error && data) {
+      showToast('已新增主分類');
+      categoriesCache.push(data);
+      renderManageCategoryRows();
+      renderFilterBar();
+      populateMainCategoryDropdown();
+      triggerBuildWebhook();
+    } else {
+      alert('新增失敗：' + (error?.message || '未知錯誤'));
+    }
+  });
+
+  // --- Modal 表單連動與欄位處理 ---
+  const mainCatSelect = document.getElementById('form-main-cat') as HTMLSelectElement;
+  const subCatGroup = document.getElementById('form-sub-cat-group');
+  const subCatSelect = document.getElementById('form-sub-cat') as HTMLSelectElement;
+
+  function populateMainCategoryDropdown() {
+    if (!mainCatSelect) return;
+    const mainCats = categoriesCache.filter(c => c.parent_id === null);
+    
+    let html = '<option value="">請選擇主分類</option>';
+    mainCats.forEach(cat => {
+      html += `<option value="${cat.id}">${cat.name}</option>`;
+    });
+    mainCatSelect.innerHTML = html;
+  }
+
+  mainCatSelect?.addEventListener('change', () => {
+    const mainId = mainCatSelect.value;
+    updateSubCategoryDropdown(mainId);
+  });
+
+  function updateSubCategoryDropdown(mainId: string, selectedSubId: string = '') {
+    if (!subCatSelect || !subCatGroup) return;
+
+    if (!mainId) {
+      subCatGroup.style.display = 'none';
+      subCatSelect.innerHTML = '<option value="">請選擇子分類</option>';
+      return;
+    }
+
+    const subs = categoriesCache.filter(c => String(c.parent_id) === String(mainId));
+    if (subs.length === 0) {
+      subCatGroup.style.display = 'none';
+      subCatSelect.innerHTML = '<option value="">請選擇子分類</option>';
+      return;
+    }
+
+    subCatGroup.style.display = 'block';
+    let html = '<option value="">請選擇子分類</option>';
+    subs.forEach(sub => {
+      html += `<option value="${sub.id}" ${String(sub.id) === String(selectedSubId) ? 'selected' : ''}>${sub.name}</option>`;
+    });
+    subCatSelect.innerHTML = html;
+  }
+
+  // --- 照片上傳控制 ---
+  const fileInput = document.getElementById('form-item-image-file') as HTMLInputElement;
+  const imageUrlInput = document.getElementById('form-item-image-url') as HTMLInputElement;
+  const previewDiv = document.getElementById('image-upload-preview');
+  const previewImg = document.getElementById('image-preview-img') as HTMLImageElement;
+  const btnRemoveImage = document.getElementById('btn-remove-image');
+
+  fileInput?.addEventListener('change', async (e) => {
+    const target = e.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (!file) return;
+
+    const uploadText = document.querySelector('.file-upload-wrap .upload-text');
+    const uploadIcon = document.querySelector('.file-upload-wrap .upload-icon');
+    
+    if (uploadText) uploadText.textContent = '上傳中...';
+    if (uploadIcon) uploadIcon.className = 'ti ti-loader-2 upload-icon animate-spin';
+
+    try {
+      // 檔名加上時間戳記防重複
+      const ext = file.name.split('.').pop();
+      const fileName = `item_${Date.now()}.${ext}`;
+      
+      const { data, error } = await supabase.storage
+        .from('japan_images')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) throw error;
+
+      // 獲取公開連結
+      const { data: { publicUrl } } = supabase.storage
+        .from('japan_images')
+        .getPublicUrl(fileName);
+
+      imageUrlInput.value = publicUrl;
+      if (previewImg) previewImg.src = publicUrl;
+      if (previewDiv) previewDiv.style.display = 'block';
+      showToast('照片上傳成功');
+    } catch (err: any) {
+      alert('照片上傳失敗：' + (err.message || err));
+    } finally {
+      if (uploadText) uploadText.textContent = '點擊或拖曳照片至此上傳';
+      if (uploadIcon) uploadIcon.className = 'ti ti-cloud-upload upload-icon';
+    }
+  });
+
+  btnRemoveImage?.addEventListener('click', () => {
+    imageUrlInput.value = '';
+    fileInput.value = '';
+    if (previewDiv) previewDiv.style.display = 'none';
+    if (previewImg) previewImg.src = '';
+  });
+
+  // --- Modal 控制開關 ---
+  const modal = document.getElementById('item-modal');
+  const modalTitle = document.getElementById('modal-title');
+  const form = document.getElementById('item-form') as HTMLFormElement;
+  const itemIdInput = document.getElementById('form-item-id') as HTMLInputElement;
+  const itemNameInput = document.getElementById('form-item-name') as HTMLInputElement;
+  const itemNoteInput = document.getElementById('form-item-note') as HTMLTextAreaElement;
+
+  function openModal(isEdit = false, item: any = null) {
+    if (!modal) return;
+    
+    form.reset();
+    itemIdInput.value = '';
+    imageUrlInput.value = '';
+    if (previewDiv) previewDiv.style.display = 'none';
+    if (previewImg) previewImg.src = '';
+    if (subCatGroup) subCatGroup.style.display = 'none';
+
+    if (isEdit && item) {
+      if (modalTitle) modalTitle.textContent = '編輯品項';
+      itemIdInput.value = item.id;
+      itemNameInput.value = item.name;
+      itemNoteInput.value = item.note || '';
+      imageUrlInput.value = item.image_url || '';
+
+      if (item.image_url) {
+        if (previewImg) previewImg.src = item.image_url;
+        if (previewDiv) previewDiv.style.display = 'block';
+      }
+
+      // 計算所屬的父/子分類
+      const currentCat = categoriesCache.find(c => String(c.id) === String(item.category_id));
+      if (currentCat) {
+        if (currentCat.parent_id === null) {
+          // 主分類
+          mainCatSelect.value = String(currentCat.id);
+          updateSubCategoryDropdown(String(currentCat.id));
+        } else {
+          // 子分類
+          mainCatSelect.value = String(currentCat.parent_id);
+          updateSubCategoryDropdown(String(currentCat.parent_id), String(currentCat.id));
+        }
+      }
+    } else {
+      if (modalTitle) modalTitle.textContent = '新增品項';
+    }
+
+    modal.style.display = 'flex';
+  }
+
+  function closeModal() {
+    if (modal) modal.style.display = 'none';
+  }
+
+  document.getElementById('btn-open-add-modal')?.addEventListener('click', () => openModal(false));
+  document.getElementById('btn-modal-close')?.addEventListener('click', closeModal);
+  document.getElementById('btn-modal-cancel')?.addEventListener('click', closeModal);
+
+  // --- 管理面板顯隱 ---
+  const managePanel = document.getElementById('manage-category-panel');
+  document.getElementById('btn-toggle-manage')?.addEventListener('click', () => {
+    if (!managePanel) return;
+    const isShowing = managePanel.style.display === 'block';
+    managePanel.style.display = isShowing ? 'none' : 'block';
+    if (!isShowing) {
+      managePanel.scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  document.getElementById('btn-close-manage')?.addEventListener('click', () => {
+    if (managePanel) managePanel.style.display = 'none';
+  });
+
+  // --- 表單提交儲存 ---
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const saveBtn = document.getElementById('btn-modal-save') as HTMLButtonElement;
+    if (saveBtn) saveBtn.disabled = true;
+
+    const id = itemIdInput.value;
+    const name = itemNameInput.value.trim();
+    const note = itemNoteInput.value.trim();
+    const image_url = imageUrlInput.value;
+
+    // 分類判定：若有選子分類，則用子分類 ID，否則用主分類 ID
+    const mainId = mainCatSelect.value;
+    const subId = subCatSelect.value;
+    const category_id = subId ? parseInt(subId) : (mainId ? parseInt(mainId) : null);
+
+    const itemData = {
+      name,
+      note: note || null,
+      image_url: image_url || null,
+      category_id
+    };
+
+    try {
+      let error;
+      let returnedData: any = null;
+
+      if (id) {
+        // 編輯更新
+        const { error: err } = await supabase.from('japan_items').update(itemData).eq('id', id);
+        error = err;
+      } else {
+        // 新增品項
+        const { data, error: err } = await supabase.from('japan_items').insert([itemData]).select().single();
+        error = err;
+        returnedData = data;
+      }
+
+      if (error) throw error;
+
+      showToast(id ? '品項已成功更新' : '已成功新增收藏品項');
+      closeModal();
+      init(); // 重新讀取資料，重置快取並渲染
+      triggerBuildWebhook();
+    } catch (err: any) {
+      alert('儲存失敗：' + (err.message || err));
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  });
+
+  // --- 磚牆卡片點擊事件委派 (編輯 & 刪除) ---
+  const itemsGrid = document.getElementById('japan-items-grid');
+  itemsGrid?.addEventListener('click', async (e) => {
+    const target = e.target as HTMLElement;
+    const btnEdit = target.closest('.btn-edit');
+    const btnDelete = target.closest('.btn-delete');
+
+    if (btnEdit) {
+      const card = btnEdit.closest('.japan-card') as HTMLElement;
+      if (!card) return;
+      const item = {
+        id: card.dataset.id,
+        name: card.dataset.name,
+        category_id: card.dataset.categoryId,
+        note: card.dataset.note,
+        image_url: card.dataset.imageUrl
+      };
+      openModal(true, item);
+    }
+
+    if (btnDelete) {
+      const card = btnDelete.closest('.japan-card') as HTMLElement;
+      if (!card) return;
+      const id = card.dataset.id;
+      if (confirm('確定要刪除這個收藏品項嗎？此操作將無法復原。')) {
+        const { error } = await supabase.from('japan_items').delete().eq('id', id);
+        if (!error) {
+          showToast('品項已成功刪除');
+          card.remove();
+          // 更新快取
+          itemsCache = itemsCache.filter(item => String(item.id) !== String(id));
+          if (itemsCache.length === 0) {
+            init(); // 觸發 empty-state
+          }
+          triggerBuildWebhook();
+        } else {
+          alert('刪除失敗：' + error.message);
+        }
+      }
+    }
+  });
+
+  // --- 背景靜默重新編譯 Webhook 觸發 ---
+  function triggerBuildWebhook() {
+    if (!deployWebhookUrl) return;
+    fetch(deployWebhookUrl, { method: 'POST' })
+      .then(res => {
+        console.log('Deploy webhook triggered quietly:', res.status);
+      })
+      .catch(err => {
+        console.warn('Webhook trigger failed:', err);
+      });
+  }
+
+  // 頁面加載完成後啟動初始化
+  init();
+</script>
