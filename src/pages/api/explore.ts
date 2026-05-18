@@ -15,10 +15,14 @@ export async function POST({ request }) {
       });
     }
 
-    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${googleKey}&cx=${googleCx}&q=${encodeURIComponent(query)}&num=5`;
+    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${googleKey}&cx=${googleCx}&q=${encodeURIComponent(query + ' 日本 推薦')}&num=5&safe=off`;
     
     const searchRes = await fetch(searchUrl);
     const searchData = await searchRes.json();
+    
+    console.log('Search URL:', searchUrl);
+    console.log('Search response status:', searchRes.status);
+    console.log('Search data:', JSON.stringify(searchData).substring(0, 500));
     
     const items = searchData.items?.map(i => ({
       name: i.title || "無標題",
