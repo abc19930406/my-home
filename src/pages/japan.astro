@@ -90,6 +90,15 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 
       <!-- 2. 分類篩選列 -->
       <section class="japan-filter-bar">
+        <!-- 收藏品即時搜尋框 -->
+        <div class="collection-search-container">
+          <div class="collection-search-wrapper">
+            <i class="ti ti-search search-icon"></i>
+            <input type="text" id="collection-search-input" placeholder="搜尋收藏品名或備註..." autocomplete="off" />
+            <button type="button" id="btn-collection-search-clear" style="display: none;">✕</button>
+          </div>
+        </div>
+
         <div class="filter-row">
           <!-- 主分類標籤區 -->
           <div class="main-categories" id="main-categories-filter">
@@ -336,6 +345,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   let itemsCache: any[] = [];
   let currentMainFilter: string = 'all';
   let currentSubFilter: string = 'all';
+  let currentSearchQuery = '';
   let isAdminUser = false;
 
   // --- Utility Functions ---
@@ -467,7 +477,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     let filtered = [...itemsCache];
 
     if (currentMainFilter === 'recommend') {
-      filtered = itemsCache.filter(item => item.note === '網友推薦');
+      filtered = filtered.filter(item => item.note === '網友推薦');
     } else if (currentMainFilter !== 'all') {
       // 獲取該主分類下的所有子分類 ID
       const subIds = categoriesCache
@@ -476,14 +486,24 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       
       if (currentSubFilter === 'all') {
         // 顯示主分類品項 + 所有子分類品項
-        filtered = itemsCache.filter(item => 
+        filtered = filtered.filter(item => 
           String(item.category_id) === String(currentMainFilter) || 
           subIds.includes(String(item.category_id))
         );
       } else {
         // 僅顯示特定子分類品項
-        filtered = itemsCache.filter(item => String(item.category_id) === String(currentSubFilter));
+        filtered = filtered.filter(item => String(item.category_id) === String(currentSubFilter));
       }
+    }
+
+    // 關鍵字即時模糊搜尋 (模糊比對 name 與 note)
+    if (currentSearchQuery.trim()) {
+      const q = currentSearchQuery.trim().toLowerCase();
+      filtered = filtered.filter(item => {
+        const nameMatch = item.name ? item.name.toLowerCase().includes(q) : false;
+        const noteMatch = item.note ? item.note.toLowerCase().includes(q) : false;
+        return nameMatch || noteMatch;
+      });
     }
 
     if (filtered.length === 0) {
@@ -986,6 +1006,34 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && lightbox) lightbox.style.display = 'none';
+  });
+
+  // --- 收藏品即時搜尋事件監聽 (Collection Real-time Search) ---
+  const collectionSearchInput = document.getElementById('collection-search-input') as HTMLInputElement;
+  const btnCollectionSearchClear = document.getElementById('btn-collection-search-clear') as HTMLButtonElement;
+
+  collectionSearchInput?.addEventListener('input', (e) => {
+    const val = (e.target as HTMLInputElement).value;
+    currentSearchQuery = val;
+    
+    // 控制清除按鈕的顯示/隱藏
+    if (btnCollectionSearchClear) {
+      btnCollectionSearchClear.style.display = val ? 'block' : 'none';
+    }
+    
+    filterAndRenderItems();
+  });
+
+  btnCollectionSearchClear?.addEventListener('click', () => {
+    if (collectionSearchInput) {
+      collectionSearchInput.value = '';
+    }
+    currentSearchQuery = '';
+    if (btnCollectionSearchClear) {
+      btnCollectionSearchClear.style.display = 'none';
+    }
+    filterAndRenderItems();
+    collectionSearchInput?.focus();
   });
 
   // ==========================================================
