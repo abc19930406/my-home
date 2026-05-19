@@ -797,7 +797,23 @@
 
 @media (max-width: 480px) {
   .items-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .item-name {
+    font-size: 0.72rem;
+    line-height: 1.3;
+  }
+  .item-note {
+    font-size: 0.65rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .item-category-tag {
+    font-size: 0.62rem;
+    padding: 1px 6px;
   }
 }
 
