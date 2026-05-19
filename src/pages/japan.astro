@@ -7,6 +7,7 @@ import '../styles/japan.css';
 // 1. Build Time: 靜態抓取所有分類與品項，確保極速載入
 let initialCategories = [];
 let initialItems = [];
+let initialStatus = { japan_explore_public: false };
 
 try {
   // 抓取分類
@@ -27,6 +28,17 @@ try {
 
   if (!itemError && itemData) {
     initialItems = itemData;
+  }
+
+  // 抓取狀態中的日本探索隱私設定
+  const { data: statusData, error: statusError } = await supabase
+    .from('status')
+    .select('japan_explore_public')
+    .eq('id', 1)
+    .single();
+
+  if (!statusError && statusData) {
+    initialStatus = statusData;
   }
 } catch (err) {
   console.warn('⚠️ Build Warning: 日本收藏 Supabase 讀取失敗，使用備用資料。', err);
@@ -69,8 +81,18 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       </header>
 
       <!-- 探索日本搜尋區 -->
-      <section class="explore-section">
-        <div class="explore-header">🔍 探索日本</div>
+      <section class="explore-section" id="explore-japan-section" data-explore-public={String(initialStatus.japan_explore_public)} style={initialStatus.japan_explore_public ? '' : 'display: none;'}>
+        <div class="explore-header">
+          <span class="explore-title-text">🔍 探索日本</span>
+          <!-- 管理開關 (預設隱藏，登入後顯示) -->
+          <div id="explore-toggle-container" class="admin-only explore-toggle-container" style="display: none;">
+            <span id="explore-toggle-label" class="explore-toggle-label">私人</span>
+            <label class="explore-switch">
+              <input type="checkbox" id="explore-toggle-checkbox" />
+              <span class="explore-switch-slider"></span>
+            </label>
+          </div>
+        </div>
         <p class="explore-sub">搜尋最新網路資訊・網友熱門推薦</p>
         <div class="explore-input-row">
           <input type="text" id="explore-input" 
@@ -367,8 +389,15 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     categoriesCache = cats || [];
     itemsCache = items || [];
 
-    // 2. 身分驗證檢查
+    // 2. 身分驗證與即時探索隱私狀態檢查
     const { data: { session } } = await supabase.auth.getSession();
+    const { data: statusObj } = await supabase.from('status').select('japan_explore_public').eq('id', 1).single();
+    const isPublic = statusObj ? !!statusObj.japan_explore_public : false;
+
+    const exploreSection = document.getElementById('explore-japan-section');
+    const toggleCheckbox = document.getElementById('explore-toggle-checkbox') as HTMLInputElement;
+    const toggleLabel = document.getElementById('explore-toggle-label');
+
     if (session) {
       isAdminUser = true;
       document.querySelectorAll('.admin-only').forEach(el => {
@@ -380,6 +409,57 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       // 載入管理選單與 Modal 相關下拉
       renderManageCategoryRows();
       populateMainCategoryDropdown();
+
+      // 管理員：不論公開或私人均保持可見以進行設定
+      if (exploreSection) exploreSection.style.display = 'block';
+
+      // 初始化開關狀態
+      if (toggleCheckbox) {
+        toggleCheckbox.checked = isPublic;
+      }
+      if (toggleLabel) {
+        toggleLabel.textContent = isPublic ? '公開' : '私人';
+        if (isPublic) {
+          toggleLabel.classList.add('is-public');
+        } else {
+          toggleLabel.classList.remove('is-public');
+        }
+      }
+
+      // 監聽管理開關狀態變更
+      toggleCheckbox?.addEventListener('change', async (e) => {
+        const checked = (e.target as HTMLInputElement).checked;
+        try {
+          const { error } = await supabase
+            .from('status')
+            .update({ japan_explore_public: checked })
+            .eq('id', 1);
+            
+          if (error) throw error;
+          
+          showToast(checked ? '探索功能已公開' : '探索功能已設為私人');
+          
+          if (toggleLabel) {
+            toggleLabel.textContent = checked ? '公開' : '私人';
+            if (checked) {
+              toggleLabel.classList.add('is-public');
+            } else {
+              toggleLabel.classList.remove('is-public');
+            }
+          }
+        } catch (err) {
+          console.error('Failed to update explore visibility:', err);
+          showToast('設定失敗，請稍後重試！');
+          if (toggleCheckbox) {
+            toggleCheckbox.checked = !checked;
+          }
+        }
+      });
+    } else {
+      // 訪客端：根據 Supabase 真實狀態即時控制探索日本區塊的顯隱
+      if (exploreSection) {
+        exploreSection.style.display = isPublic ? 'block' : 'none';
+      }
     }
 
     // 3. 重繪篩選器與卡片 (確保 Client Side 最新)
