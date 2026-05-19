@@ -1025,10 +1025,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: query.trim() })
       });
-      
-      console.log('res.status:', res.status);
       const data = await res.json();
-      console.log('data:', JSON.stringify(data));
       
       if (exploreResults) {
         if (data.items && data.items.length > 0) {
@@ -1040,6 +1037,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
             html += `
               <div class="explore-card" data-name="${item.name.replace(/"/g, '&quot;')}" data-link="${item.link}" data-desc="${item.description.replace(/"/g, '&quot;')}">
                 <div class="explore-card-content">
+                  ${item.thumbnail ? `<img src="${item.thumbnail}" alt="${item.name}" class="explore-thumb">` : ''}
                   <h4 class="explore-card-title">${item.name}</h4>
                   <p class="explore-card-desc">${item.description}</p>
                   <div class="explore-card-meta">

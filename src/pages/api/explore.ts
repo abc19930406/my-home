@@ -12,16 +12,17 @@ export async function POST({ request }) {
       });
     }
 
-    const searchUrl = `https://serpapi.com/search.json?engine=google&q=${encodeURIComponent(query + ' 日本 推薦')}&hl=zh-tw&gl=tw&num=5&api_key=${serpApiKey}`;
+    const searchUrl = `https://serpapi.com/search.json?engine=google_shopping&q=${encodeURIComponent(query + ' 日本')}&hl=zh-tw&gl=jp&num=5&api_key=${serpApiKey}`;
     
     const searchRes = await fetch(searchUrl);
     const searchData = await searchRes.json();
     
-    const items = searchData.organic_results?.map(r => ({
+    const items = searchData.shopping_results?.map(r => ({
       name: r.title || "無標題",
-      description: r.snippet || '',
-      source: r.displayed_link || r.link || "外部連結",
-      link: r.link || "#"
+      description: r.price ? `價格：${r.price}　${r.source || ''}` : (r.snippet || ''),
+      source: r.source || r.link || "外部連結",
+      link: r.link || "#",
+      thumbnail: r.thumbnail || ''
     })) ?? [];
 
     return new Response(JSON.stringify({ items }), {

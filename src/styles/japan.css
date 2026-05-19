@@ -1064,3 +1064,12 @@
   to { transform: rotate(360deg); }
 }
 
+.explore-thumb {
+  width: 100%;
+  max-height: 120px;
+  object-fit: contain;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: rgba(112,144,184,0.06);
+}
+
