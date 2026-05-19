@@ -34,11 +34,15 @@
   font-family: 'Noto Serif TC', 'Georgia', serif;
   box-sizing: border-box;
   overflow-y: auto;
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 .japan-container {
   max-width: 1080px;
   margin: 0 auto;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 /* ==========================================================
@@ -797,8 +801,12 @@
 
 @media (max-width: 480px) {
   .items-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    padding: 0 4px;
+  }
+  .item-card {
+    padding: 6px;
   }
   .item-name {
     font-size: 0.72rem;
