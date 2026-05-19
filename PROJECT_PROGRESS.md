@@ -14,111 +14,105 @@
 - Supabase 資料庫連接（含 RLS 權限設定）
 - 管理員登入系統（/login 頁面，Supabase Auth）
 - 管理後台（/admin 頁面，需登入才能進入）
-- Vercel Deploy Webhook 正常運作（測試狀態碼 201 確認）
+- Vercel Deploy Webhook 正常運作
+- **架構升級**：Astro output 改為 `server` 模式 + `@astrojs/vercel` 適配器，支援 Serverless Function
+- 所有現有靜態頁面加上 `export const prerender = true` 維持靜態輸出
 
 ### ✅ 首頁
 - 深木奶油色系視覺風格（背景 #2C1E14）
 - 資料驅動卡片架構（src/data/links.ts 集中管理）
 - 三個卡片分區：知識與創作 / 生活記錄 / 工具
-- 知識庫卡片子連結：Obsidian 筆記（https://quartz-five-sigma.vercel.app）
-- 登入後每張卡片出現編輯按鈕，可直接修改標題/描述/連結
+- 知識庫卡片子連結：Obsidian 筆記
+- 登入後每張卡片出現編輯按鈕
 
 ### ✅ 現在狀態便條紙（首頁卡片上方）
-- 視覺：淡黃色便條紙（#F5EDD0）+ 頂部琥珀色紙膠帶 + 微傾斜 -1.2deg
+- 淡黃色便條紙 + 頂部琥珀色紙膠帶 + 微傾斜
 - 內容四欄：📖 正在讀的書 / 🎵 正在聽的音樂 / 💬 心情 / 🔨 最近在做的事
-- 資料來源：Supabase `status` 資料表（固定一筆 id=1）
-- 更新方式：登入後進入 /admin，便條紙右上角有編輯按鈕，可直接編輯儲存
-- 儲存後即時更新畫面，背景觸發 Webhook 重新部署
+- 登入後 /admin 頁面可直接編輯儲存
 
-### ✅ 短文模組（/posts）標題已改為「日噹」
-- 列表頁：時間軸排列，顯示標題/天氣/日期/閱讀時間/預覽
-- 單篇頁：Markdown 渲染、照片幻燈片顯示、頁碼、返回連結
-- 權限系統：public / friends / private
-- 日夜切換：白天（陽光海面）/ 夜晚（繁星月光），1.8 秒過渡
-- 主題偏好存入 localStorage（key: tcr-theme）
-- 玻璃日記本質感（backdrop-filter: blur(12px)）
-- 前台管理（登入後直接在 /posts 操作）：
-  - 新增/編輯/刪除，事件委派不重複觸發
-  - 多圖上傳（post_images bucket），單篇頁幻燈片顯示
-  - 發文後立即更新畫面，背景靜默觸發 Webhook
-- 底部登入連結，登入後跳回 /posts
-- 手機版響應式已調整
-- 段落行高 1.6，段落間距 0.8em
+### ✅ 短文模組（/posts）「日噹」
+- 列表頁時間軸、單篇 Markdown 渲染、照片幻燈片
+- 權限系統 public / friends / private
+- 日夜切換主題、前台管理（新增/編輯/刪除）
 
-### ✅ 語錄收藏模組（/quotes）
-- 路由：/quotes（列表頁，無單篇頁）
-- 視覺：牛皮紙格紋背景（#E8D5A8）、書頁卡片（左側邊欄＋右上摺角）
-- 「新增語錄」按鈕：紙膠帶風格（半透明金棕、微傾斜 -3deg、左右漸層毛邊）
-- 關鍵字搜尋 + 分類篩選（全部、成長、關係、當下、孤獨、自己）
-- 管理：新增/編輯/刪除，登入後顯示
-- 來源圖示：ti-book / ti-movie / ti-pencil
-- 「翻頁」收合搜尋區
-- 無日夜切換（已移除）
-- 底部低調「管理」登入連結，登入後隱藏
-- 已連結首頁卡片（語錄收藏 url 已改為 /quotes）
-- 樣式在 src/styles/quotes.css
+### ✅ 語錄收藏（/quotes）
+- 牛皮紙格紋背景、書頁卡片
+- 新增語錄按鈕：紙膠帶風格（微傾斜 -3deg）
+- 搜尋 + 分類篩選、前台管理
+- 底部登入連結
 
 ### ✅ Polaroid 底片日記（/polaroid）
-- 路由：/polaroid
-- 視覺：深木色底片風格（#1A1410），上下齒孔（14×9px，#0A0806）
-- 核心功能：同一日期跨年並排（今年最亮 / 去年次之 / 兩年前最暗）
-- 日期導航：左右箭頭切換日期
-- 底片格：顯示完整日期（YYYY · M · D）+ 內文
-- 輸入框：登入後顯示，支援新增／編輯／刪除
-- 刪除前有確認提示
-- 本月縱覽：每行一天，有記錄亮起，空白顯示「—」，點擊切換日期
-- 底部低調「管理」登入連結，登入後隱藏
+- 深木色底片風格 + 上下齒孔
+- 同一日期跨年並排（今年最亮、去年次之、兩年前最暗）
+- 日期導航、本月縱覽、新增/編輯/刪除
 - 日期處理用本地時區避免 UTC 偏移
-- 已連結首頁卡片（視覺日記 url 已改為 /polaroid）
-- 樣式在 src/styles/polaroid.css
 
 ### ✅ 記帳系統（/ledger）
-- 路由：/ledger
-- 權限：私密，未登入者導向 /login?from=/ledger
-- 貨幣：NTD
-- 收入來源分類：樂驛、豐苒、少觀所、仁愛之家、演講、其他（其他需補充備註）
+- 私密頁面，未登入導向 /login
+- 收入來源：樂驛、豐苒、少觀所、仁愛之家、演講、其他
 - 支出分類：固定支出、飲食、交通、娛樂、其他
-- 頁面結構：
-  - 月份導航（左右切換）
-  - 三張指標卡片：本月收入（綠）/ 本月支出（紅）/ 本月結餘（金）
-  - 收入來源分布橫條圖（按金額排列）
-  - 支出分類分布橫條圖（按金額排列）
-  - 本月明細列表（收入綠色正號、支出紅色負號）
-  - 新增／編輯／刪除 Modal
-- 日期處理用本地時區避免 UTC 偏移
-- 已連結首頁卡片（記帳系統 url 已改為 /ledger）
-- 樣式在 src/styles/ledger.css
+- 月份導航、三張指標卡片、橫條圖、明細列表
+- 新增/編輯/刪除 Modal
+
+### ✅ 日本收藏（/japan）
+- 晨霧富士淡藍灰風格（#E8EEF5 + 格紋）
+- 兩層分類系統（主分類 + 子分類），登入後前台管理
+- 磚磚片式三欄 Grid 排列
+- 照片依原始比例顯示（height: auto，min 120px，max 400px）
+- 點擊照片放大 Lightbox（ESC / 點背景關閉）
+- 「探索日本」搜尋區塊已建立（UI 完整）
+- 底部登入連結
+- 首頁「旅行地圖」卡片已連結至 /japan
+
+### ⚠️ 日本收藏 — 探索日本搜尋（待修復）
+**功能架構已完整，但 Google Custom Search API 尚未正常運作。**
+
+已完成：
+- Vercel Serverless Function：`src/pages/api/explore.ts`（POST，prerender: false）
+- 後端保護 API Key（GOOGLE_SEARCH_KEY、GOOGLE_SEARCH_CX）
+- 前端搜尋 UI：搜尋框、快速標籤、結果卡片、「＋ 加入收藏」按鈕
+- 「網友推薦」分類標籤篩選
+- Vercel 環境變數已設定：GOOGLE_SEARCH_KEY、GOOGLE_SEARCH_CX
+
+待修復問題：
+- Google Custom Search API 回傳 403 PERMISSION_DENIED
+- API Key 在 my-home 專案下，Custom Search API 已啟用，帳單帳戶正常
+- 配額正常（10,000/天，已用 22 次）
+- 懷疑是 API 啟用後需要幾小時才生效，隔天再試
+
+程式化搜尋引擎已設定網站：
+- *.cosme.net/*
+- *.ptt.cc/*
+- *.dcard.tw/*
+- *.pixnet.net/*
+- *.mobile01.com/*
+- travel.rakuten.com.tw/*
+- matome.naver.jp/*
 
 ### ✅ 資料庫
-- posts 資料表含 image_urls text[] 欄位
-- post_images Storage Bucket（PUBLIC）
-- quotes 資料表已建立（含 RLS）
-- status 資料表已建立（固定一筆 id=1，含 RLS）
-- daily 資料表已建立（date UNIQUE，含 RLS）
-- transactions 資料表已建立（含 RLS，僅管理員可讀寫）
+- posts、quotes、status、daily、transactions、japan_categories、japan_items 資料表均已建立
+- japan_images Storage Bucket（PUBLIC）
 
 ---
 
 ## 二、規劃中功能（尚未開始）
 
-讀書筆記、食記、年度回顧、作品集、書籤收藏、習慣打卡、語言學習、旅行地圖
+讀書筆記、食記、年度回顧、作品集、書籤收藏、習慣打卡、語言學習
 
 ---
 
 ## 三、重要注意事項
 
-1. 新增文章後單篇頁需等 Vercel 重新編譯（約 1 分鐘）才能訪問，正常行為。
+1. 新增文章後單篇頁需等 Vercel 重新編譯（約 1 分鐘）才能訪問
 2. 有自訂背景的頁面需在頂部加 `<style is:global> html, body { background-color: transparent !important; } </style>`
-3. 各頁面 CSS 用 import 在 frontmatter 載入，不放在 `<style>` 標籤
+3. 各頁面 CSS 用 import 在 frontmatter 載入
 4. `<script define:vars>` 不支援頂層 await，所有非同步邏輯必須包在 `(async () => { ... })()` 內
-5. `<script define:vars>` 內不能用 import 語句，Supabase 用 CDN 動態匯入：
-   `const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm')`
-6. define:vars 傳入 supabaseUrl、supabaseAnonKey、webhookUrl
-7. .halo-moon 容器需 280x280px 才不會出現方形邊框
+5. `<script define:vars>` 內不能用 import，Supabase 用 CDN 動態匯入
+6. 所有日期處理用本地時區避免 UTC 偏移
+7. 私密頁面在 IIFE 開頭確認 session，無 session 立即導向 /login?from=/xxx
 8. /admin 頁面的 page-wrapper 預設 display:none，IIFE 確認 session 後顯示
-9. 所有日期處理用本地時區，避免 UTC 偏移：
-   `const localDate = \`\${d.getFullYear()}-\${String(d.getMonth()+1).padStart(2,'0')}-\${String(d.getDate()).padStart(2,'0')}\``
-10. 私密頁面（如 /ledger）在 IIFE 開頭確認 session，無 session 立即導向 /login?from=/xxx
+9. **架構注意**：astro.config.mjs 已改為 `output: 'server'`，所有靜態頁面必須有 `export const prerender = true`
+10. API 路由放在 src/pages/api/，需加 `export const prerender = false`
 
 ---
 
