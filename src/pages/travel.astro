@@ -340,14 +340,23 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   </div>
 </Layout>
 
-<!-- 環境變數傳遞 -->
+<!-- 環境變數傳遞與動態載入 Google Maps Script -->
 <script define:vars={{ webhookUrl, mapsKey }} is:inline>
   window.__WEBHOOK_URL__ = webhookUrl;
   window.__MAPS_KEY__ = mapsKey;
-</script>
 
-<!-- Google Maps JavaScript API (靜態載入以發揮最大效益) -->
-<script src={`https://maps.googleapis.com/maps/api/js?key=${mapsKey}&libraries=places&loading=async`} async defer></script>
+  // 動態載入 Google Maps Script
+  window.__googleMapsPromise = new Promise((resolve, reject) => {
+    if (window.google?.maps) { resolve(); return; }
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${mapsKey}&libraries=places&loading=async&callback=__googleMapsReady`;
+    script.async = true;
+    script.defer = true;
+    window.__googleMapsReady = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+</script>
 
 <!-- IIFE 客戶端互動與 Supabase 連線邏輯 -->
 <script>
@@ -945,7 +954,10 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     }
 
     // 3. 地圖載入完畢後初始化
-    initGoogleMap();
+    if ((window as any).__googleMapsPromise) {
+      await (window as any).__googleMapsPromise;
+    }
+    await initGoogleMap();
 
     // 4. 偵測管理員登入狀態
     const { data: { session } } = await supabase.auth.getSession();
