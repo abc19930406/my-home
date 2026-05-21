@@ -964,27 +964,44 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       });
 
       // 監聽點擊，打開氣泡資訊視窗
-      marker.addEventListener('gmp-click', () => {
+      marker.addEventListener('gmp-click', (e) => {
+        e.stopPropagation(); // 阻止冒泡到地圖，避免觸發新增景點
+
         if (openInfoWindow) {
           openInfoWindow.close();
         }
 
-        const ratingText = {
-          recommend: '🌟 五星大推！',
-          maybe: '☕ 順路可訪',
-          not_recommend: '💔 不甚理想'
-        };
-        
-        const ratingLabel = spot.status === 'visited' && spot.rating 
-          ? `<div style="font-size:0.75rem; color:#F5A623; margin-top:2px; font-weight:600;">${ratingText[spot.rating] || ''}</div>`
+        let subtypeBadge = '';
+        if (spot.spot_subtype_id) {
+          const subtype = spotSubtypesCache.find(st => st.id === spot.spot_subtype_id);
+          if (subtype) {
+            subtypeBadge = `<span style="font-size: 0.75rem; background: var(--travel-bg); padding: 2px 6px; border-radius: 12px; border: 1px solid var(--travel-border); margin-left: 6px; color: var(--travel-text-muted);">${subtype.emoji} ${subtype.name}</span>`;
+          }
+        }
+
+        const mapsUrl = spot.place_id
+          ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name)}&query_place_id=${spot.place_id}`
+          : `https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`;
+
+        // 管理員才有編輯按鈕
+        const editBtn = isAdminUser
+          ? `<button onclick="window.openSpotModal('${spot.id}')" style="background:white; color:#8B7355; border:1px solid #8B7355; padding:6px 14px; border-radius:16px; font-size:12px; cursor:pointer; flex:1;">✏️ 編輯</button>`
           : '';
 
         const iwContent = `
-          <div class="iw-title">${spot.name} ${emoji}</div>
-          <div class="iw-desc">
-            📍 ${spot.address}<br/>
-            ${spot.note ? `✍️ ${spot.note}<br/>` : ''}
-            ${ratingLabel}
+          <div style="font-family: serif; padding: 4px; min-width: 200px;">
+            <div style="font-weight: bold; font-size: 1.1rem; color: #5a4a35; margin-bottom: 6px; display: flex; align-items: center;">
+              ${spot.name} ${subtypeBadge}
+            </div>
+            <div style="font-size: 0.85rem; color: #666; margin-bottom: 8px;">📍 ${spot.address}</div>
+            ${spot.open_hours ? `<div style="font-size: 0.85rem; color: #666; margin-bottom: 4px;">⏰ ${spot.open_hours}</div>` : ''}
+            ${spot.price ? `<div style="font-size: 0.85rem; color: #666; margin-bottom: 8px;">💰 ${spot.price}</div>` : ''}
+            ${spot.note ? `<div style="font-size: 0.85rem; color: #8B7355; margin-bottom: 12px; font-style: italic;">✍️ ${spot.note}</div>` : ''}
+            
+            <div style="display: flex; gap: 8px; margin-top: 12px;">
+              <a href="${mapsUrl}" target="_blank" style="background: #8B7355; color: white; border: none; padding: 6px 14px; border-radius: 16px; font-size: 12px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; flex: 1;">🗺 Google Maps</a>
+              ${editBtn}
+            </div>
           </div>
         `;
 
@@ -1816,6 +1833,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         spotModal?.classList.add('show');
         document.body.classList.add('modal-open');
       }
+      window.openSpotModal = openSpotModal;
 
       // 攔截原表單的 submit 行為
       spotForm?.addEventListener('submit', (e) => {
