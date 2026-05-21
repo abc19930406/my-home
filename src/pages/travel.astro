@@ -927,103 +927,77 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       return '📍';
     }
 
-    // --- 自訂 HTML Marker ---
+    // --- 自訂 HTML Marker (改用 AdvancedMarkerElement) ---
     function createCustomMarker(spot) {
-      if (!googleMap || !window.google) return null;
+      if (!googleMap || !window.google || !window.google.maps.marker) return null;
 
       const lat = parseFloat(spot.lat);
       const lng = parseFloat(spot.lng);
       if (isNaN(lat) || isNaN(lng)) return null;
 
-      const latLng = new window.google.maps.LatLng(lat, lng);
+      const emoji = getSpotIcon(spot);
 
-      // 定義 Custom HTML Marker Class (繼承 OverlayView)
-      class HTMLMarker extends window.google.maps.OverlayView {
-        constructor(latlng, map, spot) {
-          super();
-          this.latlng = latlng;
-          this.spot = spot;
-          this.div = null;
-          this.setMap(map);
-        }
-
-        onAdd() {
-          this.div = document.createElement('div');
-          this.div.className = `custom-map-marker ${this.spot.status}`;
-          
-          // 評價點綴
-          let ratingDot = '';
-          if (this.spot.status === 'visited' && this.spot.rating) {
-            this.div.classList.add(`rating-card-${this.spot.rating}`);
-            ratingDot = `<span class="marker-rating-dot rating-dot-${this.spot.rating}"></span>`;
-          }
-
-          this.div.innerHTML = `
-            <div class="marker-circle">
-              <span class="marker-emoji">${this.spot.icon || '📍'}</span>
-            </div>
-            ${ratingDot}
-          `;
-
-          // 監聽點擊，打開氣泡資訊視窗
-          this.div.addEventListener('click', (e) => {
-            e.stopPropagation();
-            
-            if (openInfoWindow) {
-              openInfoWindow.close();
-            }
-
-            const ratingText = {
-              recommend: '🌟 五星大推！',
-              maybe: '☕ 順路可訪',
-              not_recommend: '💔 不甚理想'
-            };
-            
-            const ratingLabel = this.spot.status === 'visited' && this.spot.rating 
-              ? `<div style="font-size:0.75rem; color:#F5A623; margin-top:2px; font-weight:600;">${ratingText[this.spot.rating] || ''}</div>`
-              : '';
-
-            const iwContent = `
-              <div class="iw-title">${this.spot.name} ${this.spot.icon || ''}</div>
-              <div class="iw-desc">
-                📍 ${this.spot.address}<br/>
-                ${this.spot.note ? `✍️ ${this.spot.note}<br/>` : ''}
-                ${ratingLabel}
-              </div>
-            `;
-
-            openInfoWindow = new window.google.maps.InfoWindow({
-              content: iwContent,
-              position: this.latlng,
-              pixelOffset: new window.google.maps.Size(0, -32)
-            });
-
-            openInfoWindow.open(googleMap);
-          });
-
-          const panes = this.getPanes();
-          panes.overlayMouseTarget.appendChild(this.div);
-        }
-
-        draw() {
-          if (!this.div) return;
-          const overlayProjection = this.getProjection();
-          const position = overlayProjection.fromLatLngToDivPixel(this.latlng);
-          if (position) {
-            this.div.style.left = (position.x - 19) + 'px';
-            this.div.style.top = (position.y - 19) + 'px';
-          }
-        }
-
-        onRemove() {
-          if (this.div) {
-            this.div.parentNode?.removeChild(this.div);
-            this.div = null;
-          }
-        }
+      // 建立自訂的內容元素
+      const markerContent = document.createElement('div');
+      markerContent.className = `custom-map-marker ${spot.status}`;
+      markerContent.style.cursor = 'pointer';
+      
+      // 評價點綴
+      let ratingDot = '';
+      if (spot.status === 'visited' && spot.rating) {
+        markerContent.classList.add(`rating-card-${spot.rating}`);
+        ratingDot = `<span class="marker-rating-dot rating-dot-${spot.rating}"></span>`;
       }
 
-      return new HTMLMarker(latLng, googleMap, spot);
+      markerContent.innerHTML = `
+        <div class="marker-circle">
+          <span class="marker-emoji">${emoji}</span>
+        </div>
+        ${ratingDot}
+      `;
+
+      const marker = new window.google.maps.marker.AdvancedMarkerElement({
+        map: googleMap,
+        position: { lat, lng },
+        content: markerContent,
+        title: spot.name
+      });
+
+      // 監聽點擊，打開氣泡資訊視窗
+      marker.addEventListener('gmp-click', () => {
+        if (openInfoWindow) {
+          openInfoWindow.close();
+        }
+
+        const ratingText = {
+          recommend: '🌟 五星大推！',
+          maybe: '☕ 順路可訪',
+          not_recommend: '💔 不甚理想'
+        };
+        
+        const ratingLabel = spot.status === 'visited' && spot.rating 
+          ? `<div style="font-size:0.75rem; color:#F5A623; margin-top:2px; font-weight:600;">${ratingText[spot.rating] || ''}</div>`
+          : '';
+
+        const iwContent = `
+          <div class="iw-title">${spot.name} ${emoji}</div>
+          <div class="iw-desc">
+            📍 ${spot.address}<br/>
+            ${spot.note ? `✍️ ${spot.note}<br/>` : ''}
+            ${ratingLabel}
+          </div>
+        `;
+
+        openInfoWindow = new window.google.maps.InfoWindow({
+          content: iwContent,
+          position: { lat, lng },
+          pixelOffset: new window.google.maps.Size(0, -32)
+        });
+
+        openInfoWindow.open(googleMap);
+      });
+
+      return marker;
     }
 
     // --- 更新地圖上的 Markers ---
