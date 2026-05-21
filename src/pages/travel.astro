@@ -960,12 +960,18 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         map: googleMap,
         position: { lat, lng },
         content: markerContent,
-        title: spot.name
+        title: spot.name,
+        gmpClickable: true
       });
 
       // 監聽點擊，打開氣泡資訊視窗
       marker.addEventListener('gmp-click', (e) => {
-        e.stopPropagation(); // 阻止冒泡到地圖，避免觸發新增景點
+        console.log('景點 Marker 被點擊：', spot.name);
+        if (e && typeof e.stopPropagation === 'function') {
+          e.stopPropagation(); // 阻止冒泡到地圖，避免觸發新增景點
+        } else if (e && e.domEvent && typeof e.domEvent.stopPropagation === 'function') {
+          e.domEvent.stopPropagation();
+        }
 
         if (openInfoWindow) {
           openInfoWindow.close();
@@ -1006,12 +1012,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         `;
 
         openInfoWindow = new window.google.maps.InfoWindow({
-          content: iwContent,
-          position: { lat, lng },
-          pixelOffset: new window.google.maps.Size(0, -32)
+          content: iwContent
         });
 
-        openInfoWindow.open(googleMap);
+        openInfoWindow.open({ map: googleMap, anchor: marker });
       });
 
       return marker;
