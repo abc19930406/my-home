@@ -71,6 +71,7 @@
 - 日系清新白底暖木色系視覺風格（#FDFCF8）
 - 行程切換列（多個旅行可切換）
 - 類型篩選（全部/景點/飲食/購物/住宿）+ 狀態篩選（想去/已去）
+- **景點類型自訂管理**（動態載入、登入後可管理、包含防呆檢查）
 - Google Maps 動態載入（IIFE + document.createElement，避免 prerender 插值問題）
 - 搜尋功能：AutocompleteSuggestion 即時聯想（locationBias 限制在地圖視野）
 - 搜尋功能：Place.searchByText 按鈕搜尋（locationRestriction 限制在地圖視野）
@@ -78,7 +79,7 @@
 - InfoWindow 顯示地點名稱、地址、加入行程、Google Maps 連結
 - Modal 捲動鎖定（overflow: hidden）+ 內部獨立捲動
 - 新增/編輯/刪除景點、新增行程
-- Supabase 資料庫：trips、spots 資料表 + RLS
+- Supabase 資料庫：trips、spots、spot_types 資料表 + RLS
 - Supabase Storage：travel_images bucket
 - 使用 Places API (New)，不依賴舊版 Places API
 

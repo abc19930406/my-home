@@ -130,10 +130,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         <!-- 左側：類型標籤 (全部、景點、飲食、購物、住宿) -->
         <div class="filter-left" id="category-filter-group">
           <button class="filter-btn active" data-category="all">全部</button>
-          <button class="filter-btn" data-category="景點">景點</button>
-          <button class="filter-btn" data-category="飲食">飲食</button>
-          <button class="filter-btn" data-category="購物">購物</button>
-          <button class="filter-btn" data-category="住宿">住宿</button>
+          <!-- JS 動態產生其他按鈕 -->
         </div>
 
         <!-- 右側：狀態標籤 (想去、已去) + 新增景點按鈕 -->
@@ -144,6 +141,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           <!-- ＋ 新增景點 (預設隱藏，登入後由 JS 顯示) -->
           <button id="btn-open-spot-modal" class="btn-add-spot admin-only" style="display: none;">
             <i class="ti ti-plus"></i> 新增景點
+          </button>
+          
+          <!-- ⚙️ 管理類型 (預設隱藏，登入後由 JS 顯示) -->
+          <button id="btn-manage-types" class="btn-manage-types admin-only" style="display: none; background: transparent; border: 1px dashed var(--travel-border); color: var(--travel-text-muted); padding: 4px 12px; border-radius: 16px; font-size: 0.85rem; cursor: pointer;">
+            <i class="ti ti-settings"></i> 管理類型
           </button>
         </div>
       </section>
@@ -248,10 +250,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           <div class="form-group">
             <label for="spot-category">類型</label>
             <select id="spot-category">
-              <option value="景點">⛩️ 景點</option>
-              <option value="飲食">🍽️ 飲食</option>
-              <option value="購物">🛍️ 購物</option>
-              <option value="住宿">🏨 住宿</option>
+              <!-- JS 動態插入 -->
             </select>
           </div>
 
@@ -332,6 +331,28 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     </div>
   </div>
 
+  <!-- ==========================================
+       彈出視窗 3：管理景點類型 Modal
+       ========================================== -->
+  <div id="type-management-modal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3>⚙️ 管理景點類型</h3>
+        <button type="button" class="btn-modal-close" id="btn-type-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <ul id="type-list-container" style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px;">
+          <!-- JS 動態渲染 -->
+        </ul>
+        <hr style="margin: 16px 0; border: none; border-top: 1px dashed var(--travel-border);" />
+        <form id="add-type-form" style="display: flex; gap: 8px;">
+          <input type="text" id="new-type-emoji" placeholder="圖示 (如 🗼)" required style="width: 80px;" autocomplete="off" />
+          <input type="text" id="new-type-name" placeholder="類型名稱" required style="flex: 1;" autocomplete="off" />
+          <button type="submit" class="btn-primary" style="padding: 0 16px; white-space: nowrap;">新增</button>
+        </form>
+      </div>
+    </div>
+  </div>
   <!-- Toast 訊息通知 -->
   <div id="toast" class="toast">已成功儲存</div>
 
@@ -381,6 +402,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     // 全域快取狀態
     let tripsCache = [];
     let spotsCache = [];
+    let spotTypesCache = [];
     let currentTripId = '';
     let selectedCategoryFilter = 'all';
     let selectedStatusFilter = 'want'; // 預設篩選「想去」
@@ -395,6 +417,30 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     let searchMarkers = []; // 頂部搜尋的標記
     let openInfoWindow = null; // 指向當前開啟的氣泡視窗
     let openAddSpotModal = null; // 全域新增景點 Modal 控制器
+
+    // 動態渲染首頁上方篩選列
+    window.renderCategoryFilters = function() {
+      const catGroup = document.getElementById('category-filter-group');
+      if (!catGroup) return;
+      let html = `<button class="filter-btn ${selectedCategoryFilter === 'all' ? 'active' : ''}" data-category="all">全部</button>`;
+      spotTypesCache.forEach(type => {
+        html += `<button class="filter-btn ${selectedCategoryFilter === type.id ? 'active' : ''}" data-category="${type.id}">${type.name}</button>`;
+      });
+      catGroup.innerHTML = html;
+    };
+
+    // 動態渲染新增/編輯景點 Modal 內的下拉選單
+    window.renderSpotCategoryOptions = function() {
+      const select = document.getElementById('spot-category');
+      if (!select) return;
+      const val = select.value;
+      let html = '';
+      spotTypesCache.forEach(type => {
+        html += `<option value="${type.id}">${type.emoji} ${type.name}</option>`;
+      });
+      select.innerHTML = html;
+      if (val) select.value = val;
+    };
 
     // 清除頂部搜尋的標記
     function clearSearchMarkers() {
@@ -965,7 +1011,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
       // 類型篩選 (全部 / 景點 / 飲食 / 購物 / 住宿)
       if (selectedCategoryFilter !== 'all') {
-        filtered = filtered.filter(spot => spot.category === selectedCategoryFilter);
+        filtered = filtered.filter(spot => spot.spot_type_id === selectedCategoryFilter);
       }
 
       // 2. 更新地圖標記 (Aesthetic & Interactive Map)
@@ -1151,9 +1197,14 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       // 1. 先從資料庫拉取最新資料 (確保資料一致性)
       const { data: trips } = await supabase.from('trips').select('*').order('created_at', { ascending: true });
       const { data: spots } = await supabase.from('spots').select('*').order('created_at', { ascending: false });
+      const { data: spotTypes } = await supabase.from('spot_types').select('*').order('created_at', { ascending: true });
 
       tripsCache = trips || [];
       spotsCache = spots || [];
+      spotTypesCache = spotTypes || [];
+      
+      renderCategoryFilters();
+      renderSpotCategoryOptions();
 
       // 2. 決定預選的行程
       if (tripsCache.length > 0) {
@@ -1352,17 +1403,22 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       const spotLatInput = document.getElementById('spot-lat');
       const spotLngInput = document.getElementById('spot-lng');
 
-      // 依分類動態變更 Emoji 清單
-      const categoryEmojis = {
-        '景點': ['⛩️', '🌸', '🗼', '🏯', '🏔️', '🎡', '🎨', '🛍️', '📍'],
-        '飲食': ['🍽️', '☕', '🍜', '🍣', '🍣', '🍡', '🍺', '🥩', '🐟', '🥞'],
-        '購物': ['🛍️', '💊', '🎁', '👗', '🏪', '🛒', '👞', '💄'],
-        '住宿': ['🏨', '🏡', '♨️', '⛺', '🛌']
-      };
+      // 依分類動態變更 Emoji 清單 (解除原本硬編碼限制，允許自由切換)
+      // 保留常用選項，並且加上該 spot_type 本身的預設圖示
+      const commonEmojis = ['📍', '⛩️', '🌸', '🗼', '🏯', '🏔️', '🎡', '🎨', '🛍️', '🍽️', '☕', '🍜', '🍣', '🍡', '🍺', '🥩', '🏨', '♨️', '⛺'];
 
-      function updateSpotEmojiOptions(category, selectedEmoji = '') {
+      function updateSpotEmojiOptions(typeId, selectedEmoji = '') {
         if (!spotEmojiGroup) return;
-        const emojis = categoryEmojis[category] || ['📍'];
+        const type = spotTypesCache.find(t => t.id === typeId);
+        const defaultEmoji = type ? type.emoji : '📍';
+        
+        let emojis = [defaultEmoji, ...commonEmojis.filter(e => e !== defaultEmoji)];
+        // 如果傳入的 selectedEmoji 不在清單中，將其加入
+        if (selectedEmoji && !emojis.includes(selectedEmoji)) {
+          emojis.unshift(selectedEmoji);
+        }
+        // 去除重複
+        emojis = [...new Set(emojis)].slice(0, 20); // 最多顯示20個供選擇
         
         let html = '';
         emojis.forEach((emoji, idx) => {
@@ -1416,8 +1472,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         renderSpotImagePreviews();
 
         // 預設分類與 Emoji
-        spotCategorySelect.value = '景點';
-        updateSpotEmojiOptions('景點', '⛩️');
+        if (spotTypesCache.length > 0) {
+          spotCategorySelect.value = spotTypesCache[0].id;
+          updateSpotEmojiOptions(spotTypesCache[0].id, spotTypesCache[0].emoji);
+        }
 
         if (spotRatingGroup) spotRatingGroup.style.display = 'none';
 
@@ -1611,8 +1669,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
         // 帶入欄位值
         document.getElementById('spot-name').value = spot.name || '';
-        spotCategorySelect.value = spot.category || '景點';
-        updateSpotEmojiOptions(spot.category, spot.icon);
+        spotCategorySelect.value = spot.spot_type_id || (spotTypesCache.length > 0 ? spotTypesCache[0].id : '');
+        updateSpotEmojiOptions(spot.spot_type_id, spot.icon);
         
         spotAddressInput.value = spot.address || '';
         spotLatInput.value = spot.lat ? spot.lat.toString() : '';
@@ -1647,7 +1705,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         const spotId = document.getElementById('form-spot-id').value;
         const nameEl = document.getElementById('spot-name');
         const name = nameEl.value.trim();
-        const category = spotCategorySelect.value;
+        const spotTypeId = spotCategorySelect.value;
         const icon = spotSelectedEmojiInput.value;
         const address = spotAddressInput.value.trim();
         
@@ -1690,7 +1748,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         const spotPayload = {
           trip_id: currentTripId,
           name,
-          category,
+          spot_type_id: spotTypeId,
           icon,
           address,
           lat,
@@ -1769,12 +1827,117 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         }
       });
 
+      // ==========================================
+      // 12. 景點類型管理 Modal
+      // ==========================================
+      const typeModal = document.getElementById('type-management-modal');
+      const btnManageTypes = document.getElementById('btn-manage-types');
+      const btnTypeModalClose = document.getElementById('btn-type-modal-close');
+      const typeListContainer = document.getElementById('type-list-container');
+      const addTypeForm = document.getElementById('add-type-form');
+
+      const renderTypeManagementList = () => {
+        if (!typeListContainer) return;
+        let html = '';
+        spotTypesCache.forEach(type => {
+          html += `
+            <li style="display: flex; align-items: center; justify-content: space-between; padding: 8px; background: white; border-radius: 8px; border: 1px solid var(--travel-border);">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <span style="font-size: 1.5rem;">${type.emoji}</span>
+                <span style="font-weight: 500;">${type.name}</span>
+              </div>
+              <button class="btn-spot-icon delete btn-delete-type" data-id="${type.id}" title="刪除" style="width: 32px; height: 32px; background: #fff5f5; color: #e03131; border: none; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center;">
+                <i class="ti ti-trash"></i>
+              </button>
+            </li>
+          `;
+        });
+        typeListContainer.innerHTML = html;
+
+        // 綁定刪除類型按鈕
+        typeListContainer.querySelectorAll('.btn-delete-type').forEach(btn => {
+          btn.addEventListener('click', async (e) => {
+            const id = e.currentTarget.dataset.id;
+            
+            // 檢查是否被景點使用
+            const spotsUsingThisType = spotsCache.filter(s => s.spot_type_id === id);
+            if (spotsUsingThisType.length > 0) {
+              alert(`無法刪除！目前有 ${spotsUsingThisType.length} 個景點正在使用此類型。請先將這些景點改為其他類型。`);
+              return;
+            }
+
+            if (confirm('確定要刪除這個景點類型嗎？')) {
+              try {
+                const { error } = await supabase.from('spot_types').delete().eq('id', id);
+                if (error) throw error;
+                
+                spotTypesCache = spotTypesCache.filter(t => t.id !== id);
+                renderTypeManagementList();
+                renderCategoryFilters();
+                renderSpotCategoryOptions();
+                showToast('已刪除類型');
+              } catch (err) {
+                alert('刪除失敗: ' + err.message);
+              }
+            }
+          });
+        });
+      };
+
+      btnManageTypes?.addEventListener('click', () => {
+        renderTypeManagementList();
+        typeModal?.classList.add('show');
+        document.body.classList.add('modal-open');
+      });
+
+      const closeTypeModal = () => {
+        typeModal?.classList.remove('show');
+        document.body.classList.remove('modal-open');
+      };
+      
+      btnTypeModalClose?.addEventListener('click', closeTypeModal);
+      typeModal?.addEventListener('click', (e) => {
+        if (e.target === typeModal) closeTypeModal();
+      });
+
+      addTypeForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const emojiInput = document.getElementById('new-type-emoji');
+        const nameInput = document.getElementById('new-type-name');
+        const emoji = emojiInput.value.trim();
+        const name = nameInput.value.trim();
+        
+        if (!name || !emoji) return;
+
+        try {
+          const { data, error } = await supabase
+            .from('spot_types')
+            .insert([{ name, emoji }])
+            .select()
+            .single();
+
+          if (error) throw error;
+          
+          spotTypesCache.push(data);
+          emojiInput.value = '';
+          nameInput.value = '';
+          
+          renderTypeManagementList();
+          renderCategoryFilters();
+          renderSpotCategoryOptions();
+          showToast('新增類型成功');
+        } catch (err) {
+          alert('新增失敗: ' + err.message);
+        }
+      });
+
       // ESC 鍵關閉所有 Modal
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
           closeTripModal();
           closeSpotModal();
           closeLightbox();
+          closeTypeModal();
         }
       });
     };
