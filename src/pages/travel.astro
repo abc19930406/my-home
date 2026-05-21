@@ -132,7 +132,13 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       </section>
 
       <!-- 4. Google Maps 地圖區塊 -->
-      <div id="travel-map" class="map-container"></div>
+      <div class="map-wrapper">
+        <div id="travel-map" class="map-container"></div>
+        <!-- 地圖提示文字 (預設隱藏，登入後由 JS 顯示) -->
+        <div id="map-hint-banner" class="map-hint-banner admin-only" style="display: none;">
+          <i class="ti ti-info-circle"></i> 點擊地圖任意位置可快速新增景點
+        </div>
+      </div>
 
       <!-- 5. 景點清單區 -->
       <section class="spots-list-section">
@@ -215,6 +221,12 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
         <div class="modal-body">
           <input type="hidden" id="form-spot-id" />
           
+          <!-- 搜尋景點自動完成 -->
+          <div class="form-group">
+            <label for="spot-search-input">搜尋景點 (快速填寫)</label>
+            <input type="text" id="spot-search-input" placeholder="🔍 輸入關鍵字搜尋地點（例如：伏見稻荷、清水寺）" autocomplete="off" />
+          </div>
+
           <!-- 景點名稱 -->
           <div class="form-group">
             <label for="spot-name">景點名稱 <span style="color: var(--color-danger)">*</span></label>
@@ -327,7 +339,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 </script>
 
 <!-- Google Maps JavaScript API (靜態載入以發揮最大效益) -->
-<script src={`https://maps.googleapis.com/maps/api/js?key=${mapsKey}` || ''} async defer></script>
+<script src={`https://maps.googleapis.com/maps/api/js?key=${mapsKey}&libraries=places&loading=async`} async defer></script>
 
 <!-- IIFE 客戶端互動與 Supabase 連線邏輯 -->
 <script>
@@ -353,6 +365,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   let googleMap: any = null;
   let mapMarkers: any[] = [];
   let activeInfoWindow: any = null;
+  let openAddSpotModal: any = null; // 全域新增景點 Modal 控制器
 
   // --- Utility: 顯示 Toast 訊息 ---
   function showToast(message: string) {
@@ -376,7 +389,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   }
 
   // --- 初始化地圖 ---
-  function initGoogleMap() {
+  async function initGoogleMap() {
     const mapElement = document.getElementById('travel-map');
     if (!mapElement || !(window as any).google || !(window as any).google.maps) {
       console.warn('⚠️ Google Maps API 未載入完成，稍後重新嘗試。');
@@ -420,13 +433,78 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       streetViewControl: false
     });
 
-    // 點擊地圖時關閉打開的氣泡
-    googleMap.addListener('click', () => {
+    // 點擊地圖事件：關閉氣泡 ＋ 管理員點擊新增
+    googleMap.addListener('click', async (e: any) => {
       if (activeInfoWindow) {
         activeInfoWindow.close();
         activeInfoWindow = null;
       }
+
+      // 只有管理員可以點擊地圖新增景點
+      if (!isAdminUser) return;
+
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+
+      const geocoder = new (window as any).google.maps.Geocoder();
+      geocoder.geocode({ location: { lat, lng } }, (results: any, status: string) => {
+        if (status === 'OK' && results[0]) {
+          openAddSpotModal({
+            lat,
+            lng,
+            address: results[0].formatted_address
+          });
+        } else {
+          // 若解析失敗，依然允許帶入經緯度新增，地址留空
+          openAddSpotModal({
+            lat,
+            lng,
+            address: ''
+          });
+        }
+      });
     });
+
+    // 初始化 Places Autocomplete (New)
+    try {
+      const { Autocomplete } = await (window as any).google.maps.importLibrary("places");
+      const searchInput = document.getElementById('spot-search-input');
+      
+      if (searchInput) {
+        const autocomplete = new Autocomplete(searchInput, {
+          fields: ['name', 'formatted_address', 'geometry']
+        });
+
+        autocomplete.addListener('place_changed', () => {
+          const place = autocomplete.getPlace();
+          if (place.geometry) {
+            const spotNameEl = document.getElementById('spot-name') as HTMLInputElement;
+            const spotAddressEl = document.getElementById('spot-address') as HTMLInputElement;
+            const spotLatEl = document.getElementById('spot-lat') as HTMLInputElement;
+            const spotLngEl = document.getElementById('spot-lng') as HTMLInputElement;
+
+            if (spotNameEl) spotNameEl.value = place.name || '';
+            if (spotAddressEl) spotAddressEl.value = place.formatted_address || '';
+            if (spotLatEl) spotLatEl.value = place.geometry.location.lat().toString();
+            if (spotLngEl) spotLngEl.value = place.geometry.location.lng().toString();
+
+            // 定位狀態指示燈
+            const geoStatusIndicator = document.getElementById('geo-status');
+            if (geoStatusIndicator) {
+              geoStatusIndicator.style.display = 'flex';
+              geoStatusIndicator.className = 'geo-status-indicator success';
+              geoStatusIndicator.innerHTML = `🟢 自動搜尋定位成功！`;
+            }
+
+            // 地圖平滑移動置中並縮放
+            googleMap.setCenter(place.geometry.location);
+            googleMap.setZoom(15);
+          }
+        });
+      }
+    } catch (err) {
+      console.warn('⚠️ Places Autocomplete 初始化失敗：', err);
+    }
 
     console.log('🗺️ Google Map 初始化成功！');
   }
@@ -1032,8 +1110,8 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       }
     });
 
-    // 開啟新增 Modal
-    btnOpenSpotModal?.addEventListener('click', () => {
+    // 實作全域新增景點 Modal 控制器，支援帶入經緯度與地址
+    openAddSpotModal = (initialData?: { lat: number, lng: number, address: string }) => {
       if (!currentTripId) {
         alert('請先建立行程！');
         return;
@@ -1043,12 +1121,12 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       (document.getElementById('form-spot-id') as HTMLInputElement).value = '';
       (document.getElementById('btn-spot-submit') as HTMLButtonElement).textContent = '儲存景點';
       
-      spotLatInput.value = '';
-      spotLngInput.value = '';
+      // 清空搜尋輸入框
+      const searchInput = document.getElementById('spot-search-input') as HTMLInputElement;
+      if (searchInput) searchInput.value = '';
+
       uploadedImagesCache = [];
       renderSpotImagePreviews();
-
-      if (geoStatusIndicator) geoStatusIndicator.style.display = 'none';
 
       // 預設分類與 Emoji
       spotCategorySelect.value = '景點';
@@ -1056,7 +1134,29 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 
       if (spotRatingGroup) spotRatingGroup.style.display = 'none';
 
+      if (initialData) {
+        spotAddressInput.value = initialData.address || '';
+        spotLatInput.value = initialData.lat.toString();
+        spotLngInput.value = initialData.lng.toString();
+        
+        if (geoStatusIndicator) {
+          geoStatusIndicator.style.display = 'flex';
+          geoStatusIndicator.className = 'geo-status-indicator success';
+          geoStatusIndicator.innerHTML = `🟢 地圖定位成功！(經:${initialData.lat.toFixed(4)}, 緯:${initialData.lng.toFixed(4)})`;
+        }
+      } else {
+        spotAddressInput.value = '';
+        spotLatInput.value = '';
+        spotLngInput.value = '';
+        if (geoStatusIndicator) geoStatusIndicator.style.display = 'none';
+      }
+
       spotModal?.classList.add('show');
+    };
+
+    // 開啟新增 Modal
+    btnOpenSpotModal?.addEventListener('click', () => {
+      openAddSpotModal();
     });
 
     const closeSpotModal = () => {
@@ -1069,29 +1169,37 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     // 9. Geocoding 自動定位地址經緯度
     // ==========================================
     async function performGeocoding(address: string) {
-      if (!address || !googleMapsKey || !geoStatusIndicator) return;
+      if (!address || !geoStatusIndicator || !(window as any).google || !(window as any).google.maps) return;
 
       geoStatusIndicator.style.display = 'flex';
       geoStatusIndicator.className = 'geo-status-indicator loading';
       geoStatusIndicator.textContent = '🧭 定位經緯度中...';
 
       try {
-        const res = await fetch(
-          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${googleMapsKey}`
-        );
-        const data = await res.json();
-        
-        if (data.status === 'OK' && data.results && data.results.length > 0) {
-          const location = data.results[0].geometry.location;
-          spotLatInput.value = location.lat.toString();
-          spotLngInput.value = location.lng.toString();
+        const geocoder = new (window as any).google.maps.Geocoder();
+        geocoder.geocode({ address }, (results: any, status: string) => {
+          if (status === 'OK' && results && results.length > 0) {
+            const location = results[0].geometry.location;
+            spotLatInput.value = location.lat().toString();
+            spotLngInput.value = location.lng().toString();
 
-          geoStatusIndicator.className = 'geo-status-indicator success';
-          geoStatusIndicator.innerHTML = `🟢 解析成功！(經:${location.lat.toFixed(4)}, 緯:${location.lng.toFixed(4)})`;
-          console.log(`🧭 Geocoding 解析成功: ${location.lat}, ${location.lng}`);
-        } else {
-          throw new Error(data.status || '定位失敗');
-        }
+            geoStatusIndicator.className = 'geo-status-indicator success';
+            geoStatusIndicator.innerHTML = `🟢 解析成功！(經:${location.lat().toFixed(4)}, 緯:${location.lng().toFixed(4)})`;
+            console.log(`🧭 Geocoding 解析成功: ${location.lat()}, ${location.lng()}`);
+
+            // 地圖平滑移動置中並縮放
+            if (googleMap) {
+              googleMap.setCenter(location);
+              googleMap.setZoom(15);
+            }
+          } else {
+            geoStatusIndicator.className = 'geo-status-indicator error';
+            geoStatusIndicator.textContent = '🔴 定位解析失敗，請手動確認地址是否正確。';
+            spotLatInput.value = '';
+            spotLngInput.value = '';
+            console.warn('🧭 Geocoding 失敗：', status);
+          }
+        });
       } catch (err: any) {
         geoStatusIndicator.className = 'geo-status-indicator error';
         geoStatusIndicator.textContent = '🔴 定位解析失敗，請手動確認地址是否正確。';
@@ -1202,6 +1310,10 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       (document.getElementById('spot-modal-title') as HTMLElement).textContent = '✏️ 編輯景點';
       (document.getElementById('form-spot-id') as HTMLInputElement).value = spot.id;
       (document.getElementById('btn-spot-submit') as HTMLButtonElement).textContent = '儲存修改';
+
+      // 清空搜尋輸入框
+      const searchInput = document.getElementById('spot-search-input') as HTMLInputElement;
+      if (searchInput) searchInput.value = '';
 
       if (geoStatusIndicator) geoStatusIndicator.style.display = 'none';
 
