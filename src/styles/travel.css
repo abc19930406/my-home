@@ -345,30 +345,26 @@
 }
 
 /* InfoWindow 質感自訂 */
-.gm-style-iw-c {
-  padding: 12px !important;
-  border-radius: 8px !important;
-  box-shadow: var(--travel-shadow-lg) !important;
-  background-color: #3D3530 !important; /* 深木灰氣泡 */
-  color: #FDFCF8 !important;
+.gm-style .gm-style-iw-c {
+  padding: 0 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 4px 20px rgba(90, 74, 53, 0.15) !important;
+  background: #FDFCF8 !important;
 }
-.gm-style-iw-tc::after {
-  background-color: #3D3530 !important;
+
+.gm-style .gm-style-iw-d {
+  overflow: auto !important;
+  max-height: 320px !important;
 }
-.gm-style-iw-d {
-  overflow: hidden !important;
-  max-width: 250px;
+
+.gm-style .gm-style-iw-t::after, .gm-style .gm-style-iw-tc::after {
+  background: #FDFCF8 !important;
 }
-.iw-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  margin-bottom: 4px;
-  font-family: 'Noto Serif TC', serif;
-}
-.iw-desc {
-  font-size: 0.75rem;
-  opacity: 0.8;
-  line-height: 1.4;
+
+.gm-style-iw-chr {
+  position: absolute !important;
+  top: 8px !important;
+  right: 8px !important;
 }
 
 /* ==========================================================================

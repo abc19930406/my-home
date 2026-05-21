@@ -977,11 +977,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           openInfoWindow.close();
         }
 
-        let subtypeBadge = '';
+        let subtypeLabel = '';
         if (spot.spot_subtype_id) {
           const subtype = spotSubtypesCache.find(st => st.id === spot.spot_subtype_id);
           if (subtype) {
-            subtypeBadge = `<span style="font-size: 0.75rem; background: var(--travel-bg); padding: 2px 6px; border-radius: 12px; border: 1px solid var(--travel-border); margin-left: 6px; color: var(--travel-text-muted);">${subtype.emoji} ${subtype.name}</span>`;
+            subtypeLabel = subtype.name;
           }
         }
 
@@ -989,26 +989,64 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name)}&query_place_id=${spot.place_id}`
           : `https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`;
 
-        // 管理員才有編輯按鈕
-        const editBtn = isAdminUser
-          ? `<button onclick="window.openSpotModal('${spot.id}')" style="background:white; color:#8B7355; border:1px solid #8B7355; padding:6px 14px; border-radius:16px; font-size:12px; cursor:pointer; flex:1;">✏️ 編輯</button>`
-          : '';
-
         const iwContent = `
-          <div style="font-family: serif; padding: 4px; min-width: 200px;">
-            <div style="font-weight: bold; font-size: 1.1rem; color: #5a4a35; margin-bottom: 6px; display: flex; align-items: center;">
-              ${spot.name} ${subtypeBadge}
-            </div>
-            <div style="font-size: 0.85rem; color: #666; margin-bottom: 8px;">📍 ${spot.address}</div>
-            ${spot.open_hours ? `<div style="font-size: 0.85rem; color: #666; margin-bottom: 4px;">⏰ ${spot.open_hours}</div>` : ''}
-            ${spot.price ? `<div style="font-size: 0.85rem; color: #666; margin-bottom: 8px;">💰 ${spot.price}</div>` : ''}
-            ${spot.note ? `<div style="font-size: 0.85rem; color: #8B7355; margin-bottom: 12px; font-style: italic;">✍️ ${spot.note}</div>` : ''}
-            
-            <div style="display: flex; gap: 8px; margin-top: 12px;">
-              <a href="${mapsUrl}" target="_blank" style="background: #8B7355; color: white; border: none; padding: 6px 14px; border-radius: 16px; font-size: 12px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; flex: 1;">🗺 Google Maps</a>
-              ${editBtn}
-            </div>
-          </div>
+<div style="
+  font-family: inherit;
+  width: 240px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 16px;
+  background: #FDFCF8;
+  border-radius: 12px;
+  color: #3a2e24;
+">
+  <!-- 標題列 -->
+  <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+    <span style="font-size:20px;">${emoji}</span>
+    <div>
+      <div style="font-weight:700; font-size:15px; color:#3a2e24;">${spot.name}</div>
+      ${subtypeLabel ? `<span style="font-size:11px; background:#f0ebe3; color:#8B7355; padding:2px 8px; border-radius:20px; display:inline-block; margin-top:4px;">${subtypeLabel}</span>` : ''}
+    </div>
+  </div>
+  
+  <!-- 資訊列 -->
+  ${spot.address ? `
+  <div style="display:flex; gap:6px; margin-bottom:8px; font-size:13px; color:#5a4a35;">
+    <span>📍</span><span style="line-height:1.4;">${spot.address}</span>
+  </div>` : ''}
+  
+  ${spot.open_hours ? `
+  <div style="display:flex; gap:6px; margin-bottom:8px; font-size:13px; color:#5a4a35;">
+    <span>🕐</span><span style="line-height:1.4;">${spot.open_hours}</span>
+  </div>` : ''}
+  
+  ${spot.price ? `
+  <div style="display:flex; gap:6px; margin-bottom:8px; font-size:13px; color:#5a4a35;">
+    <span>💰</span><span style="line-height:1.4;">${spot.price}</span>
+  </div>` : ''}
+  
+  ${spot.note ? `
+  <div style="display:flex; gap:6px; margin-bottom:12px; font-size:13px; color:#5a4a35;">
+    <span>📝</span><span style="line-height:1.4;">${spot.note}</span>
+  </div>` : ''}
+  
+  <!-- 按鈕列 -->
+  <div style="display:flex; gap:8px; margin-top:12px; border-top:1px solid #e8ddd0; padding-top:12px;">
+    <a href="${mapsUrl}" target="_blank" style="
+      flex:1; text-align:center; padding:7px;
+      background:#f0ebe3; color:#8B7355;
+      border-radius:8px; font-size:12px;
+      text-decoration:none; font-weight:600;
+    ">🗺 Google Maps</a>
+    ${isAdminUser ? `
+    <button onclick="window.openSpotModal('${spot.id}')" style="
+      flex:1; padding:7px;
+      background:#8B7355; color:white;
+      border:none; border-radius:8px;
+      font-size:12px; cursor:pointer; font-weight:600;
+    ">✏️ 編輯</button>` : ''}
+  </div>
+</div>
         `;
 
         openInfoWindow = new window.google.maps.InfoWindow({
