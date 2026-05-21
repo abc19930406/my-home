@@ -128,10 +128,23 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       <!-- 3. 篩選列 -->
       <section class="travel-filter-bar" style="flex-wrap: wrap;">
         <div style="display: flex; width: 100%; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
-          <!-- 左側：類型標籤 -->
-          <div class="filter-left" id="category-filter-group">
-            <button class="filter-btn active" data-category="all">全部</button>
-            <!-- JS 動態產生其他按鈕 -->
+          <!-- 左側：搜尋框與類型標籤 -->
+          <div class="filter-left" style="gap: 12px;">
+            <div style="position: relative; display: inline-flex; align-items: center; min-width: 180px;">
+              <input 
+                type="text" 
+                id="saved-spots-search" 
+                placeholder="🔍 搜尋已儲存景點..." 
+                style="width: 100%; padding: 6px 28px 6px 14px; border-radius: 16px; border: 1px solid var(--travel-border); font-size: 0.85rem; font-family: inherit; color: var(--travel-text); background: #FFFFFF; outline: none; box-shadow: var(--travel-shadow-sm); transition: border-color 0.2s;"
+                autocomplete="off"
+              />
+              <button id="btn-clear-saved-search" style="position: absolute; right: 8px; background: none; border: none; font-size: 14px; color: #999; cursor: pointer; display: none; padding: 0;">✕</button>
+            </div>
+            
+            <div id="category-filter-group" style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button class="filter-btn active" data-category="all">全部</button>
+              <!-- JS 動態產生其他按鈕 -->
+            </div>
           </div>
 
           <!-- 右側：狀態標籤 (想去、已去) + 新增景點按鈕 -->
@@ -1140,6 +1153,19 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         filtered = filtered.filter(spot => spot.spot_subtype_id === selectedSubcategoryFilter);
       }
 
+      // 搜尋篩選 (名稱、地址、備註)
+      const searchInput = document.getElementById('saved-spots-search');
+      if (searchInput) {
+        const searchQuery = searchInput.value.trim().toLowerCase();
+        if (searchQuery) {
+          filtered = filtered.filter(spot => {
+            return (spot.name && spot.name.toLowerCase().includes(searchQuery)) ||
+                   (spot.note && spot.note.toLowerCase().includes(searchQuery)) ||
+                   (spot.address && spot.address.toLowerCase().includes(searchQuery));
+          });
+        }
+      }
+
       // 2. 更新地圖標記 (Aesthetic & Interactive Map)
       updateMapMarkers(filtered);
 
@@ -1400,6 +1426,23 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           if (id) selectTrip(id);
         }
       });
+
+      // 1.5 綁定已儲存景點搜尋事件
+      const savedSpotsSearch = document.getElementById('saved-spots-search');
+      const btnClearSavedSearch = document.getElementById('btn-clear-saved-search');
+      
+      if (savedSpotsSearch && btnClearSavedSearch) {
+        savedSpotsSearch.addEventListener('input', (e) => {
+          btnClearSavedSearch.style.display = e.target.value.trim() ? 'block' : 'none';
+          filterAndRenderSpots();
+        });
+        
+        btnClearSavedSearch.addEventListener('click', () => {
+          savedSpotsSearch.value = '';
+          btnClearSavedSearch.style.display = 'none';
+          filterAndRenderSpots();
+        });
+      }
 
       // 2. 綁定類型篩選點擊事件
       const catGroup = document.getElementById('category-filter-group');
