@@ -373,7 +373,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   let googleMap: any = null;
   let mapMarkers: any[] = [];
   let searchMarkers: any[] = []; // 頂部搜尋的標記
-  let activeInfoWindow: any = null;
+  let openInfoWindow: any = null; // 指向當前開啟的氣泡視窗
   let openAddSpotModal: any = null; // 全域新增景點 Modal 控制器
 
   // 清除頂部搜尋的標記
@@ -382,12 +382,12 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     searchMarkers = [];
   }
 
-  // 綁定全域搜尋加入行程方法
-  (window as any).addSpotFromSearch = (lat: number, lng: number, address: string, name: string) => {
+  // 綁定全域搜尋加入行程方法 (對齊使用者的參數順序：name, address, lat, lng)
+  (window as any).addSpotFromSearch = (name: string, address: string, lat: number, lng: number) => {
     // 關閉氣泡
-    if (activeInfoWindow) {
-      activeInfoWindow.close();
-      activeInfoWindow = null;
+    if (openInfoWindow) {
+      openInfoWindow.close();
+      openInfoWindow = null;
     }
     // 開啟新增景點 Modal，自動填入資料
     if (openAddSpotModal) {
@@ -463,9 +463,9 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 
     // 點擊地圖事件：關閉氣泡 ＋ 管理員點擊新增
     googleMap.addListener('click', async (e: any) => {
-      if (activeInfoWindow) {
-        activeInfoWindow.close();
-        activeInfoWindow = null;
+      if (openInfoWindow) {
+        openInfoWindow.close();
+        openInfoWindow = null;
       }
 
       // 只有管理員可以點擊地圖新增景點
@@ -496,100 +496,79 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       });
     });
 
-    // 初始化 Places SearchBox (頂部搜尋列)
+    // 初始化 Places Autocomplete (頂部搜尋列)
     try {
-      const searchInput = document.getElementById('travel-search-input') as HTMLInputElement;
-      const searchButton = document.getElementById('travel-search-btn');
+      const { Autocomplete } = await (window as any).google.maps.importLibrary("places");
+      const searchInput = document.getElementById('travel-search-input');
       
       if (searchInput) {
-        const searchBox = new (window as any).google.maps.places.SearchBox(searchInput);
-        
-        // 偏向地圖目前視角
-        googleMap.addListener('bounds_changed', () => {
-          searchBox.setBounds(googleMap.getBounds());
+        const autocomplete = new Autocomplete(searchInput, {
+          fields: ['name', 'formatted_address', 'geometry', 'place_id']
         });
 
-        const handlePlacesChanged = () => {
-          const places = searchBox.getPlaces();
-          if (!places || places.length === 0) return;
-
-          // 1. 清除舊搜尋標記
-          clearSearchMarkers();
-
-          // 2. 關閉當前 InfoWindow
-          if (activeInfoWindow) {
-            activeInfoWindow.close();
-            activeInfoWindow = null;
-          }
-
-          const bounds = new (window as any).google.maps.LatLngBounds();
-
-          places.forEach((place: any) => {
-            if (!place.geometry || !place.geometry.location) return;
-
-            // 建立藍色圓點標記 (SymbolPath.CIRCLE)
-            const marker = new (window as any).google.maps.Marker({
-              map: googleMap,
-              position: place.geometry.location,
-              title: place.name,
-              icon: {
-                path: (window as any).google.maps.SymbolPath.CIRCLE,
-                fillColor: '#4A90E2', // 清新藍
-                fillOpacity: 0.9,
-                strokeColor: '#FFFFFF',
-                strokeWeight: 2,
-                scale: 8
-              }
-            });
-
-            // 點擊藍色標記彈出 InfoWindow
-            marker.addListener('click', () => {
-              if (activeInfoWindow) {
-                activeInfoWindow.close();
-              }
-
-              const escName = (place.name || '').replace(/'/g, "\\'");
-              const escAddress = (place.formatted_address || '').replace(/'/g, "\\'");
-              const lat = place.geometry.location.lat();
-              const lng = place.geometry.location.lng();
-
-              // 全域事件轉傳：呼叫 window.addSpotFromSearch(lat, lng, address, name)
-              const iwContent = `
-                <div class="search-iw-container" style="padding: 6px; font-family: system-ui, sans-serif;">
-                  <div class="iw-title" style="font-weight: 700; font-size: 1rem; color: #3D3530; margin-bottom: 4px;">${place.name}</div>
-                  <div class="iw-desc" style="font-size: 0.8rem; color: #7F7267; margin-bottom: 8px; max-width: 200px; line-height: 1.4;">${place.formatted_address || ''}</div>
-                  <button class="btn-primary" onclick="window.addSpotFromSearch(${lat}, ${lng}, '${escAddress}', '${escName}')" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 20px; cursor: pointer; border: none; background-color: #D4A373; color: white; display: flex; align-items: center; gap: 4px;">
-                    <i class="ti ti-plus"></i> ＋ 加入行程
-                  </button>
-                </div>
-              `;
-
-              activeInfoWindow = new (window as any).google.maps.InfoWindow({
-                content: iwContent,
-                position: place.geometry.location,
-                pixelOffset: new (window as any).google.maps.Size(0, -10)
-              });
-
-              activeInfoWindow.open(googleMap);
-            });
-
-            searchMarkers.push(marker);
-
-            if (place.geometry.viewport) {
-              bounds.union(place.geometry.viewport);
-            } else {
-              bounds.extend(place.geometry.location);
+        autocomplete.addListener('place_changed', () => {
+          const place = autocomplete.getPlace();
+          if (!place.geometry?.location) return;
+          
+          // 清除上次搜尋標記
+          searchMarkers.forEach(m => m.setMap(null));
+          searchMarkers = [];
+          
+          // 建立藍色標記
+          const marker = new (window as any).google.maps.Marker({
+            map: googleMap,
+            position: place.geometry.location,
+            icon: {
+              path: (window as any).google.maps.SymbolPath.CIRCLE,
+              scale: 12,
+              fillColor: '#4A90D9',
+              fillOpacity: 1,
+              strokeColor: 'white',
+              strokeWeight: 2.5
             }
           });
-
-          googleMap.fitBounds(bounds);
-        };
-
-        searchBox.addListener('places_changed', handlePlacesChanged);
-        searchButton?.addEventListener('click', handlePlacesChanged);
+          
+          // InfoWindow 含「加入行程」按鈕
+          const iw = new (window as any).google.maps.InfoWindow({
+            content: `
+              <div style="font-family:serif;padding:8px;min-width:180px;">
+                <div style="font-size:14px;font-weight:bold;color:#3D3530;margin-bottom:4px;">
+                  ${place.name || ''}
+                </div>
+                <div style="font-size:11px;color:#7A6050;margin-bottom:10px;line-height:1.4;">
+                  ${place.formatted_address || ''}
+                </div>
+                <button onclick="window.addSpotFromSearch(
+                  '${(place.name || '').replace(/'/g, "\\'")}',
+                  '${(place.formatted_address || '').replace(/'/g, "\\'")}',
+                  ${place.geometry.location.lat()},
+                  ${place.geometry.location.lng()}
+                )" style="
+                  background:#8B7355;color:white;border:none;
+                  padding:6px 14px;border-radius:16px;
+                  font-size:12px;cursor:pointer;
+                ">＋ 加入行程</button>
+              </div>
+            `
+          });
+          
+          marker.addListener('click', () => {
+            if (openInfoWindow) openInfoWindow.close();
+            iw.open(googleMap, marker);
+            openInfoWindow = iw;
+          });
+          
+          searchMarkers.push(marker);
+          googleMap.setCenter(place.geometry.location);
+          googleMap.setZoom(15);
+          
+          // 自動開啟 InfoWindow
+          iw.open(googleMap, marker);
+          openInfoWindow = iw;
+        });
       }
     } catch (err) {
-      console.warn('⚠️ Places SearchBox 初始化失敗：', err);
+      console.warn('⚠️ Places Autocomplete 初始化失敗：', err);
     }
 
     console.log('🗺️ Google Map 初始化成功！');
@@ -641,8 +620,8 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
         this.div.addEventListener('click', (e) => {
           e.stopPropagation();
           
-          if (activeInfoWindow) {
-            activeInfoWindow.close();
+          if (openInfoWindow) {
+            openInfoWindow.close();
           }
 
           const ratingText: { [key: string]: string } = {
@@ -664,13 +643,13 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
             </div>
           `;
 
-          activeInfoWindow = new (window as any).google.maps.InfoWindow({
+          openInfoWindow = new (window as any).google.maps.InfoWindow({
             content: iwContent,
             position: this.latlng,
             pixelOffset: new (window as any).google.maps.Size(0, -32)
           });
 
-          activeInfoWindow.open(googleMap);
+          openInfoWindow.open(googleMap);
         });
 
         const panes = this.getPanes();
@@ -706,9 +685,9 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     });
     mapMarkers = [];
 
-    if (activeInfoWindow) {
-      activeInfoWindow.close();
-      activeInfoWindow = null;
+    if (openInfoWindow) {
+      openInfoWindow.close();
+      openInfoWindow = null;
     }
 
     if (!googleMap) return;
@@ -1071,10 +1050,12 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
         if ((opt as HTMLElement).dataset.emoji === '🌸') opt.classList.add('selected');
       });
       tripModal?.classList.add('show');
+      document.body.classList.add('modal-open');
     });
 
     const closeTripModal = () => {
       tripModal?.classList.remove('show');
+      document.body.classList.remove('modal-open');
     };
     btnTripClose?.addEventListener('click', closeTripModal);
     btnTripCancel?.addEventListener('click', closeTripModal);
@@ -1240,6 +1221,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       }
 
       spotModal?.classList.add('show');
+      document.body.classList.add('modal-open');
     };
 
     const btnCancelSpot = document.getElementById('btn-cancel-spot');
@@ -1252,6 +1234,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 
     const closeSpotModal = () => {
       spotModal?.classList.remove('show');
+      document.body.classList.remove('modal-open');
     };
     btnSpotClose?.addEventListener('click', closeSpotModal);
     btnCancelSpot?.addEventListener('click', closeSpotModal);
@@ -1432,6 +1415,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       renderSpotImagePreviews();
 
       spotModal?.classList.add('show');
+      document.body.classList.add('modal-open');
     }
 
     // 攔截原表單的 submit 行為
