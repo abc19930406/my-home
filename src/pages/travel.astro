@@ -108,6 +108,20 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
         </button>
       </section>
 
+      <!-- 2.5 搜尋列 -->
+      <section class="travel-search-bar">
+        <div class="search-input-wrapper">
+          <i class="ti ti-search search-icon"></i>
+          <input 
+            type="text" 
+            id="travel-search-input" 
+            placeholder="搜尋想去的景點、餐廳、住宿... (例如：清水寺)" 
+            autocomplete="off"
+          />
+          <button id="travel-search-btn" class="search-btn">搜尋</button>
+        </div>
+      </section>
+
       <!-- 3. 篩選列 -->
       <section class="travel-filter-bar">
         <!-- 左側：類型標籤 (全部、景點、飲食、購物、住宿) -->
@@ -220,12 +234,6 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       <form id="spot-form">
         <div class="modal-body">
           <input type="hidden" id="form-spot-id" />
-          
-          <!-- 搜尋景點自動完成 -->
-          <div class="form-group">
-            <label for="spot-search-input">搜尋景點 (快速填寫)</label>
-            <input type="text" id="spot-search-input" placeholder="🔍 輸入關鍵字搜尋地點（例如：伏見稻荷、清水寺）" autocomplete="off" />
-          </div>
 
           <!-- 景點名稱 -->
           <div class="form-group">
@@ -313,9 +321,9 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
             </div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn-secondary" id="btn-spot-cancel">取消</button>
-          <button type="submit" class="btn-primary" id="btn-spot-submit">儲存景點</button>
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" id="btn-cancel-spot">取消</button>
+          <button type="button" class="btn-primary" id="btn-save-spot">儲存景點</button>
         </div>
       </form>
     </div>
@@ -364,8 +372,28 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   // Google Maps 物件快取
   let googleMap: any = null;
   let mapMarkers: any[] = [];
+  let searchMarkers: any[] = []; // 頂部搜尋的標記
   let activeInfoWindow: any = null;
   let openAddSpotModal: any = null; // 全域新增景點 Modal 控制器
+
+  // 清除頂部搜尋的標記
+  function clearSearchMarkers() {
+    searchMarkers.forEach(m => m.setMap(null));
+    searchMarkers = [];
+  }
+
+  // 綁定全域搜尋加入行程方法
+  (window as any).addSpotFromSearch = (lat: number, lng: number, address: string, name: string) => {
+    // 關閉氣泡
+    if (activeInfoWindow) {
+      activeInfoWindow.close();
+      activeInfoWindow = null;
+    }
+    // 開啟新增景點 Modal，自動填入資料
+    if (openAddSpotModal) {
+      openAddSpotModal({ lat, lng, address, name });
+    }
+  };
 
   // --- Utility: 顯示 Toast 訊息 ---
   function showToast(message: string) {
@@ -447,63 +475,121 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       const lng = e.latLng.lng();
 
       const geocoder = new (window as any).google.maps.Geocoder();
-      geocoder.geocode({ location: { lat, lng } }, (results: any, status: string) => {
+      // 使用 zh-TW 語言，優先取得繁體中文地址
+      geocoder.geocode({ location: { lat, lng }, language: 'zh-TW' }, (results: any, status: string) => {
         if (status === 'OK' && results[0]) {
           openAddSpotModal({
             lat,
             lng,
-            address: results[0].formatted_address
+            address: results[0].formatted_address,
+            name: '' // 點擊地圖新增，名稱保持空白
           });
         } else {
           // 若解析失敗，依然允許帶入經緯度新增，地址留空
           openAddSpotModal({
             lat,
             lng,
-            address: ''
+            address: '',
+            name: ''
           });
         }
       });
     });
 
-    // 初始化 Places Autocomplete (New)
+    // 初始化 Places SearchBox (頂部搜尋列)
     try {
-      const { Autocomplete } = await (window as any).google.maps.importLibrary("places");
-      const searchInput = document.getElementById('spot-search-input');
+      const searchInput = document.getElementById('travel-search-input') as HTMLInputElement;
+      const searchButton = document.getElementById('travel-search-btn');
       
       if (searchInput) {
-        const autocomplete = new Autocomplete(searchInput, {
-          fields: ['name', 'formatted_address', 'geometry']
+        const searchBox = new (window as any).google.maps.places.SearchBox(searchInput);
+        
+        // 偏向地圖目前視角
+        googleMap.addListener('bounds_changed', () => {
+          searchBox.setBounds(googleMap.getBounds());
         });
 
-        autocomplete.addListener('place_changed', () => {
-          const place = autocomplete.getPlace();
-          if (place.geometry) {
-            const spotNameEl = document.getElementById('spot-name') as HTMLInputElement;
-            const spotAddressEl = document.getElementById('spot-address') as HTMLInputElement;
-            const spotLatEl = document.getElementById('spot-lat') as HTMLInputElement;
-            const spotLngEl = document.getElementById('spot-lng') as HTMLInputElement;
+        const handlePlacesChanged = () => {
+          const places = searchBox.getPlaces();
+          if (!places || places.length === 0) return;
 
-            if (spotNameEl) spotNameEl.value = place.name || '';
-            if (spotAddressEl) spotAddressEl.value = place.formatted_address || '';
-            if (spotLatEl) spotLatEl.value = place.geometry.location.lat().toString();
-            if (spotLngEl) spotLngEl.value = place.geometry.location.lng().toString();
+          // 1. 清除舊搜尋標記
+          clearSearchMarkers();
 
-            // 定位狀態指示燈
-            const geoStatusIndicator = document.getElementById('geo-status');
-            if (geoStatusIndicator) {
-              geoStatusIndicator.style.display = 'flex';
-              geoStatusIndicator.className = 'geo-status-indicator success';
-              geoStatusIndicator.innerHTML = `🟢 自動搜尋定位成功！`;
-            }
-
-            // 地圖平滑移動置中並縮放
-            googleMap.setCenter(place.geometry.location);
-            googleMap.setZoom(15);
+          // 2. 關閉當前 InfoWindow
+          if (activeInfoWindow) {
+            activeInfoWindow.close();
+            activeInfoWindow = null;
           }
-        });
+
+          const bounds = new (window as any).google.maps.LatLngBounds();
+
+          places.forEach((place: any) => {
+            if (!place.geometry || !place.geometry.location) return;
+
+            // 建立藍色圓點標記 (SymbolPath.CIRCLE)
+            const marker = new (window as any).google.maps.Marker({
+              map: googleMap,
+              position: place.geometry.location,
+              title: place.name,
+              icon: {
+                path: (window as any).google.maps.SymbolPath.CIRCLE,
+                fillColor: '#4A90E2', // 清新藍
+                fillOpacity: 0.9,
+                strokeColor: '#FFFFFF',
+                strokeWeight: 2,
+                scale: 8
+              }
+            });
+
+            // 點擊藍色標記彈出 InfoWindow
+            marker.addListener('click', () => {
+              if (activeInfoWindow) {
+                activeInfoWindow.close();
+              }
+
+              const escName = (place.name || '').replace(/'/g, "\\'");
+              const escAddress = (place.formatted_address || '').replace(/'/g, "\\'");
+              const lat = place.geometry.location.lat();
+              const lng = place.geometry.location.lng();
+
+              // 全域事件轉傳：呼叫 window.addSpotFromSearch(lat, lng, address, name)
+              const iwContent = `
+                <div class="search-iw-container" style="padding: 6px; font-family: system-ui, sans-serif;">
+                  <div class="iw-title" style="font-weight: 700; font-size: 1rem; color: #3D3530; margin-bottom: 4px;">${place.name}</div>
+                  <div class="iw-desc" style="font-size: 0.8rem; color: #7F7267; margin-bottom: 8px; max-width: 200px; line-height: 1.4;">${place.formatted_address || ''}</div>
+                  <button class="btn-primary" onclick="window.addSpotFromSearch(${lat}, ${lng}, '${escAddress}', '${escName}')" style="font-size: 0.8rem; padding: 4px 10px; border-radius: 20px; cursor: pointer; border: none; background-color: #D4A373; color: white; display: flex; align-items: center; gap: 4px;">
+                    <i class="ti ti-plus"></i> ＋ 加入行程
+                  </button>
+                </div>
+              `;
+
+              activeInfoWindow = new (window as any).google.maps.InfoWindow({
+                content: iwContent,
+                position: place.geometry.location,
+                pixelOffset: new (window as any).google.maps.Size(0, -10)
+              });
+
+              activeInfoWindow.open(googleMap);
+            });
+
+            searchMarkers.push(marker);
+
+            if (place.geometry.viewport) {
+              bounds.union(place.geometry.viewport);
+            } else {
+              bounds.extend(place.geometry.location);
+            }
+          });
+
+          googleMap.fitBounds(bounds);
+        };
+
+        searchBox.addListener('places_changed', handlePlacesChanged);
+        searchButton?.addEventListener('click', handlePlacesChanged);
       }
     } catch (err) {
-      console.warn('⚠️ Places Autocomplete 初始化失敗：', err);
+      console.warn('⚠️ Places SearchBox 初始化失敗：', err);
     }
 
     console.log('🗺️ Google Map 初始化成功！');
@@ -1111,7 +1197,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     });
 
     // 實作全域新增景點 Modal 控制器，支援帶入經緯度與地址
-    openAddSpotModal = (initialData?: { lat: number, lng: number, address: string }) => {
+    openAddSpotModal = (initialData?: { lat: number, lng: number, address: string, name?: string }) => {
       if (!currentTripId) {
         alert('請先建立行程！');
         return;
@@ -1119,11 +1205,11 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       spotForm.reset();
       (document.getElementById('spot-modal-title') as HTMLElement).textContent = '＋ 新增景點';
       (document.getElementById('form-spot-id') as HTMLInputElement).value = '';
-      (document.getElementById('btn-spot-submit') as HTMLButtonElement).textContent = '儲存景點';
-      
-      // 清空搜尋輸入框
-      const searchInput = document.getElementById('spot-search-input') as HTMLInputElement;
+
+      // 清空頁面頂部的搜尋框並清除搜尋標記
+      const searchInput = document.getElementById('travel-search-input') as HTMLInputElement;
       if (searchInput) searchInput.value = '';
+      clearSearchMarkers();
 
       uploadedImagesCache = [];
       renderSpotImagePreviews();
@@ -1135,6 +1221,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       if (spotRatingGroup) spotRatingGroup.style.display = 'none';
 
       if (initialData) {
+        (document.getElementById('spot-name') as HTMLInputElement).value = initialData.name || '';
         spotAddressInput.value = initialData.address || '';
         spotLatInput.value = initialData.lat.toString();
         spotLngInput.value = initialData.lng.toString();
@@ -1145,6 +1232,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
           geoStatusIndicator.innerHTML = `🟢 地圖定位成功！(經:${initialData.lat.toFixed(4)}, 緯:${initialData.lng.toFixed(4)})`;
         }
       } else {
+        (document.getElementById('spot-name') as HTMLInputElement).value = '';
         spotAddressInput.value = '';
         spotLatInput.value = '';
         spotLngInput.value = '';
@@ -1153,6 +1241,9 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 
       spotModal?.classList.add('show');
     };
+
+    const btnCancelSpot = document.getElementById('btn-cancel-spot');
+    const btnSaveSpot = document.getElementById('btn-save-spot');
 
     // 開啟新增 Modal
     btnOpenSpotModal?.addEventListener('click', () => {
@@ -1163,7 +1254,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       spotModal?.classList.remove('show');
     };
     btnSpotClose?.addEventListener('click', closeSpotModal);
-    btnSpotCancel?.addEventListener('click', closeSpotModal);
+    btnCancelSpot?.addEventListener('click', closeSpotModal);
 
     // ==========================================
     // 9. Geocoding 自動定位地址經緯度
@@ -1309,10 +1400,9 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       spotForm.reset();
       (document.getElementById('spot-modal-title') as HTMLElement).textContent = '✏️ 編輯景點';
       (document.getElementById('form-spot-id') as HTMLInputElement).value = spot.id;
-      (document.getElementById('btn-spot-submit') as HTMLButtonElement).textContent = '儲存修改';
 
-      // 清空搜尋輸入框
-      const searchInput = document.getElementById('spot-search-input') as HTMLInputElement;
+      // 清空頁面頂部的搜尋框
+      const searchInput = document.getElementById('travel-search-input') as HTMLInputElement;
       if (searchInput) searchInput.value = '';
 
       if (geoStatusIndicator) geoStatusIndicator.style.display = 'none';
@@ -1344,16 +1434,32 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       spotModal?.classList.add('show');
     }
 
-    // 景點表單提交 (新增或編輯)
-    spotForm?.addEventListener('submit', async (e) => {
+    // 攔截原表單的 submit 行為
+    spotForm?.addEventListener('submit', (e) => {
       e.preventDefault();
+    });
 
+    // 點擊儲存按鈕執行景點儲存邏輯 (新增或編輯)
+    btnSaveSpot?.addEventListener('click', async () => {
       const spotId = (document.getElementById('form-spot-id') as HTMLInputElement).value;
-      const name = (document.getElementById('spot-name') as HTMLInputElement).value.trim();
+      const nameEl = document.getElementById('spot-name') as HTMLInputElement;
+      const name = nameEl.value.trim();
       const category = spotCategorySelect.value;
       const icon = spotSelectedEmojiInput.value;
       const address = spotAddressInput.value.trim();
       
+      // 手動驗證必填欄位
+      if (!name) {
+        alert('請填寫景點名稱！');
+        nameEl.focus();
+        return;
+      }
+      if (!address) {
+        alert('請填寫景點地址！');
+        spotAddressInput.focus();
+        return;
+      }
+
       // 確保有經緯度
       let lat = parseFloat(spotLatInput.value);
       let lng = parseFloat(spotLngInput.value);

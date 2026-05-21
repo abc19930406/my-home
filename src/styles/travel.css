@@ -821,7 +821,7 @@
   cursor: pointer;
 }
 
-.modal-footer {
+.modal-footer, .modal-actions {
   padding: 16px 20px;
   border-top: 1px solid rgba(139, 115, 85, 0.12);
   display: flex;
@@ -1009,4 +1009,53 @@
 
 .pac-icon {
   display: none !important; /* 隱藏預設的地標定位 icon */
+}
+
+/* ==========================================================================
+   9. 全新地圖上方搜尋列樣式
+   ========================================================================== */
+.travel-search-bar {
+  display: flex;
+  gap: 8px;
+  margin: 0 4px 24px 4px;
+  width: calc(100% - 8px);
+}
+
+#travel-search-input {
+  flex-grow: 1;
+  padding: 10px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--travel-border);
+  background-color: #FFFFFF;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--travel-text);
+  outline: none;
+  box-shadow: var(--travel-shadow-sm);
+  transition: all 0.2s ease;
+}
+
+#travel-search-input:focus {
+  border-color: var(--travel-primary);
+  box-shadow: 0 0 0 3px rgba(139, 115, 85, 0.15);
+}
+
+#travel-search-btn {
+  padding: 10px 24px;
+  border-radius: 20px;
+  border: none;
+  background-color: var(--travel-primary);
+  color: var(--travel-bg);
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: var(--travel-shadow-sm);
+  transition: all 0.2s ease;
+}
+
+#travel-search-btn:hover {
+  background-color: var(--travel-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 115, 85, 0.2);
 }
