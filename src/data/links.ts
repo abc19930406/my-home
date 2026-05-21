@@ -59,7 +59,7 @@ export const linksData: CardLink[] = [
     title: "旅行地圖",
     icon: "map-pin",
     description: "去過的地方・還想去的地方",
-    url: "/japan"
+    url: "/travel"
   },
   {
     section: "生活記錄",

@@ -1,0 +1,936 @@
+/* ==========================================================================
+   The Corner Table — 旅行地圖頁面專用樣式 (travel.css)
+   視覺風格：日系清新明亮白底暖木色系
+   ========================================================================== */
+
+:root {
+  --travel-bg: #FDFCF8;
+  --travel-primary: #8B7355; /* 暖木棕 */
+  --travel-primary-hover: #756046;
+  --travel-secondary: rgba(139, 115, 85, 0.15); /* 淺暖木棕 */
+  --travel-secondary-hover: rgba(139, 115, 85, 0.25);
+  --travel-text: #3D3530; /* 深木灰 */
+  --travel-text-muted: #7E746B; /* 淺木灰 */
+  --travel-card-bg: #FFFFFF;
+  --travel-visited-bg: rgba(139, 115, 85, 0.04);
+  --travel-border: rgba(139, 115, 85, 0.18);
+  --travel-border-dashed: rgba(139, 115, 85, 0.3);
+  --travel-shadow: 0 4px 20px rgba(139, 115, 85, 0.08);
+  --travel-shadow-sm: 0 2px 8px rgba(139, 115, 85, 0.05);
+  --travel-shadow-lg: 0 10px 30px rgba(139, 115, 85, 0.12);
+  
+  /* 評價圓點顏色 */
+  --color-recommend: #4A90D9;     /* 藍色 */
+  --color-maybe: #F5A623;         /* 黃色 */
+  --color-not-recommend: #E74C3C; /* 紅色 */
+  --color-danger: #E74C3C;
+}
+
+/* 全域或 Page-specific 覆蓋 */
+.travel-page-active {
+  background-color: var(--travel-bg) !important;
+  color: var(--travel-text) !important;
+}
+
+/* 典雅淡格紋背景 */
+.travel-body {
+  min-height: 100vh;
+  background-color: var(--travel-bg);
+  background-image: 
+    linear-gradient(rgba(139, 115, 85, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(139, 115, 85, 0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  padding: 40px 20px 80px 20px;
+  box-sizing: border-box;
+  font-family: 'Noto Serif TC', 'Georgia', serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.travel-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+/* ==========================================================================
+   1. Header 區樣式
+   ========================================================================== */
+.travel-header {
+  margin-bottom: 30px;
+  position: relative;
+}
+
+.nav-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--travel-primary);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 12px;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.nav-back:hover {
+  transform: translateX(-3px);
+  opacity: 0.8;
+}
+
+.page-title {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--travel-text);
+  margin: 0 0 6px 0;
+  letter-spacing: 0.05em;
+}
+
+.page-subtitle {
+  font-size: 0.95rem;
+  color: var(--travel-primary);
+  margin: 0;
+  opacity: 0.85;
+  font-weight: 400;
+}
+
+/* ==========================================================================
+   2. 行程切換列 (橫向滾動)
+   ========================================================================== */
+.trips-scroll-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+  position: relative;
+}
+
+.trips-list {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 4px 8px 4px;
+  scroll-behavior: smooth;
+  flex-grow: 1;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 隱藏滾動條 */
+.trips-list::-webkit-scrollbar {
+  height: 4px;
+}
+.trips-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.trips-list::-webkit-scrollbar-thumb {
+  background: rgba(139, 115, 85, 0.15);
+  border-radius: 4px;
+}
+
+.trip-tab {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 20px;
+  border: 1px solid var(--travel-border);
+  background-color: rgba(139, 115, 85, 0.06);
+  color: var(--travel-text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--travel-shadow-sm);
+}
+
+.trip-tab:hover {
+  background-color: var(--travel-secondary);
+  border-color: var(--travel-primary);
+  transform: translateY(-1px);
+}
+
+.trip-tab.active {
+  background-color: var(--travel-primary);
+  border-color: var(--travel-primary);
+  color: var(--travel-bg);
+  box-shadow: 0 4px 12px rgba(139, 115, 85, 0.2);
+}
+
+.btn-dashed-add-trip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px dashed var(--travel-primary);
+  background-color: transparent;
+  color: var(--travel-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-dashed-add-trip:hover {
+  background-color: rgba(139, 115, 85, 0.08);
+  transform: translateY(-1px);
+}
+
+/* ==========================================================================
+   3. 篩選列
+   ========================================================================== */
+.travel-filter-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid rgba(139, 115, 85, 0.1);
+  padding-bottom: 16px;
+}
+
+.filter-left, .filter-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  font-weight: 500;
+  border: 1px solid transparent;
+  background-color: rgba(139, 115, 85, 0.05);
+  color: var(--travel-text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-btn:hover {
+  background-color: var(--travel-secondary);
+  color: var(--travel-text);
+}
+
+.filter-btn.active {
+  background-color: var(--travel-primary);
+  color: var(--travel-bg);
+}
+
+/* 狀態篩選特別樣式 (方角或特殊質感) */
+.status-btn {
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.85rem;
+  border: 1px solid var(--travel-border);
+  background-color: transparent;
+  color: var(--travel-text-muted);
+}
+.status-btn.active {
+  background-color: var(--travel-primary);
+  border-color: var(--travel-primary);
+  color: var(--travel-bg);
+}
+
+.btn-add-spot {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  font-weight: 600;
+  background-color: var(--travel-primary);
+  color: var(--travel-bg);
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(139, 115, 85, 0.15);
+  transition: all 0.2s ease;
+}
+
+.btn-add-spot:hover {
+  background-color: var(--travel-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 115, 85, 0.25);
+}
+
+/* ==========================================================================
+   4. Google Maps 地圖區塊與自訂 Marker
+   ========================================================================== */
+.map-container {
+  width: 100%;
+  height: 350px;
+  border-radius: 12px;
+  border: 1px solid var(--travel-border);
+  overflow: hidden;
+  box-shadow: var(--travel-shadow);
+  margin-bottom: 24px;
+  background-color: #EAE6DF; /* 地圖載入前的質感灰色底 */
+}
+
+/* Custom Marker Container in Google Maps */
+.custom-map-marker {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  cursor: pointer;
+  z-index: 10;
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.custom-map-marker:hover {
+  transform: scale(1.2) translateY(-2px);
+  z-index: 999;
+}
+
+.marker-circle {
+  width: 100%;
+  height: 100%;
+  background: #FFFFFF;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+  box-sizing: border-box;
+}
+
+/* 已去：實線邊框 */
+.custom-map-marker.visited .marker-circle {
+  border: 2px solid var(--travel-primary);
+}
+
+/* 想去：虛線邊框 */
+.custom-map-marker.want .marker-circle {
+  border: 2px dashed var(--travel-primary);
+}
+
+.marker-emoji {
+  font-size: 19px;
+  line-height: 1;
+}
+
+/* 右上角評價圓點 */
+.marker-rating-dot {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid #FFFFFF;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  box-sizing: border-box;
+}
+
+.rating-dot-recommend {
+  background-color: var(--color-recommend) !important;
+}
+
+.rating-dot-maybe {
+  background-color: var(--color-maybe) !important;
+}
+
+.rating-dot-not_recommend {
+  background-color: var(--color-not-recommend) !important;
+}
+
+/* InfoWindow 質感自訂 */
+.gm-style-iw-c {
+  padding: 12px !important;
+  border-radius: 8px !important;
+  box-shadow: var(--travel-shadow-lg) !important;
+  background-color: #3D3530 !important; /* 深木灰氣泡 */
+  color: #FDFCF8 !important;
+}
+.gm-style-iw-tc::after {
+  background-color: #3D3530 !important;
+}
+.gm-style-iw-d {
+  overflow: hidden !important;
+  max-width: 250px;
+}
+.iw-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  font-family: 'Noto Serif TC', serif;
+}
+.iw-desc {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   5. 景點清單區
+   ========================================================================== */
+.spots-section-header {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--travel-text);
+  margin: 0 0 16px 0;
+  letter-spacing: 0.03em;
+}
+
+.spots-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.spot-card {
+  position: relative;
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  border-radius: 8px;
+  box-shadow: var(--travel-shadow-sm);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  box-sizing: border-box;
+}
+
+.spot-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--travel-shadow);
+}
+
+/* 已去與想去卡片區隔 */
+.spot-card.visited {
+  background-color: var(--travel-visited-bg);
+  border: 1px solid var(--travel-border);
+}
+
+.spot-card.want {
+  background-color: #FFFFFF;
+  border: 1px dashed var(--travel-border-dashed);
+}
+
+.spot-card-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  background-color: #FFFFFF;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  border: 1px solid rgba(139, 115, 85, 0.12);
+  box-shadow: 0 2px 6px rgba(139, 115, 85, 0.05);
+}
+
+.spot-card-main {
+  flex-grow: 1;
+}
+
+.spot-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.spot-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--travel-text);
+  margin: 0;
+}
+
+/* 狀態標籤 */
+.badge-status {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+.badge-status.visited {
+  background-color: var(--travel-primary);
+  color: var(--travel-bg);
+}
+.badge-status.want {
+  background-color: rgba(139, 115, 85, 0.12);
+  color: var(--travel-primary);
+}
+
+/* 評價標籤 */
+.badge-rating {
+  font-size: 0.75rem;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+  border: 1px solid transparent;
+}
+.badge-rating.recommend {
+  background-color: rgba(74, 144, 217, 0.08);
+  border-color: rgba(74, 144, 217, 0.25);
+  color: var(--color-recommend);
+}
+.badge-rating.maybe {
+  background-color: rgba(245, 166, 35, 0.08);
+  border-color: rgba(245, 166, 35, 0.25);
+  color: var(--color-maybe);
+}
+.badge-rating.not_recommend {
+  background-color: rgba(231, 76, 60, 0.08);
+  border-color: rgba(231, 76, 60, 0.25);
+  color: var(--color-not-recommend);
+}
+
+/* 開放時間/價格 */
+.spot-meta {
+  font-size: 0.8rem;
+  color: var(--travel-primary);
+  opacity: 0.85;
+  margin-bottom: 6px;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* 備註 */
+.spot-note {
+  font-size: 0.85rem;
+  color: var(--travel-text);
+  opacity: 0.9;
+  margin: 0;
+  line-height: 1.5;
+  border-left: 2px solid var(--travel-primary);
+  padding-left: 8px;
+}
+
+/* 景點照片預覽 */
+.spot-images-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.spot-image-thumb {
+  width: 70px;
+  height: 70px;
+  border-radius: 6px;
+  object-fit: cover;
+  cursor: pointer;
+  border: 1px solid var(--travel-border);
+  transition: transform 0.2s ease;
+}
+.spot-image-thumb:hover {
+  transform: scale(1.05);
+}
+
+/* 編輯/刪除按鈕 */
+.spot-admin-actions {
+  display: flex;
+  gap: 6px;
+  align-self: flex-start;
+}
+
+.btn-spot-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background-color: transparent;
+}
+.btn-spot-icon.edit {
+  color: var(--travel-primary);
+  background-color: rgba(139, 115, 85, 0.08);
+}
+.btn-spot-icon.edit:hover {
+  background-color: var(--travel-secondary);
+}
+.btn-spot-icon.delete {
+  color: var(--color-danger);
+  background-color: rgba(231, 76, 60, 0.08);
+}
+.btn-spot-icon.delete:hover {
+  background-color: rgba(231, 76, 60, 0.18);
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--travel-text-muted);
+  font-size: 0.9rem;
+  background: rgba(139, 115, 85, 0.02);
+  border: 1px dashed var(--travel-border-dashed);
+  border-radius: 8px;
+}
+
+/* ==========================================================================
+   6. Modals (彈出視窗)
+   ========================================================================== */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(61, 53, 48, 0.5); /* 溫暖的深色遮罩 */
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.modal-overlay.show {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-box {
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  background-color: var(--travel-bg);
+  border-radius: 12px;
+  box-shadow: var(--travel-shadow-lg);
+  border: 1px solid var(--travel-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: translateY(20px);
+  transition: transform 0.3s ease;
+}
+
+.modal-overlay.show .modal-box {
+  transform: translateY(0);
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(139, 115, 85, 0.12);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: rgba(139, 115, 85, 0.03);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--travel-text);
+  letter-spacing: 0.02em;
+}
+
+.btn-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--travel-text-muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+}
+.btn-modal-close:hover {
+  color: var(--travel-text);
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--travel-text);
+}
+
+.form-group input[type="text"],
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--travel-border);
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--travel-text);
+  background-color: #FFFFFF;
+  box-sizing: border-box;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.form-group input[type="text"]:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  border-color: var(--travel-primary);
+  box-shadow: 0 0 0 3px rgba(139, 115, 85, 0.12);
+}
+
+/* Emoji 選擇區樣式 */
+.emoji-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--travel-border);
+  border-radius: 6px;
+  background-color: #FFFFFF;
+}
+
+.emoji-option {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.15s ease;
+}
+
+.emoji-option:hover {
+  background-color: var(--travel-secondary);
+}
+
+.emoji-option.selected {
+  background-color: var(--travel-primary);
+  border-color: var(--travel-primary);
+  color: var(--travel-bg);
+}
+
+/* 地理經緯度狀態 */
+.geo-status-indicator {
+  font-size: 0.75rem;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.geo-status-indicator.success {
+  color: var(--color-recommend);
+}
+.geo-status-indicator.loading {
+  color: var(--color-maybe);
+}
+.geo-status-indicator.error {
+  color: var(--color-danger);
+}
+
+/* 照片上傳樣式 */
+.file-upload-wrap {
+  position: relative;
+  border: 2px dashed var(--travel-border-dashed);
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  background-color: #FFFFFF;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.file-upload-wrap:hover {
+  background-color: var(--travel-visited-bg);
+}
+
+.file-upload-wrap input[type="file"] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.upload-icon {
+  font-size: 24px;
+  color: var(--travel-primary);
+  margin-bottom: 6px;
+}
+
+.upload-text {
+  font-size: 0.8rem;
+  color: var(--travel-text-muted);
+  margin: 0;
+}
+
+.upload-preview-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.upload-preview-item {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--travel-border);
+}
+
+.upload-preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.btn-remove-preview {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  background-color: rgba(231, 76, 60, 0.85);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.modal-footer {
+  padding: 16px 20px;
+  border-top: 1px solid rgba(139, 115, 85, 0.12);
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  background-color: rgba(139, 115, 85, 0.01);
+}
+
+.btn-secondary {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: 1px solid var(--travel-border);
+  background-color: transparent;
+  color: var(--travel-text);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-secondary:hover {
+  background-color: var(--travel-secondary);
+}
+
+.btn-primary {
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: none;
+  background-color: var(--travel-primary);
+  color: var(--travel-bg);
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(139, 115, 85, 0.15);
+  transition: all 0.2s ease;
+}
+.btn-primary:hover {
+  background-color: var(--travel-primary-hover);
+  box-shadow: 0 4px 12px rgba(139, 115, 85, 0.25);
+}
+
+/* ==========================================================================
+   7. 其它小提示、Footer、Toast
+   ========================================================================== */
+.login-hint {
+  text-align: center;
+  margin-top: 50px;
+  font-size: 0.85rem;
+}
+
+.login-hint .nav-link {
+  color: var(--travel-primary);
+  opacity: 0.6;
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+}
+
+.login-hint .nav-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translate(-50%, 20px);
+  background-color: #3D3530;
+  color: #FDFCF8;
+  padding: 10px 24px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  z-index: 2000;
+  box-shadow: var(--travel-shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* Lightbox 放大效果 */
+#lightbox {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  z-index: 10000;
+  display: flex; align-items: center; justify-content: center;
+  background-color: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(4px);
+}
+#lightbox-img {
+  max-width: 90%;
+  max-height: 90%;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+}
+#lightbox-close {
+  position: absolute;
+  top: 20px; right: 20px;
+  background: none; border: none;
+  color: #FFFFFF; font-size: 32px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+#lightbox-close:hover {
+  transform: scale(1.1);
+}

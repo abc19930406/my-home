@@ -1,0 +1,1323 @@
+---
+export const prerender = true;
+import Layout from '../layouts/Layout.astro';
+import { supabase } from '../lib/supabase-client';
+import '../styles/travel.css';
+
+// 1. Build Time: 靜態抓取所有行程與景點資料，確保極速載入
+let initialTrips = [];
+let initialSpots = [];
+
+try {
+  // 抓取行程列表
+  const { data: tripsData, error: tripsError } = await supabase
+    .from('trips')
+    .select('*')
+    .order('created_at', { ascending: true });
+  
+  if (!tripsError && tripsData) {
+    initialTrips = tripsData;
+  }
+
+  // 抓取景點列表
+  const { data: spotsData, error: spotsError } = await supabase
+    .from('spots')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (!spotsError && spotsData) {
+    initialSpots = spotsData;
+  }
+} catch (err) {
+  console.warn('⚠️ Build Warning: 旅行地圖 Supabase 讀取失敗，使用備用資料。', err);
+}
+
+// 備用資料 (以防資料庫在 build 時無法連線)
+const fallbackTrips = [
+  { id: 'fallback-tokyo', name: '2026 東京行', description: '春櫻綻放與極致美食之旅', emoji: '🌸' }
+];
+
+const fallbackSpots = [
+  {
+    id: 'fallback-spot-1',
+    trip_id: 'fallback-tokyo',
+    name: '淺草寺',
+    address: '東京都台東區淺草2-3-1',
+    note: '早上八點前去人潮較少，雷門大燈籠很壯觀！',
+    category: '景點',
+    icon: '⛩️',
+    status: 'visited',
+    rating: 'recommend',
+    lat: 35.7148,
+    lng: 139.7967,
+    images: [],
+    open_hours: '06:00 - 17:00',
+    price: '免費',
+  }
+];
+
+const trips = initialTrips.length > 0 ? initialTrips : fallbackTrips;
+const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
+
+const mapsKey = import.meta.env.PUBLIC_GOOGLE_MAPS_KEY ?? '';
+const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
+---
+
+<Layout title="旅行地圖 | The Corner Table">
+  <!-- 全域背景覆蓋：確保 Layout 的深色背景被清新白底暖木色覆蓋 -->
+  <style is:global>
+    html, body {
+      background-color: #FDFCF8 !important;
+      overflow-y: auto !important;
+      height: auto !important;
+      color: #3D3530 !important;
+    }
+  </style>
+
+  <div class="travel-body">
+    <div class="travel-container">
+      
+      <!-- 1. Header 區 -->
+      <header class="travel-header">
+        <a href="/" class="nav-back">
+          <i class="ti ti-chevron-left"></i> 返回首頁
+        </a>
+        <h1 class="page-title">旅行</h1>
+        <p class="page-subtitle">走過的地方・還想去的地方</p>
+      </header>
+
+      <!-- 2. 行程切換列 (橫向滾動) -->
+      <section class="trips-scroll-container">
+        <div class="trips-list" id="trips-tab-list">
+          <!-- JS 動態或 HTML 靜態生成 -->
+          {trips.map((trip, idx) => (
+            <button 
+              class={`trip-tab ${idx === 0 ? 'active' : ''}`} 
+              data-trip-id={trip.id}
+              data-trip-name={trip.name}
+              data-trip-desc={trip.description || ''}
+            >
+              <span>{trip.emoji}</span> {trip.name}
+            </button>
+          ))}
+        </div>
+        
+        <!-- ＋ 新增行程 (預設隱藏，登入後由 JS 顯示) -->
+        <button id="btn-add-trip" class="btn-dashed-add-trip admin-only" style="display: none;">
+          <i class="ti ti-plus"></i> 新增行程
+        </button>
+      </section>
+
+      <!-- 3. 篩選列 -->
+      <section class="travel-filter-bar">
+        <!-- 左側：類型標籤 (全部、景點、飲食、購物、住宿) -->
+        <div class="filter-left" id="category-filter-group">
+          <button class="filter-btn active" data-category="all">全部</button>
+          <button class="filter-btn" data-category="景點">景點</button>
+          <button class="filter-btn" data-category="飲食">飲食</button>
+          <button class="filter-btn" data-category="購物">購物</button>
+          <button class="filter-btn" data-category="住宿">住宿</button>
+        </div>
+
+        <!-- 右側：狀態標籤 (想去、已去) + 新增景點按鈕 -->
+        <div class="filter-right">
+          <button class="filter-btn status-btn active" id="filter-status-want" data-status="want">想去</button>
+          <button class="filter-btn status-btn" id="filter-status-visited" data-status="visited">已去</button>
+          
+          <!-- ＋ 新增景點 (預設隱藏，登入後由 JS 顯示) -->
+          <button id="btn-open-spot-modal" class="btn-add-spot admin-only" style="display: none;">
+            <i class="ti ti-plus"></i> 新增景點
+          </button>
+        </div>
+      </section>
+
+      <!-- 4. Google Maps 地圖區塊 -->
+      <div id="travel-map" class="map-container"></div>
+
+      <!-- 5. 景點清單區 -->
+      <section class="spots-list-section">
+        <h3 class="spots-section-header" id="current-trip-title">景點清單</h3>
+        <div class="spots-list" id="spots-cards-container">
+          <!-- JS 將動態渲染過濾後的景點 -->
+          <div class="empty-state">
+            載入景點中...
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. 底部低調「管理」登入連結 -->
+      <footer class="login-hint" id="login-hint">
+        <a href="/login?from=/travel" class="nav-link">管理</a>
+      </footer>
+
+    </div>
+  </div>
+
+  <!-- ==========================================
+       彈出視窗 1：新增行程 Modal
+       ========================================== -->
+  <div id="trip-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>＋ 新增旅行行程</h3>
+        <button type="button" class="btn-modal-close" id="btn-trip-modal-close">&times;</button>
+      </div>
+      <form id="trip-form">
+        <div class="modal-body">
+          <!-- 行程名稱 -->
+          <div class="form-group">
+            <label for="trip-name">行程名稱 <span style="color: var(--color-danger)">*</span></label>
+            <input type="text" id="trip-name" required placeholder="例如：2026 東京春櫻之旅" autocomplete="off" />
+          </div>
+
+          <!-- Emoji 選擇 -->
+          <div class="form-group">
+            <label>行程 Emoji</label>
+            <div class="emoji-selector" id="trip-emoji-selector">
+              <span class="emoji-option selected" data-emoji="🌸">🌸</span>
+              <span class="emoji-option" data-emoji="🍵">🍵</span>
+              <span class="emoji-option" data-emoji="🌊">🌊</span>
+              <span class="emoji-option" data-emoji="⛩️">⛩️</span>
+              <span class="emoji-option" data-emoji="🍁">🍁</span>
+              <span class="emoji-option" data-emoji="🗼">🗼</span>
+              <span class="emoji-option" data-emoji="✈️">✈️</span>
+              <span class="emoji-option" data-emoji="🎒">🎒</span>
+              <span class="emoji-option" data-emoji="🇯🇵">🇯🇵</span>
+              <span class="emoji-option" data-emoji="🍜">🍜</span>
+            </div>
+            <input type="hidden" id="trip-selected-emoji" value="🌸" />
+          </div>
+
+          <!-- 行程描述 -->
+          <div class="form-group">
+            <label for="trip-description">描述</label>
+            <textarea id="trip-description" rows="3" placeholder="簡短描述這趟行程的點滴與目的..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="btn-trip-cancel">取消</button>
+          <button type="submit" class="btn-primary">儲存行程</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       彈出視窗 2：新增/編輯景點 Modal
+       ========================================== -->
+  <div id="spot-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="spot-modal-title">＋ 新增景點</h3>
+        <button type="button" class="btn-modal-close" id="btn-spot-modal-close">&times;</button>
+      </div>
+      <form id="spot-form">
+        <div class="modal-body">
+          <input type="hidden" id="form-spot-id" />
+          
+          <!-- 景點名稱 -->
+          <div class="form-group">
+            <label for="spot-name">景點名稱 <span style="color: var(--color-danger)">*</span></label>
+            <input type="text" id="spot-name" required placeholder="例如：雷門淺草寺" autocomplete="off" />
+          </div>
+
+          <!-- 類型選擇 -->
+          <div class="form-group">
+            <label for="spot-category">類型</label>
+            <select id="spot-category">
+              <option value="景點">⛩️ 景點</option>
+              <option value="飲食">🍽️ 飲食</option>
+              <option value="購物">🛍️ 購物</option>
+              <option value="住宿">🏨 住宿</option>
+            </select>
+          </div>
+
+          <!-- 圖示 Emoji 選擇 (依類型動態改變內容) -->
+          <div class="form-group">
+            <label>景點圖示</label>
+            <div class="emoji-selector" id="spot-emoji-selector">
+              <!-- JS 動態插入對應類型的 Emoji -->
+            </div>
+            <input type="hidden" id="spot-selected-emoji" value="📍" />
+          </div>
+
+          <!-- 地址 (Geocoding 自動經緯度) -->
+          <div class="form-group">
+            <label for="spot-address">地址 <span style="color: var(--color-danger)">*</span></label>
+            <input type="text" id="spot-address" required placeholder="請輸入完整地址，將自動定位經緯度" autocomplete="off" />
+            <div id="geo-status" class="geo-status-indicator" style="display: none;"></div>
+            <input type="hidden" id="spot-lat" />
+            <input type="hidden" id="spot-lng" />
+          </div>
+
+          <!-- 開放時間 -->
+          <div class="form-group">
+            <label for="spot-hours">開放時間</label>
+            <input type="text" id="spot-hours" placeholder="例如：06:00 - 17:00 或 24小時" autocomplete="off" />
+          </div>
+
+          <!-- 價格 -->
+          <div class="form-group">
+            <label for="spot-price">價格</label>
+            <input type="text" id="spot-price" placeholder="例如：門票 ¥600 或 免費" autocomplete="off" />
+          </div>
+
+          <!-- 備註 -->
+          <div class="form-group">
+            <label for="spot-note">備註</label>
+            <textarea id="spot-note" rows="3" placeholder="填寫一些旅行備註、心得、排隊攻略..."></textarea>
+          </div>
+
+          <!-- 狀態：想去 / 已去 -->
+          <div class="form-group">
+            <label for="spot-status">狀態</label>
+            <select id="spot-status">
+              <option value="want">想去</option>
+              <option value="visited">已去</option>
+            </select>
+          </div>
+
+          <!-- 評價 (已去才顯示) -->
+          <div class="form-group" id="spot-rating-group" style="display: none;">
+            <label for="spot-rating">評價</label>
+            <select id="spot-rating">
+              <option value="">-- 選擇評價 --</option>
+              <option value="recommend">🌟 推薦 (超值必訪)</option>
+              <option value="maybe">☕ 有空可去 (順路造訪)</option>
+              <option value="not_recommend">💔 不推 (雷區避坑)</option>
+            </select>
+          </div>
+
+          <!-- 照片上傳 -->
+          <div class="form-group">
+            <label>照片上傳</label>
+            <div class="file-upload-wrap">
+              <i class="ti ti-cloud-upload upload-icon"></i>
+              <p class="upload-text">點擊或拖曳照片至此上傳</p>
+              <input type="file" id="spot-image-file" accept="image/*" multiple />
+            </div>
+            <div class="upload-preview-container" id="spot-image-previews">
+              <!-- JS 動態插入照片預覽與刪除按鈕 -->
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="btn-spot-cancel">取消</button>
+          <button type="submit" class="btn-primary" id="btn-spot-submit">儲存景點</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast 訊息通知 -->
+  <div id="toast" class="toast">已成功儲存</div>
+
+  <!-- Lightbox 圖片放大檢視 -->
+  <div id="lightbox" style="display:none;">
+    <div id="lightbox-overlay"></div>
+    <img id="lightbox-img" src="" alt="" />
+    <button id="lightbox-close">✕</button>
+  </div>
+</Layout>
+
+<!-- 環境變數傳遞 -->
+<script define:vars={{ webhookUrl, mapsKey }} is:inline>
+  window.__WEBHOOK_URL__ = webhookUrl;
+  window.__MAPS_KEY__ = mapsKey;
+</script>
+
+<!-- Google Maps JavaScript API (靜態載入以發揮最大效益) -->
+<script src={`https://maps.googleapis.com/maps/api/js?key=${mapsKey}` || ''} async defer></script>
+
+<!-- IIFE 客戶端互動與 Supabase 連線邏輯 -->
+<script>
+  import { supabase } from '../lib/supabase-client';
+
+  // 靜態資料 Fallback 控制
+  const deployWebhookUrl = (window as any).__WEBHOOK_URL__ || '';
+  const googleMapsKey = (window as any).__MAPS_KEY__ || '';
+  const toast = document.getElementById('toast');
+
+  // 全域快取狀態
+  let tripsCache: any[] = [];
+  let spotsCache: any[] = [];
+  let currentTripId: string = '';
+  let selectedCategoryFilter: string = 'all';
+  let selectedStatusFilter: string = 'want'; // 預設篩選「想去」
+  let isAdminUser = false;
+
+  // 上傳圖片的暫存陣列 (以 URL 字串儲存)
+  let uploadedImagesCache: string[] = [];
+
+  // Google Maps 物件快取
+  let googleMap: any = null;
+  let mapMarkers: any[] = [];
+  let activeInfoWindow: any = null;
+
+  // --- Utility: 顯示 Toast 訊息 ---
+  function showToast(message: string) {
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 2000);
+  }
+
+  // --- Trigger Build Webhook 觸發 Vercel 自動重構 ---
+  async function triggerBuildWebhook() {
+    if (!deployWebhookUrl) return;
+    try {
+      await fetch(deployWebhookUrl, { method: 'POST' });
+      console.log('🚀 已成功發送重新編譯 Hook');
+    } catch (err) {
+      console.warn('⚠️ 無法發送編譯 Hook：', err);
+    }
+  }
+
+  // --- 初始化地圖 ---
+  function initGoogleMap() {
+    const mapElement = document.getElementById('travel-map');
+    if (!mapElement || !(window as any).google || !(window as any).google.maps) {
+      console.warn('⚠️ Google Maps API 未載入完成，稍後重新嘗試。');
+      return;
+    }
+
+    // 預設中心點：日本東京 (35.6762, 139.6503)
+    googleMap = new (window as any).google.maps.Map(mapElement, {
+      center: { lat: 35.6762, lng: 139.6503 },
+      zoom: 12,
+      styles: [
+        {
+          featureType: "water",
+          elementType: "geometry",
+          stylers: [{ color: "#D3E5EB" }]
+        },
+        {
+          featureType: "landscape",
+          elementType: "geometry",
+          stylers: [{ color: "#FDFCF8" }]
+        },
+        {
+          featureType: "road",
+          elementType: "geometry",
+          stylers: [{ color: "#FAF8F5" }]
+        },
+        {
+          featureType: "road",
+          elementType: "geometry.stroke",
+          stylers: [{ color: "#EAE6DF" }]
+        },
+        {
+          featureType: "poi",
+          elementType: "geometry",
+          stylers: [{ color: "#E2ECE0" }]
+        }
+      ],
+      disableDefaultUI: false,
+      zoomControl: true,
+      mapTypeControl: false,
+      streetViewControl: false
+    });
+
+    // 點擊地圖時關閉打開的氣泡
+    googleMap.addListener('click', () => {
+      if (activeInfoWindow) {
+        activeInfoWindow.close();
+        activeInfoWindow = null;
+      }
+    });
+
+    console.log('🗺️ Google Map 初始化成功！');
+  }
+
+  // --- 自訂 HTML Marker ---
+  function createCustomMarker(spot: any) {
+    if (!googleMap || !(window as any).google) return null;
+
+    const lat = parseFloat(spot.lat);
+    const lng = parseFloat(spot.lng);
+    if (isNaN(lat) || isNaN(lng)) return null;
+
+    const latLng = new (window as any).google.maps.LatLng(lat, lng);
+
+    // 定義 Custom HTML Marker Class (繼承 OverlayView)
+    class HTMLMarker extends (window as any).google.maps.OverlayView {
+      latlng: any;
+      spot: any;
+      div: HTMLDivElement | null;
+
+      constructor(latlng: any, map: any, spot: any) {
+        super();
+        this.latlng = latlng;
+        this.spot = spot;
+        this.div = null;
+        this.setMap(map);
+      }
+
+      onAdd() {
+        this.div = document.createElement('div');
+        this.div.className = `custom-map-marker ${this.spot.status}`;
+        
+        // 評價點綴
+        let ratingDot = '';
+        if (this.spot.status === 'visited' && this.spot.rating) {
+          this.div.classList.add(`rating-card-${this.spot.rating}`);
+          ratingDot = `<span class="marker-rating-dot rating-dot-${this.spot.rating}"></span>`;
+        }
+
+        this.div.innerHTML = `
+          <div class="marker-circle">
+            <span class="marker-emoji">${this.spot.icon || '📍'}</span>
+          </div>
+          ${ratingDot}
+        `;
+
+        // 監聽點擊，打開氣泡資訊視窗
+        this.div.addEventListener('click', (e) => {
+          e.stopPropagation();
+          
+          if (activeInfoWindow) {
+            activeInfoWindow.close();
+          }
+
+          const ratingText: { [key: string]: string } = {
+            recommend: '🌟 五星大推！',
+            maybe: '☕ 順路可訪',
+            not_recommend: '💔 不甚理想'
+          };
+          
+          const ratingLabel = this.spot.status === 'visited' && this.spot.rating 
+            ? `<div style="font-size:0.75rem; color:#F5A623; margin-top:2px; font-weight:600;">${ratingText[this.spot.rating] || ''}</div>`
+            : '';
+
+          const iwContent = `
+            <div class="iw-title">${this.spot.name} ${this.spot.icon || ''}</div>
+            <div class="iw-desc">
+              📍 ${this.spot.address}<br/>
+              ${this.spot.note ? `✍️ ${this.spot.note}<br/>` : ''}
+              ${ratingLabel}
+            </div>
+          `;
+
+          activeInfoWindow = new (window as any).google.maps.InfoWindow({
+            content: iwContent,
+            position: this.latlng,
+            pixelOffset: new (window as any).google.maps.Size(0, -32)
+          });
+
+          activeInfoWindow.open(googleMap);
+        });
+
+        const panes = this.getPanes();
+        panes.overlayMouseTarget.appendChild(this.div);
+      }
+
+      draw() {
+        if (!this.div) return;
+        const overlayProjection = this.getProjection();
+        const position = overlayProjection.fromLatLngToDivPixel(this.latlng);
+        if (position) {
+          this.div.style.left = (position.x - 19) + 'px';
+          this.div.style.top = (position.y - 19) + 'px';
+        }
+      }
+
+      onRemove() {
+        if (this.div) {
+          this.div.parentNode?.removeChild(this.div);
+          this.div = null;
+        }
+      }
+    }
+
+    return new HTMLMarker(latLng, googleMap, spot);
+  }
+
+  // --- 更新地圖上的 Markers ---
+  function updateMapMarkers(filteredSpots: any[]) {
+    // 1. 清除舊 Markers
+    mapMarkers.forEach(marker => {
+      marker.setMap(null);
+    });
+    mapMarkers = [];
+
+    if (activeInfoWindow) {
+      activeInfoWindow.close();
+      activeInfoWindow = null;
+    }
+
+    if (!googleMap) return;
+
+    // 2. 建立新 Markers
+    const bounds = new (window as any).google.maps.LatLngBounds();
+    let validSpotsCount = 0;
+
+    filteredSpots.forEach(spot => {
+      const lat = parseFloat(spot.lat);
+      const lng = parseFloat(spot.lng);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const marker = createCustomMarker(spot);
+        if (marker) {
+          mapMarkers.push(marker);
+          bounds.extend(new (window as any).google.maps.LatLng(lat, lng));
+          validSpotsCount++;
+        }
+      }
+    });
+
+    // 3. 自動 fitBounds 調整視野
+    if (validSpotsCount > 0) {
+      // 延遲一下確保投影計算正常
+      setTimeout(() => {
+        if (googleMap) {
+          if (validSpotsCount === 1) {
+            googleMap.setCenter(bounds.getCenter());
+            googleMap.setZoom(14);
+          } else {
+            googleMap.fitBounds(bounds);
+            // 避免地圖靠得太近
+            const listener = googleMap.addListener('bounds_changed', () => {
+              if (googleMap.getZoom() > 16) googleMap.setZoom(16);
+              (window as any).google.maps.event.removeListener(listener);
+            });
+          }
+        }
+      }, 300);
+    } else {
+      // 無景點時重設為東京
+      googleMap.setCenter({ lat: 35.6762, lng: 139.6503 });
+      googleMap.setZoom(12);
+    }
+  }
+
+  // --- 依照分類與狀態篩選景點，並重繪地圖與列表 ---
+  function filterAndRenderSpots() {
+    const container = document.getElementById('spots-cards-container');
+    if (!container) return;
+
+    // 1. 篩選目前行程且符合 Category 與 Status 的景點
+    let filtered = spotsCache.filter(spot => String(spot.trip_id) === String(currentTripId));
+
+    // 狀態篩選 (想去 / 已去)
+    filtered = filtered.filter(spot => spot.status === selectedStatusFilter);
+
+    // 類型篩選 (全部 / 景點 / 飲食 / 購物 / 住宿)
+    if (selectedCategoryFilter !== 'all') {
+      filtered = filtered.filter(spot => spot.category === selectedCategoryFilter);
+    }
+
+    // 2. 更新地圖標記 (Aesthetic & Interactive Map)
+    updateMapMarkers(filtered);
+
+    // 3. 繪製景點清單
+    if (filtered.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          這趟行程的篩選條件下，目前沒有任何景點紀錄。
+        </div>
+      `;
+      return;
+    }
+
+    let html = '';
+    filtered.forEach(spot => {
+      // 評價標籤
+      let ratingBadge = '';
+      if (spot.status === 'visited' && spot.rating) {
+        const ratingLabels: { [key: string]: string } = {
+          recommend: '推薦',
+          maybe: '有空可去',
+          not_recommend: '不推'
+        };
+        ratingBadge = `<span class="badge-rating ${spot.rating}">${ratingLabels[spot.rating] || ''}</span>`;
+      }
+
+      // 開放時間與價格
+      let metaText = '';
+      if (spot.open_hours) metaText += `⏰ ${spot.open_hours}`;
+      if (spot.price) {
+        if (metaText) metaText += ' | ';
+        metaText += `💰 ${spot.price}`;
+      }
+      const metaRow = metaText ? `<div class="spot-meta">${metaText}</div>` : '';
+
+      // 照片預覽列
+      let imagesRow = '';
+      if (spot.images && spot.images.length > 0) {
+        imagesRow = `<div class="spot-images-row">`;
+        spot.images.forEach((imgUrl: string) => {
+          imagesRow += `<img src="${imgUrl}" alt="${spot.name}" class="spot-image-thumb" />`;
+        });
+        imagesRow += `</div>`;
+      }
+
+      // 管理員按鈕 (編輯/刪除)
+      const adminActions = isAdminUser ? `
+        <div class="spot-admin-actions">
+          <button class="btn-spot-icon edit" data-spot-id="${spot.id}" title="編輯景點">
+            <i class="ti ti-pencil"></i>
+          </button>
+          <button class="btn-spot-icon delete" data-spot-id="${spot.id}" title="刪除景點">
+            <i class="ti ti-trash"></i>
+          </button>
+        </div>
+      ` : '';
+
+      const statusText = spot.status === 'visited' ? '已去' : '想去';
+
+      html += `
+        <div class="spot-card ${spot.status}" data-spot-id="${spot.id}">
+          <div class="spot-card-icon">
+            ${spot.icon || '📍'}
+          </div>
+          <div class="spot-card-main">
+            <div class="spot-title-row">
+              <h4 class="spot-name">${spot.name}</h4>
+              <span class="badge-status ${spot.status}">${statusText}</span>
+              ${ratingBadge}
+            </div>
+            ${metaRow}
+            ${spot.note ? `<p class="spot-note">${spot.note}</p>` : ''}
+            ${imagesRow}
+          </div>
+          ${adminActions}
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
+
+    // 4. 綁定列表內的點擊與管理事件
+    // 點擊照片放大 Lightbox
+    container.querySelectorAll('.spot-image-thumb').forEach(img => {
+      img.addEventListener('click', (e) => {
+        const src = (e.currentTarget as HTMLImageElement).src;
+        const lightbox = document.getElementById('lightbox');
+        const lightboxImg = document.getElementById('lightbox-img') as HTMLImageElement;
+        if (lightbox && lightboxImg) {
+          lightboxImg.src = src;
+          lightbox.style.display = 'flex';
+        }
+      });
+    });
+
+    // 點擊卡片地圖置中
+    container.querySelectorAll('.spot-card').forEach(card => {
+      card.addEventListener('click', (e) => {
+        // 如果點擊的是按鈕或照片，不要觸發地圖移動
+        const target = e.target as HTMLElement;
+        if (target.closest('.spot-admin-actions') || target.closest('.spot-image-thumb')) {
+          return;
+        }
+
+        const spotId = (e.currentTarget as HTMLElement).dataset.spotId;
+        const spot = spotsCache.find(s => String(s.id) === String(spotId));
+        if (spot && googleMap) {
+          const lat = parseFloat(spot.lat);
+          const lng = parseFloat(spot.lng);
+          if (!isNaN(lat) && !isNaN(lng)) {
+            googleMap.panTo({ lat, lng });
+            googleMap.setZoom(16);
+            
+            // 找到對應的 marker 觸發 click 打開氣泡
+            // 尋找 HTMLMarker (我們將在 marker 本身綁定點擊，所以移動後也可以手動點擊)
+          }
+        }
+      });
+    });
+
+    // 綁定編輯與刪除景點事件
+    if (isAdminUser) {
+      container.querySelectorAll('.btn-spot-icon.edit').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const spotId = (e.currentTarget as HTMLElement).dataset.spotId;
+          openSpotModal(spotId);
+        });
+      });
+
+      container.querySelectorAll('.btn-spot-icon.delete').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const spotId = (e.currentTarget as HTMLElement).dataset.spotId;
+          if (!spotId) return;
+          
+          if (confirm('確定要刪除此景點嗎？刪除後將無法復原！')) {
+            const { error } = await supabase.from('spots').delete().eq('id', spotId);
+            if (!error) {
+              showToast('景點已刪除！');
+              spotsCache = spotsCache.filter(s => String(s.id) !== String(spotId));
+              filterAndRenderSpots();
+              triggerBuildWebhook();
+            } else {
+              alert('刪除失敗：' + error.message);
+            }
+          }
+        });
+      });
+    }
+  }
+
+  // --- 切換行程行程標籤 ---
+  function selectTrip(tripId: string) {
+    currentTripId = tripId;
+
+    // 1. 更新行程標籤 UI
+    const tabsList = document.getElementById('trips-tab-list');
+    tabsList?.querySelectorAll('.trip-tab').forEach(tab => {
+      if ((tab as HTMLElement).dataset.tripId === tripId) {
+        tab.classList.add('active');
+        
+        // 更新標題
+        const titleEl = document.getElementById('current-trip-title');
+        const tripName = (tab as HTMLElement).dataset.tripName || '';
+        const tripDesc = (tab as HTMLElement).dataset.tripDesc || '';
+        if (titleEl) {
+          titleEl.innerHTML = `📍 ${tripName} <span style="font-size: 0.85rem; font-weight:400; color: var(--travel-text-muted); display:block; margin-top:4px;">${tripDesc}</span>`;
+        }
+      } else {
+        tab.classList.remove('active');
+      }
+    });
+
+    // 2. 重繪該行程景點
+    filterAndRenderSpots();
+  }
+
+  // ==========================================
+  // 6. 身分驗證與管理員介面切換
+  // ==========================================
+  async function initAuthAndData() {
+    // 1. 先從資料庫拉取最新資料 (確保資料一致性)
+    const { data: trips } = await supabase.from('trips').select('*').order('created_at', { ascending: true });
+    const { data: spots } = await supabase.from('spots').select('*').order('created_at', { ascending: false });
+
+    tripsCache = trips || [];
+    spotsCache = spots || [];
+
+    // 2. 決定預選的行程
+    if (tripsCache.length > 0) {
+      currentTripId = tripsCache[0].id;
+    }
+
+    // 3. 地圖載入完畢後初始化
+    initGoogleMap();
+
+    // 4. 偵測管理員登入狀態
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      isAdminUser = true;
+      document.querySelectorAll('.admin-only').forEach(el => {
+        (el as HTMLElement).style.display = 'inline-flex';
+      });
+      const loginHint = document.getElementById('login-hint');
+      if (loginHint) loginHint.style.display = 'none';
+
+      console.log('🔑 管理員已登入，啟用前台管理介面。');
+    }
+
+    // 5. 初次繪製
+    if (currentTripId) {
+      selectTrip(currentTripId);
+    } else {
+      // 沒有行程時顯示空狀態
+      const container = document.getElementById('spots-cards-container');
+      if (container) {
+        container.innerHTML = `
+          <div class="empty-state">
+            目前沒有行程，請點選「新增行程」開始建立。
+          </div>
+        `;
+      }
+    }
+  }
+
+  // --- 初始化事件監聽 ---
+  document.addEventListener('DOMContentLoaded', () => {
+    // 載入資料與身分驗證
+    initAuthAndData();
+
+    // 1. 綁定行程標籤點擊事件
+    const tabsList = document.getElementById('trips-tab-list');
+    tabsList?.addEventListener('click', (e) => {
+      const tab = (e.target as HTMLElement).closest('.trip-tab');
+      if (tab) {
+        const id = (tab as HTMLElement).dataset.tripId;
+        if (id) selectTrip(id);
+      }
+    });
+
+    // 2. 綁定類型篩選點擊事件
+    const catGroup = document.getElementById('category-filter-group');
+    catGroup?.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('.filter-btn');
+      if (btn) {
+        catGroup.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedCategoryFilter = (btn as HTMLElement).dataset.category || 'all';
+        filterAndRenderSpots();
+      }
+    });
+
+    // 3. 綁定狀態篩選點擊事件 (想去 / 已去)
+    const btnWant = document.getElementById('filter-status-want');
+    const btnVisited = document.getElementById('filter-status-visited');
+    
+    btnWant?.addEventListener('click', () => {
+      btnVisited?.classList.remove('active');
+      btnWant.classList.add('active');
+      selectedStatusFilter = 'want';
+      filterAndRenderSpots();
+    });
+
+    btnVisited?.addEventListener('click', () => {
+      btnWant?.classList.remove('active');
+      btnVisited.classList.add('active');
+      selectedStatusFilter = 'visited';
+      filterAndRenderSpots();
+    });
+
+    // Lightbox 關閉監聽
+    const lightbox = document.getElementById('lightbox');
+    const lightboxClose = document.getElementById('lightbox-close');
+    const lightboxOverlay = document.getElementById('lightbox-overlay');
+    const closeLightbox = () => {
+      if (lightbox) lightbox.style.display = 'none';
+    };
+    lightboxClose?.addEventListener('click', closeLightbox);
+    lightboxOverlay?.addEventListener('click', closeLightbox);
+
+    // ==========================================
+    // 7. Modal 互動與控制：行程 (Trips)
+    // ==========================================
+    const tripModal = document.getElementById('trip-modal');
+    const btnAddTrip = document.getElementById('btn-add-trip');
+    const btnTripClose = document.getElementById('btn-trip-modal-close');
+    const btnTripCancel = document.getElementById('btn-trip-cancel');
+    const tripForm = document.getElementById('trip-form') as HTMLFormElement;
+    const tripEmojiGroup = document.getElementById('trip-emoji-selector');
+    const tripSelectedEmojiInput = document.getElementById('trip-selected-emoji') as HTMLInputElement;
+
+    btnAddTrip?.addEventListener('click', () => {
+      tripForm.reset();
+      tripSelectedEmojiInput.value = '🌸';
+      tripEmojiGroup?.querySelectorAll('.emoji-option').forEach(opt => {
+        opt.classList.remove('selected');
+        if ((opt as HTMLElement).dataset.emoji === '🌸') opt.classList.add('selected');
+      });
+      tripModal?.classList.add('show');
+    });
+
+    const closeTripModal = () => {
+      tripModal?.classList.remove('show');
+    };
+    btnTripClose?.addEventListener('click', closeTripModal);
+    btnTripCancel?.addEventListener('click', closeTripModal);
+
+    // Emoji 選擇
+    tripEmojiGroup?.addEventListener('click', (e) => {
+      const opt = (e.target as HTMLElement).closest('.emoji-option');
+      if (opt) {
+        tripEmojiGroup.querySelectorAll('.emoji-option').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+        tripSelectedEmojiInput.value = (opt as HTMLElement).dataset.emoji || '🌸';
+      }
+    });
+
+    // 新增行程表單提交
+    tripForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = (document.getElementById('trip-name') as HTMLInputElement).value.trim();
+      const emoji = tripSelectedEmojiInput.value;
+      const description = (document.getElementById('trip-description') as HTMLTextAreaElement).value.trim();
+
+      if (!name) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('trips')
+          .insert([{ name, emoji, description }])
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        showToast('行程建立成功！');
+        closeTripModal();
+
+        // 更新快取並重繪
+        tripsCache.push(data);
+        
+        // 重新繪製行程滾動條
+        let tabsHtml = '';
+        tripsCache.forEach(t => {
+          tabsHtml += `
+            <button class="trip-tab" data-trip-id="${t.id}" data-trip-name="${t.name}" data-trip-desc="${t.description || ''}">
+              <span>${t.emoji}</span> ${t.name}
+            </button>
+          `;
+        });
+        const listEl = document.getElementById('trips-tab-list');
+        if (listEl) listEl.innerHTML = tabsHtml;
+
+        // 選中新建立的行程
+        selectTrip(data.id);
+        triggerBuildWebhook();
+      } catch (err: any) {
+        alert('行程儲存失敗：' + err.message);
+      }
+    });
+
+    // ==========================================
+    // 8. Modal 互動與控制：景點 (Spots)
+    // ==========================================
+    const spotModal = document.getElementById('spot-modal');
+    const btnOpenSpotModal = document.getElementById('btn-open-spot-modal');
+    const btnSpotClose = document.getElementById('btn-spot-modal-close');
+    const btnSpotCancel = document.getElementById('btn-spot-cancel');
+    const spotForm = document.getElementById('spot-form') as HTMLFormElement;
+    const spotCategorySelect = document.getElementById('spot-category') as HTMLSelectElement;
+    const spotEmojiGroup = document.getElementById('spot-emoji-selector');
+    const spotSelectedEmojiInput = document.getElementById('spot-selected-emoji') as HTMLInputElement;
+    const spotStatusSelect = document.getElementById('spot-status') as HTMLSelectElement;
+    const spotRatingGroup = document.getElementById('spot-rating-group');
+    const spotAddressInput = document.getElementById('spot-address') as HTMLInputElement;
+    const geoStatusIndicator = document.getElementById('geo-status');
+    const spotLatInput = document.getElementById('spot-lat') as HTMLInputElement;
+    const spotLngInput = document.getElementById('spot-lng') as HTMLInputElement;
+
+    // 依分類動態變更 Emoji 清單
+    const categoryEmojis: { [key: string]: string[] } = {
+      '景點': ['⛩️', '🌸', '🗼', '🏯', '🏔️', '🎡', '🎨', '🛍️', '📍'],
+      '飲食': ['🍽️', '☕', '🍜', '🍣', '🍣', '🍡', '🍺', '🥩', '🐟', '🥞'],
+      '購物': ['🛍️', '💊', '🎁', '👗', '🏪', '🛒', '👞', '💄'],
+      '住宿': ['🏨', '🏡', '♨️', '⛺', '🛌']
+    };
+
+    function updateSpotEmojiOptions(category: string, selectedEmoji = '') {
+      if (!spotEmojiGroup) return;
+      const emojis = categoryEmojis[category] || ['📍'];
+      
+      let html = '';
+      emojis.forEach((emoji, idx) => {
+        const isSelected = selectedEmoji ? emoji === selectedEmoji : idx === 0;
+        if (isSelected) spotSelectedEmojiInput.value = emoji;
+        html += `<span class="emoji-option ${isSelected ? 'selected' : ''}" data-emoji="${emoji}">${emoji}</span>`;
+      });
+      spotEmojiGroup.innerHTML = html;
+    }
+
+    // 類型變更連動
+    spotCategorySelect?.addEventListener('change', (e) => {
+      const cat = (e.target as HTMLSelectElement).value;
+      updateSpotEmojiOptions(cat);
+    });
+
+    // 狀態變更連動評價顯隱
+    spotStatusSelect?.addEventListener('change', (e) => {
+      const status = (e.target as HTMLSelectElement).value;
+      if (spotRatingGroup) {
+        spotRatingGroup.style.display = status === 'visited' ? 'flex' : 'none';
+      }
+    });
+
+    // Emoji 點選
+    spotEmojiGroup?.addEventListener('click', (e) => {
+      const opt = (e.target as HTMLElement).closest('.emoji-option');
+      if (opt) {
+        spotEmojiGroup.querySelectorAll('.emoji-option').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+        spotSelectedEmojiInput.value = (opt as HTMLElement).dataset.emoji || '📍';
+      }
+    });
+
+    // 開啟新增 Modal
+    btnOpenSpotModal?.addEventListener('click', () => {
+      if (!currentTripId) {
+        alert('請先建立行程！');
+        return;
+      }
+      spotForm.reset();
+      (document.getElementById('spot-modal-title') as HTMLElement).textContent = '＋ 新增景點';
+      (document.getElementById('form-spot-id') as HTMLInputElement).value = '';
+      (document.getElementById('btn-spot-submit') as HTMLButtonElement).textContent = '儲存景點';
+      
+      spotLatInput.value = '';
+      spotLngInput.value = '';
+      uploadedImagesCache = [];
+      renderSpotImagePreviews();
+
+      if (geoStatusIndicator) geoStatusIndicator.style.display = 'none';
+
+      // 預設分類與 Emoji
+      spotCategorySelect.value = '景點';
+      updateSpotEmojiOptions('景點', '⛩️');
+
+      if (spotRatingGroup) spotRatingGroup.style.display = 'none';
+
+      spotModal?.classList.add('show');
+    });
+
+    const closeSpotModal = () => {
+      spotModal?.classList.remove('show');
+    };
+    btnSpotClose?.addEventListener('click', closeSpotModal);
+    btnSpotCancel?.addEventListener('click', closeSpotModal);
+
+    // ==========================================
+    // 9. Geocoding 自動定位地址經緯度
+    // ==========================================
+    async function performGeocoding(address: string) {
+      if (!address || !googleMapsKey || !geoStatusIndicator) return;
+
+      geoStatusIndicator.style.display = 'flex';
+      geoStatusIndicator.className = 'geo-status-indicator loading';
+      geoStatusIndicator.textContent = '🧭 定位經緯度中...';
+
+      try {
+        const res = await fetch(
+          `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&key=${googleMapsKey}`
+        );
+        const data = await res.json();
+        
+        if (data.status === 'OK' && data.results && data.results.length > 0) {
+          const location = data.results[0].geometry.location;
+          spotLatInput.value = location.lat.toString();
+          spotLngInput.value = location.lng.toString();
+
+          geoStatusIndicator.className = 'geo-status-indicator success';
+          geoStatusIndicator.innerHTML = `🟢 解析成功！(經:${location.lat.toFixed(4)}, 緯:${location.lng.toFixed(4)})`;
+          console.log(`🧭 Geocoding 解析成功: ${location.lat}, ${location.lng}`);
+        } else {
+          throw new Error(data.status || '定位失敗');
+        }
+      } catch (err: any) {
+        geoStatusIndicator.className = 'geo-status-indicator error';
+        geoStatusIndicator.textContent = '🔴 定位解析失敗，請手動確認地址是否正確。';
+        spotLatInput.value = '';
+        spotLngInput.value = '';
+        console.warn('🧭 Geocoding 失敗：', err);
+      }
+    }
+
+    // 地址欄失去焦點時觸發 Geocoding
+    spotAddressInput?.addEventListener('blur', () => {
+      const address = spotAddressInput.value.trim();
+      if (address) {
+        performGeocoding(address);
+      }
+    });
+
+    // ==========================================
+    // 10. 照片上傳至 Supabase Storage
+    // ==========================================
+    const spotImageFileInput = document.getElementById('spot-image-file') as HTMLInputElement;
+    const spotImagePreviews = document.getElementById('spot-image-previews');
+
+    spotImageFileInput?.addEventListener('change', async (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (!files || files.length === 0) return;
+
+      showToast('正在上傳照片...');
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        
+        // 限制只允許圖片
+        if (!file.type.startsWith('image/')) continue;
+
+        // 命名規範：以 UUID 建立檔名，並放至 bucket 中
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        try {
+          // 上傳至 Supabase Storage Bucket 'post_images' 或是 'travel_images'
+          // 實作計畫中我們設定了 travel_images。如果此 bucket 不存在，亦可 fallback 上傳至 post_images
+          let targetBucket = 'travel_images';
+          
+          let { data, error } = await supabase.storage
+            .from(targetBucket)
+            .upload(filePath, file);
+
+          if (error) {
+            // Fallback 到 post_images 如果 travel_images 無法存取
+            targetBucket = 'post_images';
+            const fallbackUpload = await supabase.storage
+              .from(targetBucket)
+              .upload(filePath, file);
+            if (fallbackUpload.error) throw fallbackUpload.error;
+            data = fallbackUpload.data;
+          }
+
+          // 取得公開讀取網址
+          const { data: { publicUrl } } = supabase.storage
+            .from(targetBucket)
+            .getPublicUrl(filePath);
+
+          uploadedImagesCache.push(publicUrl);
+          showToast('照片上傳成功！');
+        } catch (err: any) {
+          alert('圖片上傳失敗：' + err.message);
+        }
+      }
+
+      // 重繪預覽
+      renderSpotImagePreviews();
+    });
+
+    function renderSpotImagePreviews() {
+      if (!spotImagePreviews) return;
+
+      let html = '';
+      uploadedImagesCache.forEach((url, idx) => {
+        html += `
+          <div class="upload-preview-item">
+            <img src="${url}" alt="preview" />
+            <button type="button" class="btn-remove-preview" data-idx="${idx}">&times;</button>
+          </div>
+        `;
+      });
+      spotImagePreviews.innerHTML = html;
+
+      // 綁定移除照片事件
+      spotImagePreviews.querySelectorAll('.btn-remove-preview').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          const idx = parseInt((e.currentTarget as HTMLElement).dataset.idx || '0');
+          uploadedImagesCache.splice(idx, 1);
+          renderSpotImagePreviews();
+        });
+      });
+    }
+
+    // ==========================================
+    // 11. 景點編輯載入與表單提交
+    // ==========================================
+    async function openSpotModal(spotId: string) {
+      const spot = spotsCache.find(s => String(s.id) === String(spotId));
+      if (!spot) return;
+
+      spotForm.reset();
+      (document.getElementById('spot-modal-title') as HTMLElement).textContent = '✏️ 編輯景點';
+      (document.getElementById('form-spot-id') as HTMLInputElement).value = spot.id;
+      (document.getElementById('btn-spot-submit') as HTMLButtonElement).textContent = '儲存修改';
+
+      if (geoStatusIndicator) geoStatusIndicator.style.display = 'none';
+
+      // 帶入欄位值
+      (document.getElementById('spot-name') as HTMLInputElement).value = spot.name || '';
+      spotCategorySelect.value = spot.category || '景點';
+      updateSpotEmojiOptions(spot.category, spot.icon);
+      
+      spotAddressInput.value = spot.address || '';
+      spotLatInput.value = spot.lat ? spot.lat.toString() : '';
+      spotLngInput.value = spot.lng ? spot.lng.toString() : '';
+
+      (document.getElementById('spot-hours') as HTMLInputElement).value = spot.open_hours || '';
+      (document.getElementById('spot-price') as HTMLInputElement).value = spot.price || '';
+      (document.getElementById('spot-note') as HTMLTextAreaElement).value = spot.note || '';
+      
+      spotStatusSelect.value = spot.status || 'want';
+      
+      if (spotRatingGroup) {
+        spotRatingGroup.style.display = spot.status === 'visited' ? 'flex' : 'none';
+      }
+      (document.getElementById('spot-rating') as HTMLSelectElement).value = spot.rating || '';
+
+      // 圖片載入
+      uploadedImagesCache = spot.images ? [...spot.images] : [];
+      renderSpotImagePreviews();
+
+      spotModal?.classList.add('show');
+    }
+
+    // 景點表單提交 (新增或編輯)
+    spotForm?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const spotId = (document.getElementById('form-spot-id') as HTMLInputElement).value;
+      const name = (document.getElementById('spot-name') as HTMLInputElement).value.trim();
+      const category = spotCategorySelect.value;
+      const icon = spotSelectedEmojiInput.value;
+      const address = spotAddressInput.value.trim();
+      
+      // 確保有經緯度
+      let lat = parseFloat(spotLatInput.value);
+      let lng = parseFloat(spotLngInput.value);
+
+      if (isNaN(lat) || isNaN(lng)) {
+        // 如果沒有自動定位，嘗試同步做最後一次 geocoding
+        showToast('正在進行最終定位偵測...');
+        await performGeocoding(address);
+        lat = parseFloat(spotLatInput.value);
+        lng = parseFloat(spotLngInput.value);
+
+        if (isNaN(lat) || isNaN(lng)) {
+          alert('無法取得經緯度，請確認地址後重新輸入！');
+          return;
+        }
+      }
+
+      const open_hours = (document.getElementById('spot-hours') as HTMLInputElement).value.trim();
+      const price = (document.getElementById('spot-price') as HTMLInputElement).value.trim();
+      const note = (document.getElementById('spot-note') as HTMLTextAreaElement).value.trim();
+      const status = spotStatusSelect.value;
+      const rating = status === 'visited' ? (document.getElementById('spot-rating') as HTMLSelectElement).value : null;
+      const images = uploadedImagesCache;
+
+      const spotPayload = {
+        trip_id: currentTripId,
+        name,
+        category,
+        icon,
+        address,
+        lat,
+        lng,
+        open_hours,
+        price,
+        note,
+        status,
+        rating,
+        images
+      };
+
+      try {
+        if (spotId) {
+          // 編輯
+          const { data, error } = await supabase
+            .from('spots')
+            .update(spotPayload)
+            .eq('id', spotId)
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          showToast('景點修改成功！');
+          // 更新快取
+          spotsCache = spotsCache.map(s => String(s.id) === String(spotId) ? data : s);
+        } else {
+          // 新增
+          const { data, error } = await supabase
+            .from('spots')
+            .insert([spotPayload])
+            .select()
+            .single();
+
+          if (error) throw error;
+
+          showToast('景點建立成功！');
+          // 更新快取
+          spotsCache.unshift(data);
+        }
+
+        closeSpotModal();
+        filterAndRenderSpots();
+        triggerBuildWebhook();
+      } catch (err: any) {
+        alert('儲存景點失敗：' + err.message);
+      }
+    });
+  });
+</script>
