@@ -2092,11 +2092,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
         // 綁定新增子類型表單
         typeListContainer.querySelectorAll('.add-subtype-form').forEach(form => {
+          const typeId = form.dataset.typeId; // 用 closure 傳入，避免 e.currentTarget 在 await 後變 null
+
           form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const typeId = e.currentTarget.dataset.typeId;
-            const emoji = e.currentTarget.querySelector('.subtype-emoji-input').value.trim();
-            const name = e.currentTarget.querySelector('.subtype-name-input').value.trim();
+            // 在事件內直接用 closure 的 form 參考，不再使用 e.currentTarget 或 DOM 爬樹
+            const emoji = form.querySelector('.subtype-emoji-input').value.trim();
+            const name = form.querySelector('.subtype-name-input').value.trim();
             
             if (!name || !emoji) return;
 
@@ -2111,22 +2113,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
               
               spotSubtypesCache.push(data);
               
-              // 確保新增後維持展開狀態
-              const btn = e.currentTarget.closest('li').querySelector('.btn-toggle-subtypes');
-              if (btn && btn.dataset.typeId) {
-                // 觸發重新渲染
-                renderTypeManagementList();
-                
-                // 強制將剛新增的那個展開 (利用我們新寫的 openState 機制，已經會自動維持)
-                const newLi = document.querySelector(`.btn-toggle-subtypes[data-type-id="${typeId}"]`)?.closest('li');
-                if (newLi) {
-                    const container = newLi.querySelector('.subtypes-container');
-                    const icon = newLi.querySelector('.toggle-icon');
-                    if (container) container.style.display = 'block';
-                    if (icon) icon.textContent = '▼';
-                }
-              }
-
+              // 重新渲染 (renderTypeManagementList 內部會自動保存當前 display: block 的展開狀態)
+              renderTypeManagementList();
               renderSubcategoryFilters();
               renderSpotSubcategoryOptions();
               showToast('新增子類型成功');
