@@ -168,7 +168,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
       <!-- 5. 景點清單區 -->
       <section class="spots-list-section">
-        <h3 class="spots-section-header" id="current-trip-title">景點清單</h3>
+        <h3 class="spots-section-header">
+          <span id="current-trip-title">景點清單</span>
+          <button id="btn-edit-trip" class="admin-only" style="display: none; background: transparent; border: none; font-size: 1rem; cursor: pointer; color: var(--travel-text-muted); margin-left: 8px;" title="編輯行程">
+            <i class="ti ti-pencil"></i>
+          </button>
+        </h3>
         <div class="spots-list" id="spots-cards-container">
           <!-- JS 將動態渲染過濾後的景點 -->
           <div class="empty-state">
@@ -191,11 +196,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   <div id="trip-modal" class="modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>＋ 新增旅行行程</h3>
+        <h3 id="trip-modal-title">＋ 新增旅行行程</h3>
         <button type="button" class="btn-modal-close" id="btn-trip-modal-close">&times;</button>
       </div>
       <form id="trip-form">
         <div class="modal-body">
+          <input type="hidden" id="form-trip-id" />
           <!-- 行程名稱 -->
           <div class="form-group">
             <label for="trip-name">行程名稱 <span style="color: var(--color-danger)">*</span></label>
@@ -267,15 +273,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
             <select id="spot-subtype">
               <!-- JS 動態插入 -->
             </select>
-          </div>
-
-          <!-- 圖示 Emoji 選擇 (依類型動態改變內容) -->
-          <div class="form-group">
-            <label>景點圖示</label>
-            <div class="emoji-selector" id="spot-emoji-selector">
-              <!-- JS 動態插入對應類型的 Emoji -->
-            </div>
-            <input type="hidden" id="spot-selected-emoji" value="📍" />
           </div>
 
           <!-- 地址 (Geocoding 自動經緯度) -->
@@ -918,6 +915,18 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       console.log('🗺️ Google Map 初始化成功！');
     }
 
+    function getSpotIcon(spot) {
+      if (spot.spot_subtype_id) {
+        const subtype = spotSubtypesCache.find(st => st.id === spot.spot_subtype_id);
+        if (subtype) return subtype.emoji;
+      }
+      if (spot.spot_type_id) {
+        const type = spotTypesCache.find(t => t.id === spot.spot_type_id);
+        if (type) return type.emoji;
+      }
+      return '📍';
+    }
+
     // --- 自訂 HTML Marker ---
     function createCustomMarker(spot) {
       if (!googleMap || !window.google) return null;
@@ -1165,7 +1174,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         html += `
           <div class="spot-card ${spot.status}" data-spot-id="${spot.id}">
             <div class="spot-card-icon">
-              ${spot.icon || '📍'}
+              ${getSpotIcon(spot)}
             </div>
             <div class="spot-card-main">
               <div class="spot-title-row">
@@ -1419,13 +1428,54 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       const tripEmojiGroup = document.getElementById('trip-emoji-selector');
       const tripSelectedEmojiInput = document.getElementById('trip-selected-emoji');
 
+      const tripModalTitle = document.getElementById('trip-modal-title');
+
       btnAddTrip?.addEventListener('click', () => {
         tripForm.reset();
+        document.getElementById('form-trip-id').value = '';
+        if (tripModalTitle) tripModalTitle.textContent = '＋ 新增旅行行程';
         tripSelectedEmojiInput.value = '🌸';
         tripEmojiGroup?.querySelectorAll('.emoji-option').forEach(opt => {
           opt.classList.remove('selected');
           if (opt.dataset.emoji === '🌸') opt.classList.add('selected');
         });
+        tripModal?.classList.add('show');
+        document.body.classList.add('modal-open');
+      });
+
+      const btnEditTrip = document.getElementById('btn-edit-trip');
+      btnEditTrip?.addEventListener('click', () => {
+        if (!currentTripId) return;
+        const trip = tripsCache.find(t => String(t.id) === String(currentTripId));
+        if (!trip) return;
+        
+        tripForm.reset();
+        document.getElementById('form-trip-id').value = trip.id;
+        if (tripModalTitle) tripModalTitle.textContent = '✏️ 編輯行程';
+        
+        document.getElementById('trip-name').value = trip.name || '';
+        document.getElementById('trip-description').value = trip.description || '';
+        
+        const emojiToSelect = trip.emoji || '🌸';
+        tripSelectedEmojiInput.value = emojiToSelect;
+        
+        tripEmojiGroup?.querySelectorAll('.emoji-option').forEach(opt => {
+          opt.classList.remove('selected');
+          if (opt.dataset.emoji === emojiToSelect) {
+            opt.classList.add('selected');
+          }
+        });
+        
+        // 如果該 emoji 不在清單中，可以考慮加入它，但目前假設都在 emoji-selector 或是 fallback
+        const hasEmoji = Array.from(tripEmojiGroup?.querySelectorAll('.emoji-option') || []).some(o => o.dataset.emoji === emojiToSelect);
+        if (!hasEmoji && tripEmojiGroup) {
+          const newOpt = document.createElement('span');
+          newOpt.className = 'emoji-option selected';
+          newOpt.dataset.emoji = emojiToSelect;
+          newOpt.textContent = emojiToSelect;
+          tripEmojiGroup.prepend(newOpt);
+        }
+
         tripModal?.classList.add('show');
         document.body.classList.add('modal-open');
       });
@@ -1447,30 +1497,51 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         }
       });
 
-      // 新增行程表單提交
+      // 行程表單提交 (新增或編輯)
       tripForm?.addEventListener('submit', async (e) => {
         e.preventDefault();
+        const tripId = document.getElementById('form-trip-id').value;
         const name = document.getElementById('trip-name').value.trim();
         const emoji = tripSelectedEmojiInput.value;
         const description = document.getElementById('trip-description').value.trim();
 
         if (!name) return;
 
+        const payload = { name, emoji, description };
+
         try {
-          const { data, error } = await supabase
-            .from('trips')
-            .insert([{ name, emoji, description }])
-            .select()
-            .single();
+          let savedTrip;
+          if (tripId) {
+            // 更新
+            const { data, error } = await supabase
+              .from('trips')
+              .update(payload)
+              .eq('id', tripId)
+              .select()
+              .single();
+            if (error) throw error;
+            savedTrip = data;
+            
+            // 更新快取
+            tripsCache = tripsCache.map(t => String(t.id) === String(tripId) ? savedTrip : t);
+            showToast('行程更新成功！');
+          } else {
+            // 新增
+            const { data, error } = await supabase
+              .from('trips')
+              .insert([payload])
+              .select()
+              .single();
+            if (error) throw error;
+            savedTrip = data;
+            
+            // 更新快取
+            tripsCache.push(savedTrip);
+            showToast('行程建立成功！');
+          }
 
-          if (error) throw error;
-
-          showToast('行程建立成功！');
           closeTripModal();
 
-          // 更新快取並重繪
-          tripsCache.push(data);
-          
           // 重新繪製行程滾動條
           let tabsHtml = '';
           tripsCache.forEach(t => {
@@ -1483,8 +1554,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           const listEl = document.getElementById('trips-tab-list');
           if (listEl) listEl.innerHTML = tabsHtml;
 
-          // 選中新建立的行程
-          selectTrip(data.id);
+          // 選中新建立/更新的行程
+          selectTrip(savedTrip.id);
           triggerBuildWebhook();
         } catch (err) {
           alert('行程儲存失敗：' + err.message);
@@ -1500,8 +1571,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       const btnSpotCancel = document.getElementById('btn-spot-cancel');
       const spotForm = document.getElementById('spot-form');
       const spotCategorySelect = document.getElementById('spot-category');
-      const spotEmojiGroup = document.getElementById('spot-emoji-selector');
-      const spotSelectedEmojiInput = document.getElementById('spot-selected-emoji');
       const spotStatusSelect = document.getElementById('spot-status');
       const spotRatingGroup = document.getElementById('spot-rating-group');
       const spotAddressInput = document.getElementById('spot-address');
@@ -1509,36 +1578,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       const spotLatInput = document.getElementById('spot-lat');
       const spotLngInput = document.getElementById('spot-lng');
 
-      // 依分類動態變更 Emoji 清單 (解除原本硬編碼限制，允許自由切換)
-      // 保留常用選項，並且加上該 spot_type 本身的預設圖示
-      const commonEmojis = ['📍', '⛩️', '🌸', '🗼', '🏯', '🏔️', '🎡', '🎨', '🛍️', '🍽️', '☕', '🍜', '🍣', '🍡', '🍺', '🥩', '🏨', '♨️', '⛺'];
-
-      function updateSpotEmojiOptions(typeId, selectedEmoji = '') {
-        if (!spotEmojiGroup) return;
-        const type = spotTypesCache.find(t => t.id === typeId);
-        const defaultEmoji = type ? type.emoji : '📍';
-        
-        let emojis = [defaultEmoji, ...commonEmojis.filter(e => e !== defaultEmoji)];
-        // 如果傳入的 selectedEmoji 不在清單中，將其加入
-        if (selectedEmoji && !emojis.includes(selectedEmoji)) {
-          emojis.unshift(selectedEmoji);
-        }
-        // 去除重複
-        emojis = [...new Set(emojis)].slice(0, 20); // 最多顯示20個供選擇
-        
-        let html = '';
-        emojis.forEach((emoji, idx) => {
-          const isSelected = selectedEmoji ? emoji === selectedEmoji : idx === 0;
-          if (isSelected) spotSelectedEmojiInput.value = emoji;
-          html += `<span class="emoji-option ${isSelected ? 'selected' : ''}" data-emoji="${emoji}">${emoji}</span>`;
-        });
-        spotEmojiGroup.innerHTML = html;
-      }
-
       // 類型變更連動
       spotCategorySelect?.addEventListener('change', (e) => {
-        const cat = e.target.value;
-        updateSpotEmojiOptions(cat);
         renderSpotSubcategoryOptions(); // 動態更新子類型選項
       });
 
@@ -1547,16 +1588,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         const status = e.target.value;
         if (spotRatingGroup) {
           spotRatingGroup.style.display = status === 'visited' ? 'flex' : 'none';
-        }
-      });
-
-      // Emoji 點選
-      spotEmojiGroup?.addEventListener('click', (e) => {
-        const opt = e.target.closest('.emoji-option');
-        if (opt) {
-          spotEmojiGroup.querySelectorAll('.emoji-option').forEach(o => o.classList.remove('selected'));
-          opt.classList.add('selected');
-          spotSelectedEmojiInput.value = opt.dataset.emoji || '📍';
         }
       });
 
@@ -1578,10 +1609,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         uploadedImagesCache = [];
         renderSpotImagePreviews();
 
-        // 預設分類與 Emoji
+        // 預設分類
         if (spotTypesCache.length > 0) {
           spotCategorySelect.value = spotTypesCache[0].id;
-          updateSpotEmojiOptions(spotTypesCache[0].id, spotTypesCache[0].emoji);
           renderSpotSubcategoryOptions();
         }
 
@@ -1778,7 +1808,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         // 帶入欄位值
         document.getElementById('spot-name').value = spot.name || '';
         spotCategorySelect.value = spot.spot_type_id || (spotTypesCache.length > 0 ? spotTypesCache[0].id : '');
-        updateSpotEmojiOptions(spot.spot_type_id, spot.icon);
         
         renderSpotSubcategoryOptions();
         const spotSubtypeSelect = document.getElementById('spot-subtype');
@@ -1822,7 +1851,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         const spotTypeId = spotCategorySelect.value;
         const spotSubtypeSelect = document.getElementById('spot-subtype');
         const spotSubtypeId = (spotSubtypeSelect && spotSubtypeSelect.value) ? spotSubtypeSelect.value : null;
-        const icon = spotSelectedEmojiInput.value;
         const address = spotAddressInput.value.trim();
         
         // 手動驗證必填欄位
@@ -1866,7 +1894,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           name,
           spot_type_id: spotTypeId,
           spot_subtype_id: spotSubtypeId,
-          icon,
           address,
           lat,
           lng,
