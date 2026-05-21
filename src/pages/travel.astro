@@ -252,6 +252,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       <form id="spot-form">
         <div class="modal-body">
           <input type="hidden" id="form-spot-id" />
+          <input type="hidden" id="form-spot-place-id" />
 
           <!-- 景點名稱 -->
           <div class="form-group">
@@ -522,7 +523,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     }
 
     // 綁定全域搜尋加入行程方法 (對齊使用者的參數順序：name, address, lat, lng)
-    window.addSpotFromSearch = (name, address, lat, lng) => {
+    window.addSpotFromSearch = (name, address, lat, lng, placeId) => {
       // 關閉氣泡
       if (openInfoWindow) {
         openInfoWindow.close();
@@ -530,7 +531,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       }
       // 開啟新增景點 Modal，自動填入資料
       if (openAddSpotModal) {
-        openAddSpotModal({ lat, lng, address, name });
+        openAddSpotModal({ lat, lng, address, name, place_id: placeId });
       }
     };
 
@@ -728,7 +729,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
                                   '${String(place.displayName).replace(/'/g, "\\'")}',
                                   '${String(place.formattedAddress).replace(/'/g, "\\'")}',
                                   ${lat},
-                                  ${lng}
+                                  ${lng},
+                                  '${placeId}'
                                 )" style="
                                   background:#8B7355;color:white;border:none;
                                   padding:6px 14px;border-radius:16px;
@@ -846,7 +848,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
                             '${String(place.displayName).replace(/'/g, "\\'")}',
                             '${String(place.formattedAddress).replace(/'/g, "\\'")}',
                             ${lat},
-                            ${lng}
+                            ${lng},
+                            '${placeId}'
                           )" style="
                             background:#8B7355;color:white;border:none;
                             padding:6px 14px;border-radius:16px;
@@ -987,7 +990,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
         const mapsUrl = spot.place_id
           ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name)}&query_place_id=${spot.place_id}`
-          : `https://www.google.com/maps/search/?api=1&query=${spot.lat},${spot.lng}`;
+          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name + ' ' + spot.address)}`;
 
         const iwContent = `
 <div style="
@@ -1638,6 +1641,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         spotForm.reset();
         document.getElementById('spot-modal-title').textContent = '＋ 新增景點';
         document.getElementById('form-spot-id').value = '';
+        document.getElementById('form-spot-place-id').value = '';
 
         // 清空頁面頂部的搜尋框並清除搜尋標記
         const searchInput = document.getElementById('travel-search-input');
@@ -1660,6 +1664,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           spotAddressInput.value = initialData.address || '';
           spotLatInput.value = initialData.lat.toString();
           spotLngInput.value = initialData.lng.toString();
+          if (initialData.place_id) {
+            document.getElementById('form-spot-place-id').value = initialData.place_id;
+          }
           
           if (geoStatusIndicator) {
             geoStatusIndicator.style.display = 'flex';
@@ -1836,6 +1843,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         spotForm.reset();
         document.getElementById('spot-modal-title').textContent = '✏️ 編輯景點';
         document.getElementById('form-spot-id').value = spot.id;
+        document.getElementById('form-spot-place-id').value = spot.place_id || '';
 
         // 清空頁面頂部的搜尋框
         const searchInput = document.getElementById('travel-search-input');
@@ -1885,6 +1893,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       // 點擊儲存按鈕執行景點儲存邏輯 (新增或編輯)
       btnSaveSpot?.addEventListener('click', async () => {
         const spotId = document.getElementById('form-spot-id').value;
+        const placeId = document.getElementById('form-spot-place-id').value || null;
         const nameEl = document.getElementById('spot-name');
         const name = nameEl.value.trim();
         const spotTypeId = spotCategorySelect.value;
@@ -1931,6 +1940,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         const spotPayload = {
           trip_id: currentTripId,
           name,
+          place_id: placeId,
           spot_type_id: spotTypeId,
           spot_subtype_id: spotSubtypeId,
           address,
