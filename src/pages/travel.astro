@@ -1152,10 +1152,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         // 管理員按鈕 (編輯/刪除)
         const adminActions = isAdminUser ? `
           <div class="spot-admin-actions">
-            <button class="btn-spot-icon edit" data-spot-id="${spot.id}" title="編輯景點">
+            <button class="btn-spot-icon edit" data-action="edit-spot" data-spot-id="${spot.id}" title="編輯景點">
               <i class="ti ti-pencil"></i>
             </button>
-            <button class="btn-spot-icon delete" data-spot-id="${spot.id}" title="刪除景點">
+            <button class="btn-spot-icon delete" data-action="delete-spot" data-spot-id="${spot.id}" title="刪除景點">
               <i class="ti ti-trash"></i>
             </button>
           </div>
@@ -1231,36 +1231,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         });
       });
 
-      // 綁定編輯與刪除景點事件
-      if (isAdminUser) {
-        container.querySelectorAll('.btn-spot-icon.edit').forEach(btn => {
-          btn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const spotId = e.currentTarget.dataset.spotId;
-            openSpotModal(spotId);
-          });
-        });
-
-        container.querySelectorAll('.btn-spot-icon.delete').forEach(btn => {
-          btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const spotId = e.currentTarget.dataset.spotId;
-            if (!spotId) return;
-            
-            if (confirm('確定要刪除此景點嗎？刪除後將無法復原！')) {
-              const { error } = await supabase.from('spots').delete().eq('id', spotId);
-              if (!error) {
-                showToast('景點已刪除！');
-                spotsCache = spotsCache.filter(s => String(s.id) !== String(spotId));
-                filterAndRenderSpots();
-                triggerBuildWebhook();
-              } else {
-                alert('刪除失敗：' + error.message);
-              }
-            }
-          });
-        });
-      }
     }
 
     // --- 切換行程行程標籤 ---
@@ -1349,6 +1319,41 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     const initEvents = () => {
       // 載入資料與身分驗證
       initAuthAndData();
+
+      // 0. 綁定編輯與刪除景點事件 (Event Delegation)
+      const spotsContainer = document.getElementById('spots-cards-container');
+      if (spotsContainer) {
+        spotsContainer.addEventListener('click', async (e) => {
+          if (!isAdminUser) return;
+          
+          const editBtn = e.target.closest('[data-action="edit-spot"]');
+          if (editBtn) {
+            e.stopPropagation();
+            const spotId = editBtn.dataset.spotId;
+            openSpotModal(spotId);
+            return;
+          }
+
+          const deleteBtn = e.target.closest('[data-action="delete-spot"]');
+          if (deleteBtn) {
+            e.stopPropagation();
+            const spotId = deleteBtn.dataset.spotId;
+            if (!spotId) return;
+            
+            if (confirm('確定要刪除此景點嗎？刪除後將無法復原！')) {
+              const { error } = await supabase.from('spots').delete().eq('id', spotId);
+              if (!error) {
+                showToast('景點已刪除！');
+                spotsCache = spotsCache.filter(s => String(s.id) !== String(spotId));
+                filterAndRenderSpots();
+                triggerBuildWebhook();
+              } else {
+                alert('刪除失敗：' + error.message);
+              }
+            }
+          }
+        });
+      }
 
       // 1. 綁定行程標籤點擊事件
       const tabsList = document.getElementById('trips-tab-list');
