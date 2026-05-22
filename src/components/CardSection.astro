@@ -27,7 +27,7 @@ const { section, cards, isLoggedIn = false } = Astro.props;
         <div class="card-header">
           <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1;">
             <i class={`ti ti-${card.icon} card-icon`}></i>
-            {card.url ? (
+            {(card.url && card.title !== '旅行地圖') ? (
               <a href={card.url} class="card-title card-title--link">{card.title}</a>
             ) : (
               <span class="card-title">{card.title}</span>
