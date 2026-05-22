@@ -22,7 +22,7 @@ const { section, cards, isLoggedIn = false } = Astro.props;
   <!-- 卡片網格：桌面四欄、手機兩欄 -->
   <div class="card-grid">
     {cards.map((card) => (
-      <div class="card">
+      <div class={`card ${card.title === '旅行地圖' ? 'travel-map-card' : ''}`} id={card.title === '旅行地圖' ? 'travel-map-card' : undefined}>
         {/* 卡片頂部：圖示 + 標題 */}
         <div class="card-header">
           <div style="display: flex; align-items: center; gap: 0.5rem; flex: 1;">
@@ -58,6 +58,14 @@ const { section, cards, isLoggedIn = false } = Astro.props;
                 <span class="child-arrow">→</span> {child.title}
               </a>
             ))}
+          </div>
+        )}
+
+        {/* 客製：旅行地圖的子選單 */}
+        {card.title === "旅行地圖" && (
+          <div class="submenu travel-submenu" id="travel-submenu" style="display:none;">
+            <a href="/travel" class="travel-sub-link">🗺 旅行地圖</a>
+            <a href="/japan" class="travel-sub-link">🇯🇵 日本收藏</a>
           </div>
         )}
       </div>
@@ -189,4 +197,65 @@ const { section, cards, isLoggedIn = false } = Astro.props;
   .edit-btn:hover {
     opacity: 1;
   }
+
+  /* === 客製旅行地圖特殊樣式 === */
+  .travel-map-card {
+    cursor: pointer;
+  }
+  
+  .travel-submenu {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed #4A3525;
+    animation: slideDown 0.2s ease-out forwards;
+  }
+  
+  .travel-sub-link {
+    flex: 1;
+    text-align: center;
+    background: #2D1F12;
+    color: #F5E6CC;
+    text-decoration: none;
+    padding: 8px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    transition: background 0.2s;
+  }
+  
+  .travel-sub-link:hover {
+    background: #4A3525;
+  }
+  
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 </style>
+
+<script>
+  // 處理旅行地圖的點擊展開邏輯
+  const travelCard = document.getElementById('travel-map-card');
+  const travelSubmenu = document.getElementById('travel-submenu');
+
+  if (travelCard && travelSubmenu) {
+    travelCard.addEventListener('click', (e) => {
+      // 避免點擊子連結本身時觸發收合
+      if ((e.target as HTMLElement).closest('.travel-sub-link')) {
+        return;
+      }
+      
+      e.stopPropagation();
+      const isHidden = travelSubmenu.style.display === 'none';
+      travelSubmenu.style.display = isHidden ? 'flex' : 'none';
+    });
+
+    // 點擊卡片外部收合子選單
+    document.addEventListener('click', (e) => {
+      if (!travelCard.contains(e.target as Node)) {
+        travelSubmenu.style.display = 'none';
+      }
+    });
+  }
+</script>
