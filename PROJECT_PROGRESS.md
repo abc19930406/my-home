@@ -82,6 +82,20 @@
   - 「收藏」按鈕：直接加入 japan_items，標記「網友推薦」
   - 公開/私人切換開關（存於 Supabase status.japan_explore_public）
   - SERPAPI_KEY 安全保存於 Vercel 後端
+- **願望清單功能**（完整上線）：
+  - 三種登入方式：管理者帳號、Google OAuth、Email/Password
+  - 白名單機制（allowed_users 資料表，管理者手動管理）
+  - 非白名單用戶登入後自動被擋下並登出
+  - **管理者功能**：
+    - 商品卡片 ❤️/🤍 勾選控制 owner_wishlist
+    - 篩選列「❤️ 我想買」只顯示自己勾選的商品
+    - 篩選列「👥 朋友清單」下拉選單，可查看每個朋友的勾選清單
+    - 商品卡片顯示勾選人數，點擊可看完整名單
+  - **朋友/家人功能**：
+    - 商品卡片 📌 勾選，記錄存入 wishlist_items 資料表
+    - 篩選列「❤️ 我想買」顯示自己勾選的商品
+    - 商品卡片顯示勾選人數（不顯示名單）
+  - 訪客（未登入）：純瀏覽，看不到任何勾選功能
 
 ### ✅ 旅行地圖（/travel）— 完整上線
 - 日系清新白底暖木色系視覺風格（#FDFCF8）
@@ -115,8 +129,9 @@
 - Maps JavaScript API ✅
 - Places API (New) ✅
 - Geocoding API ✅
+- Google OAuth ✅（用於日本收藏願望清單登入）
 - API Key 名稱：Travel Map
-- Vercel 環境變數：PUBLIC_GOOGLE_MAPS_KEY
+- Vercel 環境變數：PUBLIC_GOOGLE_MAPS_KEY、PUBLIC_ADMIN_EMAIL
 
 ---
 
@@ -148,6 +163,12 @@
 16. **posts 單篇頁為 SSR**：已移除 prerender = true，權限控制在 client side JS
 17. **posts RLS**：已開放 SELECT 給所有人，private/friends 內容保護靠前端 JS
 18. **記帳日幣功能**：匯率用多重 API 備援，本地開發環境可能無法連線，部署後正常
+19. **日本收藏多角色登入**：
+    - 管理者判斷：session.user.email === PUBLIC_ADMIN_EMAIL
+    - 白名單用戶：查詢 allowed_users 資料表確認 email
+    - Google OAuth Callback URL：https://ltmrkdldmgysczfnidra.supabase.co/auth/v1/callback
+    - 新增白名單用戶：Supabase Table Editor → allowed_users → Insert row
+    - 新增家人帳號：Supabase Authentication → Users → Add user
 
 ---
 
@@ -162,7 +183,9 @@
 | daily | Polaroid 底片日記 |
 | transactions | 記帳明細（含 currency、amount_jpy、exchange_rate） |
 | japan_categories | 日本收藏分類（兩層） |
-| japan_items | 日本收藏品項 |
+| japan_items | 日本收藏品項（含 owner_wishlist） |
+| allowed_users | 日本收藏白名單（email + display_name） |
+| wishlist_items | 朋友/家人願望清單（關聯 japan_items + auth.users） |
 | trips | 旅行行程 |
 | spots | 旅行景點（含 spot_type_id、spot_subtype_id、place_id） |
 | spot_types | 景點主類型 |
@@ -179,6 +202,7 @@
 | PUBLIC_VERCEL_DEPLOY_HOOK | 觸發重新部署 | 前端可見 |
 | SERPAPI_KEY | 探索日本搜尋 | 後端專用 |
 | PUBLIC_GOOGLE_MAPS_KEY | 旅行地圖 Google Maps | 前端可見 |
+| PUBLIC_ADMIN_EMAIL | 管理者 email 判斷 | 前端可見 |
 
 ---
 

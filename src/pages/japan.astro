@@ -600,9 +600,6 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
   }
 
   function renderSubFilterBar() {
-    console.log('renderSubFilterBar 被呼叫了！');
-    console.log('currentMainFilter:', currentMainFilter);
-
     const subContainer = document.getElementById('sub-categories-filter');
     if (!subContainer) return;
 
@@ -626,12 +623,6 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
       }
       const catIds = [...new Set(wishlistItems.map(item => String(item.category_id)))];
       subs = catIds.map(id => categoriesCache.find(c => String(c.id) === id)).filter(Boolean);
-      
-      console.log('--- Debug: renderSubFilterBar ---');
-      console.log('currentMainFilter:', currentMainFilter);
-      console.log('願望清單商品數量:', wishlistItems.length);
-      console.log('提取的分類:', subs);
-      console.log('subContainer 元素:', subContainer);
     } else {
       subs = categoriesCache.filter(c => String(c.parent_id) === String(currentMainFilter));
     }
