@@ -56,6 +56,7 @@ const categories = initialCategories.length > 0 ? initialCategories : fallbackCa
 const items = initialItems;
 
 const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
+const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
 ---
 
 <Layout title="日本收藏 | The Corner Table">
@@ -78,6 +79,17 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
         </a>
         <h1 class="page-title">日本收藏</h1>
         <p class="page-subtitle">藥妝・零食・伴手禮・景點</p>
+        
+        <!-- 登入狀態區 -->
+        <div class="header-actions-right">
+          <div id="auth-guest" style="display: none;">
+            <button id="btn-login-modal" class="btn-header-auth">🔑 登入以加入願望清單</button>
+          </div>
+          <div id="auth-user" class="auth-user-info" style="display: none;">
+            <span id="auth-user-name"></span>
+            <button id="btn-logout" class="btn-header-auth">登出</button>
+          </div>
+        </div>
       </header>
 
       <!-- 探索日本搜尋區 -->
@@ -322,40 +334,54 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     </div>
   </div>
 
+  <!-- 訪客登入 Modal -->
+  <div id="auth-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3>🔑 登入願望清單</h3>
+        <button type="button" class="btn-modal-close" id="btn-auth-close">&times;</button>
+      </div>
+      <div class="modal-body auth-modal-content">
+        <button type="button" id="btn-google-login" class="btn-google-auth">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" height="18" alt="Google">
+          使用 Google 帳號登入
+        </button>
+        <div class="auth-divider">或</div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="auth-email" placeholder="輸入您的 Email" />
+        </div>
+        <div class="form-group">
+          <label>密碼</label>
+          <input type="password" id="auth-password" placeholder="輸入您的密碼" />
+        </div>
+        <button type="button" id="btn-email-login" class="btn-action-primary" style="width: 100%;">登入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 願望清單名單 Modal -->
+  <div id="wishlist-names-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-box" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3>❤️ 想買清單</h3>
+        <button type="button" class="btn-modal-close" id="btn-wishlist-names-close">&times;</button>
+      </div>
+      <div class="modal-body" id="wishlist-names-container">
+        <!-- JS dynamically inserts names here -->
+      </div>
+    </div>
+  </div>
+
   <!-- Toast 訊息通知 -->
   <div id="toast" class="toast">已成功儲存</div>
 </Layout>
 
 <!-- 環境變數傳遞 -->
-<script define:vars={{ webhookUrl }} is:inline>
+<script define:vars={{ webhookUrl, adminEmail }} is:inline>
   window.__WEBHOOK_URL__ = webhookUrl;
+  window.__ADMIN_EMAIL__ = adminEmail;
 </script>
-
-<!-- IIFE 客戶端互動與 Supabase 連線邏輯 -->
-<script is:inline>
-  (async () => {
-    // 1. CDN 動態導入 Supabase 庫
-    const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
-    
-    // 從 Window 取得 Astro 傳遞的環境變數，或從 global 取得 Supabase URL
-    // 主站已經在全球配置了 Supabase，我們可以從 Supabase 客戶端中繼承，或者直接配置。
-    // 為了安全和通用性，我們先檢查主站是否有全域的 Supabase 配置。
-    // 主站的 supabase-client.ts 是在編譯期載入的，但在網頁前端中，我們可以用 anon key 連線。
-    // 讓我們先發起連線
-    const supabaseUrl = 'https://ltmrkdldmgysczfnidra.supabase.co';
-    // 這裡我們直接用公共 anon key 連接
-    const { data: envData, error: envError } = await fetch('/api/config').then(res => res.json()).catch(() => ({}));
-    
-    // 我們可以從 localStorage 或 session 讀取 supabase token，
-    // 只要用主站的 anonymous key 即可。主站的 anon key 存儲在 meta 或 global 中。
-    // 由於 global.css/Layout.astro 沒有載入 anon key，我們可以使用一個安全而巧妙的辦法：
-    // 主站 client-side bundle 會把 supabaseUrl 和 supabaseAnonKey 編譯進去，我們可以用 localStorage
-    // 或是直接讀取 cookies。其實，更簡單的做法是直接使用主站 supabase instance。
-    // 等等！我們可以在 frontmatter 中取得 anon key，並透過 define:vars 傳入！
-    // 讓我們修改 frontmatter，將 PUBLIC_SUPABASE_URL 和 PUBLIC_SUPABASE_ANON_KEY 一併傳入！
-  })();
-</script>
-
 <script>
   import { supabase } from '../lib/supabase-client';
   
@@ -365,10 +391,15 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   // 本地快取狀態
   let categoriesCache: any[] = [];
   let itemsCache: any[] = [];
+  let allWishlistItems: any[] = [];
   let currentMainFilter: string = 'all';
   let currentSubFilter: string = 'all';
   let currentSearchQuery = '';
+  let currentFriendFilter = 'all';
   let isAdminUser = false;
+  let isAllowedUser = false;
+  let currentUser: any = null;
+  const adminEmail = (window as any).__ADMIN_EMAIL__ || '';
 
   // --- Utility Functions ---
   function showToast(message: string) {
@@ -385,21 +416,50 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     // 1. 抓取資料以維持最新狀態
     const { data: cats } = await supabase.from('japan_categories').select('*').order('sort_order', { ascending: true });
     const { data: items } = await supabase.from('japan_items').select('*').order('created_at', { ascending: false });
+    const { data: wishlists } = await supabase.from('wishlist_items').select('*');
     
     categoriesCache = cats || [];
     itemsCache = items || [];
+    allWishlistItems = wishlists || [];
 
     // 2. 身分驗證與即時探索隱私狀態檢查
     const { data: { session } } = await supabase.auth.getSession();
     const { data: statusObj } = await supabase.from('status').select('japan_explore_public').eq('id', 1).single();
     const isPublic = statusObj ? !!statusObj.japan_explore_public : false;
 
+    if (session) {
+      currentUser = session.user;
+      if (currentUser.email === adminEmail) {
+        isAdminUser = true;
+        isAllowedUser = true;
+      } else {
+        console.log('檢查白名單 email:', currentUser.email);
+        const { data: allowedUser, error: allowedError } = await supabase
+          .from('allowed_users')
+          .select('id')
+          .eq('email', currentUser.email)
+          .single();
+        
+        console.log('白名單查詢結果:', allowedUser, allowedError);
+
+        if (allowedUser) {
+          isAllowedUser = true;
+        } else {
+          alert('此功能僅限受邀用戶使用。');
+          await supabase.auth.signOut();
+          window.location.reload();
+          return;
+        }
+      }
+    }
+
+    updateHeaderAuthUI();
+
     const exploreSection = document.getElementById('explore-japan-section');
     const toggleCheckbox = document.getElementById('explore-toggle-checkbox') as HTMLInputElement;
     const toggleLabel = document.getElementById('explore-toggle-label');
 
-    if (session) {
-      isAdminUser = true;
+    if (isAdminUser) {
       document.querySelectorAll('.admin-only').forEach(el => {
         (el as HTMLElement).style.display = 'flex';
       });
@@ -467,6 +527,24 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     filterAndRenderItems();
   }
 
+  function updateHeaderAuthUI() {
+    const authGuest = document.getElementById('auth-guest');
+    const authUser = document.getElementById('auth-user');
+    const authUserName = document.getElementById('auth-user-name');
+    
+    if (isAdminUser) {
+      if (authGuest) authGuest.style.display = 'none';
+      if (authUser) authUser.style.display = 'none';
+    } else if (isAllowedUser && currentUser) {
+      if (authGuest) authGuest.style.display = 'none';
+      if (authUser) authUser.style.display = 'flex';
+      if (authUserName) authUserName.textContent = currentUser.user_metadata?.name || currentUser.email;
+    } else {
+      if (authGuest) authGuest.style.display = 'block';
+      if (authUser) authUser.style.display = 'none';
+    }
+  }
+
   // --- 渲染分類篩選列 ---
   function renderFilterBar() {
     const mainContainer = document.getElementById('main-categories-filter');
@@ -480,7 +558,25 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     mainCats.forEach(cat => {
       html += `<button class="tag-btn ${String(cat.id) === String(activeId) ? 'active' : ''}" data-cat-id="${cat.id}">${cat.name}</button>`;
     });
+    
+    // 願望清單功能 (個人化)
+    if (isAdminUser || isAllowedUser) {
+      html += `<button class="tag-btn ${activeId === 'wishlist' ? 'active' : ''}" data-cat-id="wishlist">❤️ 我想買</button>`;
+    }
+    
     html += `<button class="tag-btn ${activeId === 'recommend' ? 'active' : ''}" data-cat-id="recommend">網友推薦</button>`;
+    
+    if (isAdminUser) {
+      const uniqueEmails = [...new Set(allWishlistItems.map(w => w.user_email))];
+      let friendOpts = '<option value="all">👥 朋友清單</option>';
+      uniqueEmails.forEach(email => {
+        const wItem = allWishlistItems.find(w => w.user_email === email);
+        const name = wItem?.user_name || email;
+        friendOpts += `<option value="${email}" ${currentFriendFilter === email ? 'selected' : ''}>${name}</option>`;
+      });
+      html += `<div class="friend-filter-container"><select class="friend-select" id="friend-filter-select">${friendOpts}</select></div>`;
+    }
+
     mainContainer.innerHTML = html;
 
     // 綁定主分類點擊事件
@@ -490,6 +586,14 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
         selectMainCategory(id);
       });
     });
+
+    const friendSelect = document.getElementById('friend-filter-select');
+    if (friendSelect) {
+      friendSelect.addEventListener('change', (e) => {
+        currentFriendFilter = (e.target as HTMLSelectElement).value;
+        filterAndRenderItems();
+      });
+    }
 
     // 渲染子分類
     renderSubFilterBar();
@@ -556,7 +660,18 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 
     let filtered = [...itemsCache];
 
-    if (currentMainFilter === 'recommend') {
+    if (currentMainFilter === 'wishlist') {
+      if (isAdminUser) {
+        filtered = filtered.filter(item => item.owner_wishlist === true);
+      } else if (isAllowedUser && currentUser) {
+        const userWishlistIds = allWishlistItems
+          .filter(w => w.user_id === currentUser.id)
+          .map(w => String(w.japan_item_id));
+        filtered = filtered.filter(item => userWishlistIds.includes(String(item.id)));
+      } else {
+        filtered = [];
+      }
+    } else if (currentMainFilter === 'recommend') {
       filtered = filtered.filter(item => item.note === '網友推薦');
     } else if (currentMainFilter !== 'all') {
       // 獲取該主分類下的所有子分類 ID
@@ -585,6 +700,14 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
         return nameMatch || noteMatch;
       });
     }
+    
+    // 朋友清單過濾 (僅管理員)
+    if (isAdminUser && currentFriendFilter !== 'all') {
+      const userWishlistIds = allWishlistItems
+        .filter(w => w.user_email === currentFriendFilter)
+        .map(w => String(w.japan_item_id));
+      filtered = filtered.filter(item => userWishlistIds.includes(String(item.id)));
+    }
 
     if (filtered.length === 0) {
       grid.innerHTML = `
@@ -610,6 +733,34 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 
       const noteTag = item.note ? `<p class="card-note">${item.note}</p>` : '';
 
+      const isOwnerWishlisted = item.owner_wishlist === true;
+      let adminCheckboxHtml = '';
+      if (isAdminUser) {
+        adminCheckboxHtml = `
+          <div class="wishlist-checkbox-admin ${isOwnerWishlisted ? 'active' : ''}" data-id="${item.id}" title="管理者願望清單">
+            ${isOwnerWishlisted ? '❤️' : '🤍'}
+          </div>
+        `;
+      }
+
+      let userCheckboxHtml = '';
+      if (isAllowedUser && currentUser && !isAdminUser) {
+        const isUserWishlisted = allWishlistItems.some(w => String(w.japan_item_id) === String(item.id) && w.user_id === currentUser.id);
+        userCheckboxHtml = `
+          <div class="wishlist-checkbox-user ${isUserWishlisted ? 'active' : ''}" data-id="${item.id}" title="加入我的清單">
+            📌
+          </div>
+        `;
+      }
+
+      const userWishlistCount = allWishlistItems.filter(w => String(w.japan_item_id) === String(item.id)).length;
+      let countHtml = '';
+      if (isAdminUser || isAllowedUser) {
+        if (userWishlistCount > 0) {
+          countHtml = `<div class="wishlist-footer" data-id="${item.id}">❤️ ${userWishlistCount} 人想買</div>`;
+        }
+      }
+
       html += `
         <div 
           class="japan-card" 
@@ -619,6 +770,8 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
           data-note="${item.note || ''}"
           data-image-url="${item.image_url || ''}"
         >
+          ${adminCheckboxHtml}
+          ${userCheckboxHtml}
           <div class="card-admin-actions admin-only" style="display: ${isAdminUser ? 'flex' : 'none'};">
             <button class="btn-card-icon btn-edit" title="編輯">
               <i class="ti ti-pencil"></i>
@@ -636,6 +789,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
               <span class="card-tag">${catName}</span>
             </div>
             ${noteTag}
+            ${countHtml}
           </div>
         </div>
       `;
@@ -1016,6 +1170,83 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     const target = e.target as HTMLElement;
     const btnEdit = target.closest('.btn-edit');
     const btnDelete = target.closest('.btn-delete');
+    const btnWishlistAdmin = target.closest('.wishlist-checkbox-admin');
+    const btnWishlistUser = target.closest('.wishlist-checkbox-user');
+    const footerCount = target.closest('.wishlist-footer');
+
+    // Admin toggles owner_wishlist
+    if (btnWishlistAdmin) {
+      const id = (btnWishlistAdmin as HTMLElement).dataset.id;
+      const isActive = btnWishlistAdmin.classList.contains('active');
+      const newVal = !isActive;
+      
+      const { error } = await supabase.from('japan_items').update({ owner_wishlist: newVal }).eq('id', id);
+      if (!error) {
+        btnWishlistAdmin.classList.toggle('active');
+        btnWishlistAdmin.innerHTML = newVal ? '❤️' : '🤍';
+        const cItem = itemsCache.find(i => String(i.id) === String(id));
+        if (cItem) cItem.owner_wishlist = newVal;
+        showToast(newVal ? '已加入您的願望清單' : '已從願望清單移除');
+      } else {
+        alert('操作失敗：' + error.message);
+      }
+      return;
+    }
+
+    // User toggles wishlist_items
+    if (btnWishlistUser) {
+      if (!currentUser) return;
+      const id = (btnWishlistUser as HTMLElement).dataset.id;
+      const isActive = btnWishlistUser.classList.contains('active');
+      
+      if (isActive) {
+        // Delete
+        const { error } = await supabase.from('wishlist_items')
+          .delete()
+          .eq('japan_item_id', id)
+          .eq('user_id', currentUser.id);
+          
+        if (!error) {
+          allWishlistItems = allWishlistItems.filter(w => !(String(w.japan_item_id) === String(id) && w.user_id === currentUser.id));
+          filterAndRenderItems(); // re-render to update count & icon
+          showToast('已從我的清單移除');
+        }
+      } else {
+        // Insert
+        const newW = {
+          japan_item_id: id,
+          user_id: currentUser.id,
+          user_email: currentUser.email,
+          user_name: currentUser.user_metadata?.name || currentUser.email
+        };
+        const { error } = await supabase.from('wishlist_items').insert([newW]);
+        if (!error) {
+          allWishlistItems.push(newW);
+          filterAndRenderItems();
+          showToast('已加入我的清單');
+        } else {
+          alert('操作失敗：' + error.message);
+        }
+      }
+      return;
+    }
+
+    // Click footer count -> Show names (Admin only)
+    if (footerCount) {
+      if (isAdminUser) {
+        const id = (footerCount as HTMLElement).dataset.id;
+        const wItems = allWishlistItems.filter(w => String(w.japan_item_id) === String(id));
+        const container = document.getElementById('wishlist-names-container');
+        if (container) {
+          container.innerHTML = `<div class="wishlist-names-list">` + 
+            wItems.map(w => `<div class="wishlist-name-item">${w.user_name || w.user_email}</div>`).join('') + 
+            `</div>`;
+        }
+        const m = document.getElementById('wishlist-names-modal');
+        if (m) m.style.display = 'flex';
+      }
+      return;
+    }
 
     if (btnEdit) {
       const card = btnEdit.closest('.japan-card') as HTMLElement;
@@ -1049,6 +1280,53 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
           alert('刪除失敗：' + error.message);
         }
       }
+    }
+  });
+
+  // --- Auth UI 控制 ---
+  document.getElementById('btn-login-modal')?.addEventListener('click', () => {
+    const m = document.getElementById('auth-modal');
+    if (m) m.style.display = 'flex';
+  });
+
+  document.getElementById('btn-auth-close')?.addEventListener('click', () => {
+    const m = document.getElementById('auth-modal');
+    if (m) m.style.display = 'none';
+  });
+  
+  document.getElementById('btn-wishlist-names-close')?.addEventListener('click', () => {
+    const m = document.getElementById('wishlist-names-modal');
+    if (m) m.style.display = 'none';
+  });
+
+  document.getElementById('btn-logout')?.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    window.location.reload();
+  });
+
+  document.getElementById('btn-google-login')?.addEventListener('click', async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin + '/japan' }
+    });
+  });
+
+  document.getElementById('btn-email-login')?.addEventListener('click', async () => {
+    const email = (document.getElementById('auth-email') as HTMLInputElement).value;
+    const password = (document.getElementById('auth-password') as HTMLInputElement).value;
+    if (!email || !password) return;
+    
+    const btn = document.getElementById('btn-email-login') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = '登入中...';
+    
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      alert('登入失敗：' + error.message);
+      btn.disabled = false;
+      btn.textContent = '登入';
+    } else {
+      window.location.reload();
     }
   });
 

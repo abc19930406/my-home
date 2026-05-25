@@ -50,8 +50,43 @@
    ========================================================== */
 .japan-header {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: 2rem;
   position: relative;
+}
+
+.header-actions-right {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-header-auth {
+  background: rgba(112, 144, 184, 0.1);
+  border: 1px solid rgba(112, 144, 184, 0.3);
+  color: var(--japan-text);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-header-auth:hover {
+  background: rgba(112, 144, 184, 0.2);
+}
+
+.auth-user-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--japan-text);
 }
 
 .japan-header .nav-back {
@@ -134,6 +169,28 @@
   padding-top: 12px;
   border-top: 1px dashed var(--japan-border);
   animation: fadeIn 0.3s ease-out;
+}
+
+.sub-categories::-webkit-scrollbar {
+  display: none;
+}
+
+.friend-filter-container {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.friend-select {
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(112, 144, 184, 0.3);
+  background: white;
+  color: var(--japan-text);
+  font-size: 0.85rem;
+  outline: none;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 @keyframes fadeIn {
@@ -450,11 +507,11 @@
 }
 
 .card-title {
+  margin: 0 0 8px 0;
   font-size: 1.1rem;
-  font-weight: 500;
-  margin: 0;
   color: var(--japan-text);
   line-height: 1.4;
+  font-weight: 600;
 }
 
 .card-tag {
@@ -465,6 +522,80 @@
   border-radius: 4px;
   white-space: nowrap;
   font-weight: 500;
+}
+
+.wishlist-checkbox-admin, .wishlist-checkbox-user {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s ease;
+  font-size: 1.1rem;
+  user-select: none;
+  opacity: 0.5;
+}
+
+.wishlist-checkbox-admin:hover, .wishlist-checkbox-user:hover {
+  opacity: 0.8;
+  transform: scale(1.05);
+}
+
+.wishlist-checkbox-admin.active {
+  background: rgba(255, 100, 100, 0.15);
+  border-color: rgba(255, 100, 100, 0.5);
+  opacity: 1;
+  transform: scale(1.1);
+}
+.wishlist-checkbox-admin.active:hover {
+  transform: scale(1.15);
+  opacity: 1;
+}
+
+.wishlist-checkbox-user {
+  left: auto;
+  right: 10px;
+}
+
+.wishlist-checkbox-user:not(.active) {
+  filter: grayscale(100%);
+}
+
+.wishlist-checkbox-user.active {
+  background: rgba(24, 144, 255, 0.15);
+  border-color: rgba(24, 144, 255, 0.5);
+  opacity: 1;
+  transform: scale(1.1);
+  filter: none;
+}
+.wishlist-checkbox-user.active:hover {
+  transform: scale(1.15);
+  opacity: 1;
+}
+
+.wishlist-footer {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(112, 144, 184, 0.2);
+  font-size: 0.85rem;
+  color: var(--japan-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.wishlist-footer:hover {
+  color: var(--japan-primary);
 }
 
 .card-note {
@@ -1235,5 +1366,70 @@
 
 .explore-switch input:checked + .explore-switch-slider:before {
   transform: translateX(16px);
+}
+
+/* ==========================================================
+   登入 Modal & 名單 Modal (Wishlist)
+   ========================================================== */
+.auth-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.btn-google-auth {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  color: #333;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.btn-google-auth:hover {
+  background: #f5f5f5;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  color: #999;
+  font-size: 0.85rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid #eee;
+}
+
+.auth-divider:not(:empty)::before { margin-right: .25em; }
+.auth-divider:not(:empty)::after { margin-left: .25em; }
+
+.wishlist-names-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.wishlist-name-item {
+  padding: 8px 12px;
+  background: rgba(112, 144, 184, 0.05);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  color: var(--japan-text);
 }
 
