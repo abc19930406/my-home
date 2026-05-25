@@ -437,7 +437,7 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
         const { data: allowedUser, error: allowedError } = await supabase
           .from('allowed_users')
           .select('id')
-          .eq('email', currentUser.email)
+          .ilike('email', currentUser.email)
           .single();
         
         console.log('白名單查詢結果:', allowedUser, allowedError);
