@@ -14,6 +14,14 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
         <a href="/" class="nav-back">← Back</a>
         <h1 class="page-title">記帳</h1>
         <p class="page-subtitle">收支紀錄・薪資來源</p>
+        <div class="exchange-rate-display">
+          <span id="exchange-rate-text">載入匯率中...</span>
+          <button id="btn-refresh-rate" class="btn-refresh-rate" title="重新整理匯率">🔄</button>
+        </div>
+        <div id="manual-rate-container" class="manual-rate-container" style="display: none;">
+          <label for="manual-rate-input">手動輸入匯率：1 JPY = </label>
+          <input type="number" id="manual-rate-input" class="manual-rate-input" step="0.0001" value="0.22" /> TWD
+        </div>
         <hr class="header-divider" />
       </header>
 
@@ -60,6 +68,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
         <div id="expense-chart" class="distribution-list">
           <!-- JS 動態插入 -->
         </div>
+        <div id="jpy-stats" class="jpy-stats-section">
+          <div class="jpy-stats-text">本月日幣支出合計 <span id="jpy-total-jpy">¥0</span></div>
+          <div class="jpy-stats-twd">≈ <span id="jpy-total-twd">NT$ 0</span></div>
+        </div>
       </section>
 
       <!-- 明細列表 -->
@@ -95,8 +107,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
           <select id="category-select" class="form-control" required></select>
         </div>
         <div class="form-group">
-          <label for="amount-input">金額 (NTD)</label>
+          <div class="currency-switch" id="currency-switch" style="display: none;">
+            <button type="button" class="currency-btn active" data-currency="TWD">台幣 (TWD)</button>
+            <button type="button" class="currency-btn" data-currency="JPY">日幣 (JPY)</button>
+          </div>
+          <label for="amount-input" id="amount-label">金額 (NTD)</label>
           <input type="number" id="amount-input" class="form-control" required placeholder="請輸入金額" />
+          <div id="conversion-hint" class="conversion-hint" style="display: none;"></div>
         </div>
         <div class="form-group">
           <label for="date-input">日期</label>
@@ -134,6 +151,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   let currentMonth = new Date(); // 目前選中的月份
   let transactions = [];
   let editingId = null;
+  let currentExchangeRate = null;
+  let currentCurrency = 'TWD';
   const categories = {
     income: ['樂驛', '豐苒', '少觀所', '仁愛之家', '演講', '其他'],
     expense: ['固定支出', '飲食', '交通', '娛樂', '其他']
@@ -153,11 +172,23 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   const typeBtns = document.querySelectorAll('.type-btn');
   const categorySelect = document.getElementById('category-select');
   const amountInput = document.getElementById('amount-input');
+  const amountLabel = document.getElementById('amount-label');
   const dateInput = document.getElementById('date-input');
   const noteInput = document.getElementById('note-input');
   const noteLabel = document.getElementById('note-label');
   const deleteBtn = document.getElementById('btn-delete-transaction');
   const toast = document.getElementById('toast');
+  
+  const rateText = document.getElementById('exchange-rate-text');
+  const refreshRateBtn = document.getElementById('btn-refresh-rate');
+  const currencySwitch = document.getElementById('currency-switch');
+  const currencyBtns = document.querySelectorAll('.currency-btn');
+  const conversionHint = document.getElementById('conversion-hint');
+  const jpyStatsSection = document.getElementById('jpy-stats');
+  const jpyTotalJpyEl = document.getElementById('jpy-total-jpy');
+  const jpyTotalTwdEl = document.getElementById('jpy-total-twd');
+  const manualRateContainer = document.getElementById('manual-rate-container');
+  const manualRateInput = document.getElementById('manual-rate-input');
 
   // 4. 輔助函數
   const formatDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -166,6 +197,56 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     toast.textContent = msg;
     toast.style.display = 'block';
     setTimeout(() => toast.style.display = 'none', 2000);
+  };
+
+  // 匯率相關
+  async function fetchExchangeRate() {
+    refreshRateBtn.classList.add('spinning');
+    manualRateContainer.style.display = 'none';
+    try {
+      const apis = [
+        'https://v6.open.exchangerate-api.com/v6/latest/JPY',
+        'https://api.exchangerate.host/latest?base=JPY&symbols=TWD',
+        'https://open.er-api.com/v6/latest/JPY'
+      ];
+      
+      let rate = null;
+      for (const url of apis) {
+        try {
+          const res = await fetch(url);
+          if (!res.ok) continue;
+          const data = await res.json();
+          rate = data.rates?.TWD || data.conversion_rates?.TWD;
+          if (rate) break;
+        } catch (e) {
+          continue;
+        }
+      }
+
+      if (rate) {
+        currentExchangeRate = rate;
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        rateText.textContent = `目前匯率：1 JPY ≈ ${currentExchangeRate.toFixed(4)} TWD (${timeStr})`;
+        calculateConversion();
+      } else {
+        throw new Error('All APIs failed');
+      }
+    } catch (e) {
+      rateText.textContent = '匯率載入失敗';
+      manualRateContainer.style.display = 'flex';
+      currentExchangeRate = parseFloat(manualRateInput.value) || 0.22;
+      calculateConversion();
+    } finally {
+      refreshRateBtn.classList.remove('spinning');
+    }
+  }
+
+  refreshRateBtn.onclick = fetchExchangeRate;
+  
+  manualRateInput.oninput = (e) => {
+    currentExchangeRate = parseFloat(e.target.value) || 0.22;
+    calculateConversion();
   };
 
   // 5. 核心邏輯：載入資料
@@ -195,6 +276,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   function render() {
     let incomeSum = 0;
     let expenseSum = 0;
+    let monthJpySum = 0;
+    let monthJpyTwdSum = 0;
     const incomeMap = {};
     const expenseMap = {};
 
@@ -205,6 +288,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
       } else {
         expenseSum += t.amount;
         expenseMap[t.category] = (expenseMap[t.category] || 0) + t.amount;
+        if (t.currency === 'JPY') {
+          monthJpySum += t.amount_jpy || 0;
+          monthJpyTwdSum += t.amount;
+        }
       }
     });
 
@@ -234,15 +321,34 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     renderChart(incomeMap, incomeList, incomeSum, 'income');
     renderChart(expenseMap, expenseList, expenseSum, 'expense');
 
+    // 日幣統計
+    if (monthJpySum > 0) {
+      jpyStatsSection.style.display = 'block';
+      jpyTotalJpyEl.textContent = `¥${monthJpySum.toLocaleString()}`;
+      jpyTotalTwdEl.textContent = `NT$ ${monthJpyTwdSum.toLocaleString()}`;
+    } else {
+      jpyStatsSection.style.display = 'none';
+    }
+
     // 明細列表
-    listContainer.innerHTML = transactions.map(t => `
+    listContainer.innerHTML = transactions.map(t => {
+      const isJPY = t.currency === 'JPY';
+      const amountHtml = isJPY
+        ? `<div class="item-amount-wrapper">
+             <div class="item-amount ${t.type}">${t.type === 'income' ? '+' : '-'}¥${(t.amount_jpy||0).toLocaleString()}</div>
+             <div class="item-amount-twd">(NT$ ${t.amount.toLocaleString()})</div>
+           </div>`
+        : `<div class="item-amount ${t.type}">${t.type === 'income' ? '+' : '-'}${t.amount.toLocaleString()}</div>`;
+
+      return `
       <div class="transaction-item" data-id="${t.id}">
         <div class="item-date">${t.date.split('-').slice(1).join('/')}</div>
         <div class="item-note">${t.note || t.category}</div>
         <div class="item-category">${t.category}</div>
-        <div class="item-amount ${t.type}">${t.type === 'income' ? '+' : '-'}${t.amount.toLocaleString()}</div>
+        ${amountHtml}
       </div>
-    `).join('') || '<div class="text-muted" style="text-align:center; padding: 2rem;">本月尚無明細</div>';
+      `;
+    }).join('') || '<div class="text-muted" style="text-align:center; padding: 2rem;">本月尚無明細</div>';
   }
 
   // 6. Modal 與 表單邏輯
@@ -255,7 +361,17 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     updateTypeUI(type);
     updateCategories(type, item ? item.category : '');
     
-    amountInput.value = item ? item.amount : '';
+    // 幣別處理
+    const itemCurrency = (item && item.currency) ? item.currency : 'TWD';
+    setCurrency(itemCurrency);
+    
+    if (itemCurrency === 'JPY') {
+      amountInput.value = item ? item.amount_jpy : '';
+    } else {
+      amountInput.value = item ? item.amount : '';
+    }
+    calculateConversion();
+
     dateInput.value = item ? item.date : formatDate(new Date());
     noteInput.value = item ? item.note : '';
     
@@ -266,6 +382,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     typeBtns.forEach(btn => {
       btn.classList.toggle('active', btn.dataset.type === type);
     });
+    if (type === 'expense') {
+      currencySwitch.style.display = 'flex';
+    } else {
+      currencySwitch.style.display = 'none';
+      setCurrency('TWD');
+    }
   }
 
   function updateCategories(type, selectedValue = '') {
@@ -280,6 +402,39 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     noteInput.required = isOther;
     noteInput.placeholder = isOther ? '請說明具體來源/類別' : '選填';
   }
+
+  function setCurrency(cur) {
+    currentCurrency = cur;
+    currencyBtns.forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.currency === cur);
+    });
+    if (cur === 'JPY') {
+      amountLabel.textContent = '金額 (日幣 ¥)';
+      conversionHint.style.display = 'block';
+    } else {
+      amountLabel.textContent = '金額 (台幣)';
+      conversionHint.style.display = 'none';
+    }
+    calculateConversion();
+  }
+
+  function calculateConversion() {
+    if (currentCurrency === 'JPY') {
+      const val = parseInt(amountInput.value);
+      if (!isNaN(val) && currentExchangeRate) {
+        const twd = Math.round(val * currentExchangeRate);
+        conversionHint.textContent = `≈ NT$ ${twd.toLocaleString()} (匯率 ${currentExchangeRate.toFixed(4)})`;
+      } else {
+        conversionHint.textContent = '';
+      }
+    }
+  }
+
+  currencyBtns.forEach(btn => {
+    btn.onclick = () => setCurrency(btn.dataset.currency);
+  });
+
+  amountInput.oninput = calculateConversion;
 
   categorySelect.onchange = checkNoteRequired;
 
@@ -305,10 +460,27 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   form.onsubmit = async (e) => {
     e.preventDefault();
     const type = document.querySelector('.type-btn.active').dataset.type;
+    const inputVal = parseInt(amountInput.value);
+    
+    let amount = inputVal;
+    let amount_jpy = null;
+    let exchange_rate = null;
+    let currency = 'TWD';
+
+    if (currentCurrency === 'JPY') {
+      currency = 'JPY';
+      amount_jpy = inputVal;
+      exchange_rate = currentExchangeRate;
+      amount = Math.round(inputVal * (currentExchangeRate || 0.21)); // 若無匯率給個預設值
+    }
+
     const payload = {
       type,
       category: categorySelect.value,
-      amount: parseInt(amountInput.value),
+      amount,
+      amount_jpy,
+      exchange_rate,
+      currency,
       date: dateInput.value,
       note: noteInput.value
     };
@@ -352,6 +524,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   };
 
   // 8. 初始化
+  fetchExchangeRate();
   loadData();
 })();
 </script>

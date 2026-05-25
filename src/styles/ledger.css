@@ -65,6 +65,69 @@
   border: none;
 }
 
+/* 匯率顯示 */
+.exchange-rate-display {
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-refresh-rate {
+  background: none;
+  border: none;
+  color: var(--accent-color);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+}
+
+.btn-refresh-rate:hover {
+  background: rgba(196, 149, 106, 0.1);
+}
+
+.btn-refresh-rate.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+.manual-rate-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 10px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  gap: 6px;
+}
+
+.manual-rate-input {
+  background: var(--input-bg);
+  border: 1px solid var(--divider-color);
+  color: var(--text-primary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  width: 80px;
+  text-align: center;
+  outline: none;
+  font-family: inherit;
+}
+
+.manual-rate-input:focus {
+  border-color: var(--accent-color);
+}
+
 /* 月份導航 */
 .month-nav {
   display: flex;
@@ -175,6 +238,28 @@
 .income-bar { background: var(--income-color); }
 .expense-bar { background: var(--expense-color); }
 
+/* 日幣統計卡片 */
+.jpy-stats-section {
+  background: rgba(44, 30, 20, 0.8);
+  border: 1px dashed var(--divider-color);
+  padding: 15px;
+  border-radius: 8px;
+  text-align: center;
+  margin-top: 15px;
+  display: none; /* 預設隱藏 */
+}
+
+.jpy-stats-text {
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.jpy-stats-twd {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
 /* 明細列表 */
 .list-section {
   background: var(--card-bg);
@@ -230,6 +315,20 @@
 
 .item-amount.income { color: var(--income-color); }
 .item-amount.expense { color: var(--expense-color); }
+
+.item-amount-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.item-amount-twd {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  margin-top: 2px;
+  font-weight: normal;
+}
 
 /* Modal */
 .modal-overlay {
@@ -287,6 +386,39 @@
 
 .form-control:focus {
   border-color: var(--accent-color);
+}
+
+/* 幣別切換 */
+.currency-switch {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.currency-btn {
+  flex: 1;
+  padding: 6px;
+  border: 1px solid var(--divider-color);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.9rem;
+}
+
+.currency-btn.active {
+  background: rgba(196, 149, 106, 0.15);
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+/* 匯率換算提示 */
+.conversion-hint {
+  font-size: 0.85rem;
+  color: var(--accent-color);
+  margin-top: 6px;
+  min-height: 20px;
 }
 
 .type-switch {

@@ -285,6 +285,8 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     let error;
     let newPost: any = null;
 
+    console.log('發送的 Payload:', postData);
+
     if (id) {
       const { error: err } = await supabase.from('posts').update(postData).eq('id', id);
       error = err;
@@ -295,7 +297,8 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     }
 
     if (error) {
-      alert('儲存失敗');
+      console.error('Supabase 儲存錯誤:', error);
+      alert(`儲存失敗: ${error.message || '未知錯誤'}`);
       if (savePostBtn) (savePostBtn as HTMLButtonElement).disabled = false;
     } else {
       // 靜默呼叫 Webhook

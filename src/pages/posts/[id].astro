@@ -1,5 +1,4 @@
 ---
-export const prerender = true;
 import Layout from '../../layouts/Layout.astro';
 import Starfield from '../../components/Starfield.astro';
 import ThemeToggle from '../../components/ThemeToggle.astro';
@@ -7,47 +6,25 @@ import { supabase } from '../../lib/supabase-client';
 import { marked } from 'marked';
 import '../../styles/posts.css';
 
-export async function getStaticPaths() {
-  // Build Time: 抓取所有文章（包含私有，但我們只會靜態渲染公開內容）
-  const { data: posts, error } = await supabase
-    .from('posts')
-    .select('id, created_at')
-    .order('created_at', { ascending: true });
-
-  if (error || !posts) return [];
-
-  return posts.map((post, index) => ({
-    params: { id: post.id.toString() },
-    props: { pageNum: index + 1 }, // 第 N 頁
-  }));
-}
-
 const { id } = Astro.params;
-const { pageNum } = Astro.props;
 
-// Build Time: 嘗試抓取內容 (僅針對 public 文章)
 let post = null;
 let htmlContent = '';
 
-try {
-  const { data, error } = await supabase
-    .from('posts')
-    .select('*')
-    .eq('id', id)
-    .single();
+const { data, error } = await supabase
+  .from('posts')
+  .select('*')
+  .eq('id', id)
+  .single();
 
-  if (!error && data) {
-    if (data.visibility === 'public') {
-      post = data;
-      htmlContent = await marked.parse((data.content || '').replace(/\n/g, '\n\n'));
-    } else {
-      // 非公開文章，僅保留 meta 資料，內容留空等客戶端抓取
-      post = { ...data, content: '' }; 
-    }
-  }
-} catch (err) {
-  console.warn('⚠️ Build Warning: 單篇短文 Supabase 連線失敗。');
+if (error || !data) {
+  return Astro.redirect('/404');
 }
+
+// Server-side: 只抓資料不檢查權限，交給前端處理
+
+post = data;
+htmlContent = await marked.parse((data.content || '').replace(/\n/g, '\n\n'));
 
 const visibilityMap = {
   public: { text: '公開', color: 'var(--tag-public)' },
@@ -70,10 +47,9 @@ const visibilityMap = {
         <div class="notebook-content">
           <nav class="posts-nav">
             <a href="/posts" class="nav-link">← 返回短文集</a>
-            <span class="nav-page-num">第 {pageNum} 頁</span>
           </nav>
 
-          <article id="post-article">
+          <article id="post-article" style="display: none;">
             {post ? (
               <>
                 <div class="post-detail-header">
@@ -116,13 +92,7 @@ const visibilityMap = {
                 )}
 
                 <div class="post-detail-content" id="post-body">
-                  {post.visibility === 'public' ? (
-                    <div set:html={htmlContent} />
-                  ) : (
-                    <div class="loading-content">
-                      <p>🔒 此內容僅限權限使用者查看，正在驗證身分...</p>
-                    </div>
-                  )}
+                  <div set:html={htmlContent} />
                 </div>
               </>
             ) : (
@@ -137,50 +107,40 @@ const visibilityMap = {
   </div>
 </Layout>
 
-<script is:inline define:vars={{ postId: id, initialVisibility: post?.visibility }}>
+<script is:inline define:vars={{ post }}>
   // 1. 處理主題 (防止閃爍)
   const savedTheme = localStorage.getItem('tcr-theme') || 'day';
   document.documentElement.classList.toggle('theme-night', savedTheme === 'night');
   document.body.classList.add('posts-page');
+  window.__POST__ = post;
 </script>
 
 <script>
   import { supabase } from '../../lib/supabase-client';
-  import { marked } from 'marked';
 
-  const postId = window.location.pathname.split('/').pop();
-  const postBody = document.getElementById('post-body');
+  const post = window.__POST__;
+  const postArticle = document.getElementById('post-article');
 
-  async function checkAndFetchContent() {
-    // 如果是 public 文章且已有內容，就不需要再次抓取
-    if (postBody && !postBody.querySelector('.loading-content')) {
+  async function checkPermission() {
+    if (!postArticle) return;
+
+    if (post.visibility === 'public') {
+      postArticle.style.display = 'block';
       initSlideshow();
       return;
     }
 
+    // 非公開文章，檢查 session
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) {
-      if (postBody) postBody.innerHTML = '<p class="empty-state">🔒 請先登入管理員帳號以查看此文章</p>';
+      window.location.href = `/login?from=/posts/${post.id}`;
       return;
     }
 
-    const { data, error } = await supabase
-      .from('posts')
-      .select('content')
-      .eq('id', postId)
-      .single();
-
-    if (!error && data && postBody) {
-      const contentWithBreaks = data.content.replace(/\n/g, '\n\n');
-      const html = await marked.parse(contentWithBreaks);
-      postBody.innerHTML = `<div>${html}</div>`;
-      initSlideshow();
-    } else if (error) {
-      if (postBody) postBody.innerHTML = '<p class="empty-state">權限不足或載入失敗</p>';
-    }
+    postArticle.style.display = 'block';
+    initSlideshow();
   }
 
-  // 幻燈片控制邏輯
   function initSlideshow() {
     let slideIndex = 0;
     const slides = document.querySelectorAll('.slide');
@@ -222,7 +182,7 @@ const visibilityMap = {
     showSlides(0);
   }
 
-  checkAndFetchContent();
+  checkPermission();
 </script>
 
 <style>
