@@ -600,6 +600,9 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
   }
 
   function renderSubFilterBar() {
+    console.log('renderSubFilterBar 被呼叫了！');
+    console.log('currentMainFilter:', currentMainFilter);
+
     const subContainer = document.getElementById('sub-categories-filter');
     if (!subContainer) return;
 
@@ -609,7 +612,30 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
       return;
     }
 
-    const subs = categoriesCache.filter(c => String(c.parent_id) === String(currentMainFilter));
+    let subs: any[] = [];
+
+    if (currentMainFilter === 'wishlist') {
+      let wishlistItems: any[] = [];
+      if (isAdminUser) {
+        wishlistItems = itemsCache.filter(item => item.owner_wishlist === true);
+      } else if (isAllowedUser && currentUser) {
+        const userWishlistIds = allWishlistItems
+          .filter(w => w.user_id === currentUser.id)
+          .map(w => String(w.japan_item_id));
+        wishlistItems = itemsCache.filter(item => userWishlistIds.includes(String(item.id)));
+      }
+      const catIds = [...new Set(wishlistItems.map(item => String(item.category_id)))];
+      subs = catIds.map(id => categoriesCache.find(c => String(c.id) === id)).filter(Boolean);
+      
+      console.log('--- Debug: renderSubFilterBar ---');
+      console.log('currentMainFilter:', currentMainFilter);
+      console.log('願望清單商品數量:', wishlistItems.length);
+      console.log('提取的分類:', subs);
+      console.log('subContainer 元素:', subContainer);
+    } else {
+      subs = categoriesCache.filter(c => String(c.parent_id) === String(currentMainFilter));
+    }
+
     if (subs.length === 0) {
       subContainer.style.display = 'none';
       subContainer.innerHTML = '';
@@ -617,9 +643,9 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
     }
 
     subContainer.style.display = 'flex';
-    let html = `<button class="tag-btn ${currentSubFilter === 'all' ? 'active' : ''}" data-sub-id="all">全部</button>`;
+    let html = `<button class="tag-btn sub-tag-btn ${currentSubFilter === 'all' ? 'active' : ''}" data-sub-id="all">全部</button>`;
     subs.forEach(sub => {
-      html += `<button class="tag-btn ${String(sub.id) === String(currentSubFilter) ? 'active' : ''}" data-sub-id="${sub.id}">${sub.name}</button>`;
+      html += `<button class="tag-btn sub-tag-btn ${String(sub.id) === String(currentSubFilter) ? 'active' : ''}" data-sub-id="${sub.id}">${sub.name}</button>`;
     });
     subContainer.innerHTML = html;
 
@@ -670,6 +696,10 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
         filtered = filtered.filter(item => userWishlistIds.includes(String(item.id)));
       } else {
         filtered = [];
+      }
+
+      if (currentSubFilter !== 'all') {
+        filtered = filtered.filter(item => String(item.category_id) === String(currentSubFilter));
       }
     } else if (currentMainFilter === 'recommend') {
       filtered = filtered.filter(item => item.note === '網友推薦');

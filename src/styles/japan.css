@@ -224,6 +224,11 @@
   box-shadow: 0 4px 12px rgba(112, 144, 184, 0.3);
 }
 
+.sub-tag-btn {
+  font-size: 0.85rem;
+  padding: 4px 12px;
+}
+
 .admin-actions {
   display: flex;
   gap: 10px;
