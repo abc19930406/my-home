@@ -88,12 +88,13 @@
   - 非白名單用戶登入後自動被擋下並登出
   - **管理者功能**：
     - 商品卡片 ❤️/🤍 勾選控制 owner_wishlist
-    - 篩選列「❤️ 我想買」只顯示自己勾選的商品
+    - 篩選列「❤️ 我想買」→ 第二列動態出現願望清單內的分類標籤
+    - 雙層篩選：「❤️ 我想買」+ 子分類（如「零食」）同時過濾
     - 篩選列「👥 朋友清單」下拉選單，可查看每個朋友的勾選清單
     - 商品卡片顯示勾選人數，點擊可看完整名單
   - **朋友/家人功能**：
     - 商品卡片 📌 勾選，記錄存入 wishlist_items 資料表
-    - 篩選列「❤️ 我想買」顯示自己勾選的商品
+    - 篩選列「❤️ 我想買」→ 第二列動態出現自己願望清單內的分類
     - 商品卡片顯示勾選人數（不顯示名單）
   - 訪客（未登入）：純瀏覽，看不到任何勾選功能
 
@@ -169,6 +170,10 @@
     - Google OAuth Callback URL：https://ltmrkdldmgysczfnidra.supabase.co/auth/v1/callback
     - 新增白名單用戶：Supabase Table Editor → allowed_users → Insert row
     - 新增家人帳號：Supabase Authentication → Users → Add user
+20. **日本收藏雙層篩選**：
+    - 「❤️ 我想買」點選後動態產生第二列子分類
+    - 子分類只顯示願望清單內實際有的分類
+    - 管理者篩選 owner_wishlist，一般用戶篩選自己的 wishlist_items
 
 ---
 
