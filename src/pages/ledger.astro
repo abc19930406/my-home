@@ -268,19 +268,31 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     manualRateContainer.style.display = 'none';
     try {
       const apis = [
-        'https://v6.open.exchangerate-api.com/v6/latest/JPY',
-        'https://api.exchangerate.host/latest?base=JPY&symbols=TWD',
-        'https://open.er-api.com/v6/latest/JPY'
+        {
+          url: 'https://api.frankfurter.app/latest?from=JPY&to=TWD',
+          parse: (data) => data.rates?.TWD
+        },
+        {
+          url: 'https://open.er-api.com/v6/latest/JPY',
+          parse: (data) => data.rates?.TWD
+        },
+        {
+          url: 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/jpy.json',
+          parse: (data) => data.jpy?.twd
+        }
       ];
       
       let rate = null;
-      for (const url of apis) {
+      for (const api of apis) {
         try {
-          const res = await fetch(url);
+          const res = await fetch(api.url);
           if (!res.ok) continue;
           const data = await res.json();
-          rate = data.rates?.TWD || data.conversion_rates?.TWD;
-          if (rate) break;
+          const parsedRate = api.parse(data);
+          if (parsedRate && parsedRate > 0) {
+            rate = parsedRate;
+            break;
+          }
         } catch (e) {
           continue;
         }

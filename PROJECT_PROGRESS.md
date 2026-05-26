@@ -57,9 +57,19 @@
 
 ### ✅ 記帳系統（/ledger）
 - 私密頁面，未登入導向 /login
-- 收入來源：樂驛、豐苒、少觀所、仁愛之家、演講、其他
-- 支出分類：固定支出、飲食、交通、娛樂、其他
 - 月份導航、三張指標卡片、橫條圖、明細列表
+- **自訂類別管理**（完整上線）：
+  - 收入來源和支出分類改為動態讀取資料庫
+  - 登入後右上角顯示「⚙️ 管理類別」按鈕
+  - 管理 Modal 分收入/支出兩個頁籤
+  - 可新增、編輯、刪除、上下排序類別
+  - 「其他」類別不可刪除
+  - 有使用中的類別不可刪除
+  - 修改類別名稱時同步更新 transactions 歷史記錄
+- **橫條圖點擊「其他」顯示明細**：
+  - 點擊支出/收入橫條圖的「其他」bar
+  - 彈出 Modal 顯示該月所有「其他」明細
+  - 顯示日期、備註、金額
 - **日幣記帳功能**：
   - 即時匯率：自動抓取 JPY→TWD 匯率（多重 API 備援）
   - 所有 API 失敗時顯示手動輸入匯率框（預設 0.22）
@@ -85,11 +95,13 @@
 - **願望清單功能**（完整上線）：
   - 三種登入方式：管理者帳號、Google OAuth、Email/Password
   - 白名單機制（allowed_users 資料表，管理者手動管理）
+  - 白名單 email 比對使用 ilike（大小寫不敏感）
   - 非白名單用戶登入後自動被擋下並登出
+  - Google OAuth 同意畫面已設為「實際運作中」（正式版）
   - **管理者功能**：
     - 商品卡片 ❤️/🤍 勾選控制 owner_wishlist
     - 篩選列「❤️ 我想買」→ 第二列動態出現願望清單內的分類標籤
-    - 雙層篩選：「❤️ 我想買」+ 子分類（如「零食」）同時過濾
+    - 雙層篩選：「❤️ 我想買」+ 子分類同時過濾
     - 篩選列「👥 朋友清單」下拉選單，可查看每個朋友的勾選清單
     - 商品卡片顯示勾選人數，點擊可看完整名單
   - **朋友/家人功能**：
@@ -163,17 +175,24 @@
 15. **spots.place_id**：從 Places API New 搜尋加入的景點會儲存 place_id
 16. **posts 單篇頁為 SSR**：已移除 prerender = true，權限控制在 client side JS
 17. **posts RLS**：已開放 SELECT 給所有人，private/friends 內容保護靠前端 JS
-18. **記帳日幣功能**：匯率用多重 API 備援，本地開發環境可能無法連線，部署後正常
+18. **記帳匯率 API**：多重備援，本地開發環境可能部分 API 失敗，部署後正常
 19. **日本收藏多角色登入**：
     - 管理者判斷：session.user.email === PUBLIC_ADMIN_EMAIL
-    - 白名單用戶：查詢 allowed_users 資料表確認 email
+    - 白名單用戶：查詢 allowed_users 資料表，用 ilike 做大小寫不敏感比對
     - Google OAuth Callback URL：https://ltmrkdldmgysczfnidra.supabase.co/auth/v1/callback
+    - Supabase Site URL：https://my-home-blond-tau.vercel.app
+    - Redirect URLs：https://my-home-blond-tau.vercel.app/** 和 http://localhost:4321/**
+    - Google OAuth 同意畫面需設為「實際運作中」才能讓所有 Google 帳號登入
+    - 朋友需用 Safari 或 Chrome 開啟，不能用 App 內建瀏覽器
     - 新增白名單用戶：Supabase Table Editor → allowed_users → Insert row
     - 新增家人帳號：Supabase Authentication → Users → Add user
 20. **日本收藏雙層篩選**：
     - 「❤️ 我想買」點選後動態產生第二列子分類
     - 子分類只顯示願望清單內實際有的分類
-    - 管理者篩選 owner_wishlist，一般用戶篩選自己的 wishlist_items
+21. **記帳類別管理**：
+    - income_categories 和 expense_categories 資料表動態管理
+    - 修改類別名稱時同步更新 transactions 歷史記錄
+    - 「其他」類別不可刪除
 
 ---
 
@@ -187,6 +206,8 @@
 | status | 現在狀態（id=1 固定） |
 | daily | Polaroid 底片日記 |
 | transactions | 記帳明細（含 currency、amount_jpy、exchange_rate） |
+| income_categories | 收入來源（動態管理） |
+| expense_categories | 支出分類（動態管理） |
 | japan_categories | 日本收藏分類（兩層） |
 | japan_items | 日本收藏品項（含 owner_wishlist） |
 | allowed_users | 日本收藏白名單（email + display_name） |
