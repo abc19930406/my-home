@@ -26,6 +26,14 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 ---
 
 <Layout title="短文列表 | The Corner Table">
+  <div class="top-right-auth-container">
+    <div id="top-auth-guest" style="display: none;">
+      <a href="/login?from=/posts" class="btn-top-auth">🔑 登入</a>
+    </div>
+    <div id="top-auth-user" style="display: none;">
+      <button id="btn-top-logout" class="btn-top-auth">登出</button>
+    </div>
+  </div>
   <div class="bg-layer bg-day"></div>
   <div class="bg-layer bg-night"></div>
   <div class="halo-sun"></div>
@@ -122,10 +130,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
             {publicPosts.length === 0 && <p class="empty-state" id="empty-msg">尚無公開短文</p>}
           </div>
 
-          <!-- 低調登入連結 -->
-          <div id="login-hint" class="login-hint">
-            <a href="/login?from=/posts" class="nav-link">登入</a>
-          </div>
+
         </div>
       </div>
     </div>
@@ -167,18 +172,27 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   document.body.classList.add('posts-page');
 
   // 2. 權限檢查：如果是管理員，顯示管理功能
+  const topAuthGuest = document.getElementById('top-auth-guest');
+  const topAuthUser = document.getElementById('top-auth-user');
+  
+  document.getElementById('btn-top-logout')?.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    window.location.reload();
+  });
+
   async function checkAdmin() {
     const { data: { session } } = await supabase.auth.getSession();
-    const loginHint = document.getElementById('login-hint');
     
     if (session) {
       document.querySelectorAll('.admin-only').forEach(el => {
         (el as HTMLElement).style.display = 'flex';
       });
-      if (loginHint) loginHint.style.display = 'none';
+      if (topAuthGuest) topAuthGuest.style.display = 'none';
+      if (topAuthUser) topAuthUser.style.display = 'block';
       return true;
     }
-    if (loginHint) loginHint.style.display = 'block';
+    if (topAuthGuest) topAuthGuest.style.display = 'block';
+    if (topAuthUser) topAuthUser.style.display = 'none';
     return false;
   }
 

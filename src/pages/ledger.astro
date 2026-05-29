@@ -13,7 +13,15 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
       <header class="ledger-header">
         <div class="header-top">
           <a href="/" class="nav-back">← Back</a>
-          <button id="btn-manage-categories" class="btn-manage-categories" style="display: none;">⚙️ 管理類別</button>
+          <div class="header-top-right" style="display: flex; gap: 0.5rem; align-items: center;">
+            <div id="top-auth-guest" style="display: none;">
+              <a href="/login?from=/ledger" class="btn-top-auth">🔑 登入</a>
+            </div>
+            <button id="btn-manage-categories" class="btn-manage-categories" style="display: none;">⚙️ 管理類別</button>
+            <div id="top-auth-user" style="display: none;">
+              <button id="btn-top-logout" class="btn-top-auth">登出</button>
+            </div>
+          </div>
         </div>
         <h1 class="page-title">記帳</h1>
         <p class="page-subtitle">收支紀錄・薪資來源</p>
@@ -89,9 +97,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
       </section>
 
       <!-- 底部連結 -->
-      <div id="login-hint" class="login-hint" style="display: none;">
-        <a href="/login?from=/ledger" class="nav-link">管理</a>
-      </div>
+
     </div>
   </div>
 
@@ -188,10 +194,20 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   // 1. 權限保護
   const { data: { session } } = await supabase.auth.getSession();
   const btnManageCategories = document.getElementById('btn-manage-categories');
+  const topAuthGuest = document.getElementById('top-auth-guest');
+  const topAuthUser = document.getElementById('top-auth-user');
+
+  document.getElementById('btn-top-logout')?.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    window.location.reload();
+  });
+
   if (!session) {
+    if (topAuthGuest) topAuthGuest.style.display = 'block';
     window.location.href = '/login?from=/ledger';
     return;
   } else {
+    if (topAuthUser) topAuthUser.style.display = 'block';
     if (btnManageCategories) btnManageCategories.style.display = 'block';
   }
 

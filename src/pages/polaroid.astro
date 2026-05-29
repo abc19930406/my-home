@@ -8,6 +8,14 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 ---
 
 <Layout title="Polaroid | 一天一句">
+  <div class="top-right-auth-container">
+    <div id="top-auth-guest" style="display: none;">
+      <a href="/login?from=/polaroid" class="btn-top-auth">🔑 登入</a>
+    </div>
+    <div id="top-auth-user" style="display: none;">
+      <button id="btn-top-logout" class="btn-top-auth">登出</button>
+    </div>
+  </div>
   <style is:global>
     html, body { background-color: #1A1410 !important; }
   </style>
@@ -88,9 +96,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
       </section>
     </div>
 
-    <div id="login-hint" class="login-hint">
-      <a href="/login?from=/polaroid" class="nav-link">管理</a>
-    </div>
+
   </div>
 
   <div id="toast" class="toast"></div>
@@ -127,7 +133,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   const deleteBtn = document.getElementById('delete-daily');
   const overviewList = document.getElementById('overview-list');
   const monthText = document.getElementById('current-month-text');
-  const loginHint = document.getElementById('login-hint');
+  const topAuthGuest = document.getElementById('top-auth-guest');
+  const topAuthUser = document.getElementById('top-auth-user');
+  
+  document.getElementById('btn-top-logout')?.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    window.location.reload();
+  });
   const toast = document.getElementById('toast');
 
   // 4. 輔助函數
@@ -322,19 +334,20 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     };
   }
 
-  // 8. 權限檢查
   async function checkAuth() {
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
       isAdmin = true;
       if (adminZone) adminZone.style.display = 'block';
-      if (loginHint) loginHint.style.display = 'none';
+      if (topAuthGuest) topAuthGuest.style.display = 'none';
+      if (topAuthUser) topAuthUser.style.display = 'block';
       // 重新載入當前日期資料以更新輸入框
       loadDateData();
     } else {
       isAdmin = false;
       if (adminZone) adminZone.style.display = 'none';
-      if (loginHint) loginHint.style.display = 'block';
+      if (topAuthGuest) topAuthGuest.style.display = 'block';
+      if (topAuthUser) topAuthUser.style.display = 'none';
     }
   }
 

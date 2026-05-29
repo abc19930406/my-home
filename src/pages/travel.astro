@@ -66,6 +66,14 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 ---
 
 <Layout title="旅行地圖 | The Corner Table">
+  <div class="top-right-auth-container">
+    <div id="top-auth-guest" style="display: none;">
+      <a href="/login?from=/travel" class="btn-top-auth">🔑 登入</a>
+    </div>
+    <div id="top-auth-user" style="display: none;">
+      <button id="btn-top-logout" class="btn-top-auth">登出</button>
+    </div>
+  </div>
   <!-- 全域背景覆蓋：確保 Layout 的深色背景被清新白底暖木色覆蓋 -->
   <style is:global>
     html, body {
@@ -195,10 +203,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         </div>
       </section>
 
-      <!-- 6. 底部低調「管理」登入連結 -->
-      <footer class="login-hint" id="login-hint">
-        <a href="/login?from=/travel" class="nav-link">管理</a>
-      </footer>
+
 
     </div>
   </div>
@@ -1355,15 +1360,27 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
       // 4. 偵測管理員登入狀態
       const { data: { session } } = await supabase.auth.getSession();
+      
+      const topAuthGuest = document.getElementById('top-auth-guest');
+      const topAuthUser = document.getElementById('top-auth-user');
+      
+      document.getElementById('btn-top-logout')?.addEventListener('click', async () => {
+        await supabase.auth.signOut();
+        window.location.reload();
+      });
+
       if (session) {
         isAdminUser = true;
         document.querySelectorAll('.admin-only').forEach(el => {
           el.style.display = 'inline-flex';
         });
-        const loginHint = document.getElementById('login-hint');
-        if (loginHint) loginHint.style.display = 'none';
+        if (topAuthGuest) topAuthGuest.style.display = 'none';
+        if (topAuthUser) topAuthUser.style.display = 'block';
 
         console.log('🔑 管理員已登入，啟用前台管理介面。');
+      } else {
+        if (topAuthGuest) topAuthGuest.style.display = 'block';
+        if (topAuthUser) topAuthUser.style.display = 'none';
       }
 
       // 5. 初次繪製
