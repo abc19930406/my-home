@@ -60,6 +60,15 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
 ---
 
 <Layout title="日本收藏 | The Corner Table">
+  <div class="top-right-auth-container">
+    <div id="auth-guest" style="display: none;">
+      <button id="btn-login-modal" class="btn-top-auth">🔑 登入以加入願望清單</button>
+    </div>
+    <div id="auth-user" class="auth-user-info" style="display: none;">
+      <span id="auth-user-name"></span>
+      <button id="btn-logout" class="btn-top-auth">登出</button>
+    </div>
+  </div>
   <!-- 全域背景覆蓋：確保 Layout 的深色背景被晨霧富士的粉藍灰覆蓋 -->
   <style is:global>
     html, body {
@@ -80,16 +89,7 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
         <h1 class="page-title">日本收藏</h1>
         <p class="page-subtitle">藥妝・零食・伴手禮・景點</p>
         
-        <!-- 登入狀態區 -->
-        <div class="header-actions-right">
-          <div id="auth-guest" style="display: none;">
-            <button id="btn-login-modal" class="btn-header-auth">🔑 登入以加入願望清單</button>
-          </div>
-          <div id="auth-user" class="auth-user-info" style="display: none;">
-            <span id="auth-user-name"></span>
-            <button id="btn-logout" class="btn-header-auth">登出</button>
-          </div>
-        </div>
+
       </header>
 
       <!-- 探索日本搜尋區 -->
@@ -295,10 +295,7 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
         </div>
       </div>
 
-      <!-- 6. 底部低調「管理」登入連結 -->
-      <footer class="login-hint" id="login-hint">
-        <a href="/login?from=/japan" class="nav-link">管理</a>
-      </footer>
+
 
     </div>
   </div>
