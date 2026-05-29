@@ -255,7 +255,7 @@
   transition: width 0.6s cubic-bezier(0.17, 0.67, 0.83, 0.67);
 }
 
-.clickable-other {
+.clickable-category {
   cursor: pointer;
   transition: transform 0.2s, background 0.2s;
   padding: 4px;
@@ -264,7 +264,7 @@
   margin-bottom: 0.8rem;
 }
 
-.clickable-other:hover {
+.clickable-category:hover {
   background: rgba(255,255,255,0.05);
   transform: translateX(4px);
 }

@@ -356,10 +356,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
       const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
       container.innerHTML = sorted.map(([cat, val]) => {
         const percent = total > 0 ? (val / total * 100) : 0;
-        const isOther = cat === '其他';
-        const clickClass = isOther ? 'clickable-other' : '';
         return `
-          <div class="chart-item ${clickClass}" data-category="${cat}" data-type="${type}">
+          <div class="chart-item clickable-category" data-category="${cat}" data-type="${type}">
             <div class="chart-info">
               <span>${cat}</span>
               <span>${formatCurrency(val)}</span>
@@ -404,29 +402,27 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     }).join('') || '<div class="text-muted" style="text-align:center; padding: 2rem;">本月尚無明細</div>';
   }
 
-  // 其他明細點擊邏輯
+  // 分類明細點擊邏輯
   const handleChartClick = (e) => {
-    const itemEl = e.target.closest('.clickable-other');
+    const itemEl = e.target.closest('.clickable-category');
     if (!itemEl) return;
     const cat = itemEl.dataset.category;
     const type = itemEl.dataset.type;
     
-    if (cat === '其他') {
-      const filtered = transactions.filter(t => t.type === type && t.category === cat);
-      otherDetailsTitle.textContent = `其他${type === 'income' ? '收入' : '支出'}明細 - ${monthText.textContent}`;
-      otherDetailsList.innerHTML = filtered.map(t => {
-        const amt = t.currency === 'JPY' ? `¥${(t.amount_jpy||0).toLocaleString()} (NT$${t.amount.toLocaleString()})` : `NT$${t.amount.toLocaleString()}`;
-        const noteText = t.note ? t.note : '<span class="text-muted">無備註</span>';
-        return `
-          <div class="other-detail-item">
-            <div class="detail-date">${t.date.split('-').slice(1).join('/')}</div>
-            <div class="detail-note">${noteText}</div>
-            <div class="detail-amount ${t.type}">${t.type === 'income' ? '+' : '-'}${amt}</div>
-          </div>
-        `;
-      }).join('') || '<div class="text-muted text-center" style="padding: 1rem;">無紀錄</div>';
-      otherDetailsModal.style.display = 'flex';
-    }
+    const filtered = transactions.filter(t => t.type === type && t.category === cat);
+    otherDetailsTitle.textContent = `${cat}明細 - ${monthText.textContent}`;
+    otherDetailsList.innerHTML = filtered.map(t => {
+      const amt = t.currency === 'JPY' ? `¥${(t.amount_jpy||0).toLocaleString()} (NT$${t.amount.toLocaleString()})` : `NT$${t.amount.toLocaleString()}`;
+      const noteText = t.note ? t.note : '<span class="text-muted">無備註</span>';
+      return `
+        <div class="other-detail-item">
+          <div class="detail-date">${t.date.split('-').slice(1).join('/')}</div>
+          <div class="detail-note">${noteText}</div>
+          <div class="detail-amount ${t.type}">${t.type === 'income' ? '+' : '-'}${amt}</div>
+        </div>
+      `;
+    }).join('') || '<div class="text-muted text-center" style="padding: 1rem;">無紀錄</div>';
+    otherDetailsModal.style.display = 'flex';
   };
   incomeList.onclick = handleChartClick;
   expenseList.onclick = handleChartClick;
