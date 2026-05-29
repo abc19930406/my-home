@@ -8,9 +8,24 @@ export default defineConfig({
   output: 'server',
   adapter: vercel(),
   vite: {
-    plugins: [tailwindcss()],
+    plugins: [
+      tailwindcss(),
+      {
+        name: 'remove-modulepreload',
+        transformIndexHtml(html) {
+          // 從最終 HTML 移除所有 modulepreload link 標籤
+          return html.replace(
+            /<link[^>]*rel="modulepreload"[^>]*>/g,
+            ''
+          );
+        }
+      }
+    ],
     build: {
-      modulePreload: false
+      modulePreload: {
+        polyfill: false,
+        resolveDependencies: () => []
+      }
     }
   }
 });
