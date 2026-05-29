@@ -103,7 +103,17 @@ const formatShortDate = (dateStr: string) => {
 <script define:vars={{ webhookUrl, supabaseUrl, supabaseAnonKey }}>
 (async () => {
   // 動態匯入 Supabase SDK
-  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
+  const waitForSupabase = () => new Promise(resolve => {
+    if (window._supabaseCreateClient) return resolve();
+    const interval = setInterval(() => {
+      if (window._supabaseCreateClient) {
+        clearInterval(interval);
+        resolve();
+      }
+    }, 50);
+  });
+  await waitForSupabase();
+  const createClient = window._supabaseCreateClient;
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
   // 1. 偵測登入狀態

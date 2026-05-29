@@ -36,6 +36,12 @@ import '../styles/global.css';
 				navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW registration failed:', err));
 			}
 		</script>
+		
+		<!-- Supabase 全域載入 -->
+		<script type="module">
+			import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+			window._supabaseCreateClient = createClient;
+		</script>
 	</head>
 	<body>
 		<slot />

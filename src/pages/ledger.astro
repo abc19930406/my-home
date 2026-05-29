@@ -177,7 +177,17 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 
 <script define:vars={{ supabaseUrl, supabaseAnonKey }}>
 (async () => {
-  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
+  const waitForSupabase = () => new Promise(resolve => {
+    if (window._supabaseCreateClient) return resolve();
+    const interval = setInterval(() => {
+      if (window._supabaseCreateClient) {
+        clearInterval(interval);
+        resolve();
+      }
+    }, 50);
+  });
+  await waitForSupabase();
+  const createClient = window._supabaseCreateClient;
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
   // 1. 權限保護
