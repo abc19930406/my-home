@@ -99,7 +99,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 <script define:vars={{ supabaseUrl, supabaseAnonKey }}>
 (async () => {
   // 1. 初始化 Supabase
-  const { createClient } = await import('https://' + 'cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
+  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
   const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
   // 2. 狀態管理
