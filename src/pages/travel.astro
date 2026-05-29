@@ -396,12 +396,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     // 1. 動態從 CDN 匯入 Supabase 核心並初始化
     const waitForSupabase = () => new Promise(resolve => {
       if (window._supabaseCreateClient) return resolve();
-      const interval = setInterval(() => {
-        if (window._supabaseCreateClient) {
-          clearInterval(interval);
-          resolve();
-        }
-      }, 50);
+      window.addEventListener('supabase-ready', resolve, { once: true });
     });
     await waitForSupabase();
     const createClient = window._supabaseCreateClient;
