@@ -30,10 +30,14 @@ import '../styles/global.css';
 		<meta name="apple-mobile-web-app-title" content="Corner Table" />
 		<link rel="apple-touch-icon" href="/icons/icon-180.png" />
 
-		<!-- Service Worker -->
+		<!-- 清除舊版 Service Worker -->
 		<script>
 			if ('serviceWorker' in navigator) {
-				navigator.serviceWorker.register('/sw.js').catch(err => console.error('SW registration failed:', err));
+				navigator.serviceWorker.getRegistrations().then(function(registrations) {
+					for(let registration of registrations) {
+						registration.unregister();
+					}
+				});
 			}
 		</script>
 		
