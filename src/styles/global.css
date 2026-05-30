@@ -1,12 +1,12 @@
 @import "tailwindcss";
 /* 統一右上角登入/登出按鈕 */
 .top-right-auth-container {
-  position: absolute;
+  position: fixed;
   top: 1rem;
-  right: 1.5rem;
+  right: 1rem;
   display: flex;
   gap: 0.75rem;
-  z-index: 1000;
+  z-index: 100;
   align-items: center;
 }
 

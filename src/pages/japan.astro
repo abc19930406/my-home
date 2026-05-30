@@ -62,10 +62,9 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
 <Layout title="日本收藏 | The Corner Table">
   <div class="top-right-auth-container">
     <div id="auth-guest" style="display: none;">
-      <button id="btn-login-modal" class="btn-top-auth">🔑 登入以加入願望清單</button>
+      <button id="btn-login-modal" class="btn-top-auth">🔑 登入</button>
     </div>
-    <div id="auth-user" class="auth-user-info" style="display: none;">
-      <span id="auth-user-name"></span>
+    <div id="auth-user" style="display: none;">
       <button id="btn-logout" class="btn-top-auth">登出</button>
     </div>
   </div>
@@ -527,15 +526,13 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
   function updateHeaderAuthUI() {
     const authGuest = document.getElementById('auth-guest');
     const authUser = document.getElementById('auth-user');
-    const authUserName = document.getElementById('auth-user-name');
     
     if (isAdminUser) {
       if (authGuest) authGuest.style.display = 'none';
-      if (authUser) authUser.style.display = 'none';
+      if (authUser) authUser.style.display = 'block';
     } else if (isAllowedUser && currentUser) {
       if (authGuest) authGuest.style.display = 'none';
-      if (authUser) authUser.style.display = 'flex';
-      if (authUserName) authUserName.textContent = currentUser.user_metadata?.name || currentUser.email;
+      if (authUser) authUser.style.display = 'block';
     } else {
       if (authGuest) authGuest.style.display = 'block';
       if (authUser) authUser.style.display = 'none';
