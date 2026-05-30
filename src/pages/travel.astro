@@ -1137,7 +1137,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     function updateMapMarkers(filteredSpots) {
       // 1. 清除舊 Markers
       mapMarkers.forEach(marker => {
-        marker.setMap(null);
+        if (marker.map !== undefined) marker.map = null;
+        else if (marker.setMap) marker.setMap(null);
       });
       mapMarkers = [];
 
@@ -1544,7 +1545,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         spotsListSec.style.display = 'none';
         itineraryView.style.display = 'flex';
         
+        console.log('切換為行程模式，正在清除原始 Marker...');
         clearMapMarkers(); // 清除原始地圖 markers
+        console.log('載入行程天數...');
         await loadTripDays();
       }
     }
@@ -1823,11 +1826,25 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     }
 
     function clearItineraryMap() {
-      itineraryMarkers.forEach(m => m.map = null);
+      console.log('清除行程專屬 Marker 與 Polyline...');
+      itineraryMarkers.forEach(m => {
+        if (m.map !== undefined) m.map = null;
+        else if (m.setMap) m.setMap(null);
+      });
       itineraryMarkers = [];
       if (itineraryPolyline) {
         itineraryPolyline.setMap(null);
         itineraryPolyline = null;
+      }
+    }
+
+    function clearMapMarkers() {
+      console.log('執行 clearMapMarkers, 數量:', typeof mapMarkers !== 'undefined' ? mapMarkers.length : 0);
+      if (typeof mapMarkers !== 'undefined') {
+        mapMarkers.forEach(marker => {
+          if (marker.map !== undefined) marker.map = null;
+          else if (marker.setMap) marker.setMap(null);
+        });
       }
     }
 
@@ -1898,11 +1915,19 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       itineraryPolyline.setOptions({ strokeOpacity: 0 });
       itineraryPolyline.setMap(googleMap);
 
+      console.log('行程地圖繪製完成，包含座標數:', pathCoords.length);
       if (pathCoords.length > 0) {
+        console.log('執行 fitBounds', bounds.toJSON());
         googleMap.fitBounds(bounds);
         // 若只有一個點，縮放會太大
         if (pathCoords.length === 1) {
+          console.log('只有一個景點，手動設定 zoom = 14');
           googleMap.setZoom(14);
+        } else {
+          // 在 fitBounds 後加一點 padding，確保不會貼齊邊緣
+          setTimeout(() => {
+            console.log('fitBounds 完成');
+          }, 100);
         }
       }
     }
