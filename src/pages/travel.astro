@@ -1400,6 +1400,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
       // 2. 重繪該行程景點
       filterAndRenderSpots();
+
+      // 3. 若目前為行程模式，則重新載入天數
+      if (currentMode === 'itinerary') {
+        loadTripDays();
+      }
     }
 
     // ==========================================
