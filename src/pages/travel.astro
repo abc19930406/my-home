@@ -249,6 +249,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         <button type="button" class="btn-modal-close" id="btn-wishlist-modal-close">&times;</button>
       </div>
       <div class="modal-body">
+        <input 
+          type="text" 
+          id="wishlist-search-input" 
+          placeholder="搜尋景點名稱..." 
+          style="width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--travel-border); font-size: 0.9rem; color: var(--travel-text); background-color: #FFFFFF; outline: none; transition: border-color 0.2s ease; margin-bottom: 12px; box-sizing: border-box;"
+          autocomplete="off"
+        />
         <div id="wishlist-select-container" class="wishlist-select-list">
           <!-- JS 動態產生選項 -->
         </div>
@@ -1487,6 +1494,20 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           return;
         }
         
+        const upBtn = e.target.closest('.btn-day-up');
+        if (upBtn && !upBtn.disabled) {
+          e.stopPropagation();
+          await moveTripDay(upBtn.dataset.id, -1);
+          return;
+        }
+
+        const downBtn = e.target.closest('.btn-day-down');
+        if (downBtn && !downBtn.disabled) {
+          e.stopPropagation();
+          await moveTripDay(downBtn.dataset.id, 1);
+          return;
+        }
+        
         const dayBtn = e.target.closest('.day-btn');
         if (dayBtn) {
           selectTripDay(dayBtn.dataset.id);
@@ -1510,6 +1531,21 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         } else if (btn.classList.contains('move-down')) {
           await moveSpotOrder(daySpotId, 1);
         }
+      });
+
+      // 想去清單搜尋
+      const wishlistSearchInput = document.getElementById('wishlist-search-input');
+      wishlistSearchInput?.addEventListener('input', (e) => {
+        const keyword = e.target.value.toLowerCase().trim();
+        const items = document.querySelectorAll('#wishlist-select-container .wishlist-item');
+        items.forEach(item => {
+          const name = item.querySelector('.spot-name')?.textContent.toLowerCase() || '';
+          if (name.includes(keyword)) {
+            item.style.display = 'flex';
+          } else {
+            item.style.display = 'none';
+          }
+        });
       });
     }
 
@@ -1583,14 +1619,20 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       if (!list) return;
       
       let html = '';
-      tripDaysCache.forEach(day => {
+      tripDaysCache.forEach((day, index) => {
         const isActive = day.id === currentDayId;
+        const isFirst = index === 0;
+        const isLast = index === tripDaysCache.length - 1;
         html += `
-          <div class="day-btn-wrapper">
-            <button class="day-btn ${isActive ? 'active' : ''}" data-id="${day.id}">
+          <div class="day-btn-wrapper" style="display: flex; align-items: center; gap: 4px;">
+            <button class="day-btn ${isActive ? 'active' : ''}" data-id="${day.id}" style="flex-grow: 1;">
               第 ${day.day_number} 天
             </button>
-            ${isAdminUser ? `<button class="btn-day-delete admin-only" data-id="${day.id}" title="刪除"><i class="ti ti-trash"></i></button>` : ''}
+            ${isAdminUser ? `
+              <button class="btn-day-up admin-only" data-id="${day.id}" title="向上移" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 2px; color: var(--travel-text-muted); opacity: ${isFirst ? '0.3' : '0.6'}; transition: opacity 0.2s;" ${isFirst ? 'disabled' : ''} onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='${isFirst ? '0.3' : '0.6'}'"><i class="ti ti-arrow-up"></i></button>
+              <button class="btn-day-down admin-only" data-id="${day.id}" title="向下移" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 2px; color: var(--travel-text-muted); opacity: ${isLast ? '0.3' : '0.6'}; transition: opacity 0.2s; margin-right: 2px;" ${isLast ? 'disabled' : ''} onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='${isLast ? '0.3' : '0.6'}'"><i class="ti ti-arrow-down"></i></button>
+              <button class="btn-day-delete admin-only" data-id="${day.id}" title="刪除"><i class="ti ti-trash"></i></button>
+            ` : ''}
           </div>
         `;
       });
@@ -1632,6 +1674,38 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       showToast('已刪除');
       if (currentDayId === dayId) currentDayId = null;
       await loadTripDays();
+    }
+
+    async function moveTripDay(dayId, direction) {
+      const currentIndex = tripDaysCache.findIndex(d => d.id === dayId);
+      if (currentIndex < 0) return;
+      const targetIndex = currentIndex + direction;
+      if (targetIndex < 0 || targetIndex >= tripDaysCache.length) return;
+      
+      const currentDay = tripDaysCache[currentIndex];
+      const targetDay = tripDaysCache[targetIndex];
+      
+      const currentNum = currentDay.day_number;
+      const targetNum = targetDay.day_number;
+      
+      // 更新暫存以求即時反應
+      currentDay.day_number = targetNum;
+      targetDay.day_number = currentNum;
+      tripDaysCache.sort((a, b) => a.day_number - b.day_number);
+      renderTripDays();
+      
+      // 批次更新資料庫
+      const { error } = await supabase
+        .from('trip_days')
+        .upsert([
+          { id: currentDay.id, trip_id: currentDay.trip_id, day_number: targetNum },
+          { id: targetDay.id, trip_id: targetDay.trip_id, day_number: currentNum }
+        ]);
+        
+      if (error) {
+        console.error('排序更新失敗', error);
+        await loadTripDays(); // 還原
+      }
     }
 
     async function selectTripDay(dayId) {
@@ -1748,6 +1822,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
             closeWishlistModal();
           });
         });
+      }
+      
+      // 清空並恢復搜尋狀態
+      const searchInput = document.getElementById('wishlist-search-input');
+      if (searchInput) {
+        searchInput.value = '';
       }
       
       modal.classList.add('show');
