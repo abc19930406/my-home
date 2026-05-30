@@ -239,6 +239,15 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     </div>
   </div>
 
+  <!-- ==========================================
+       彈出視窗：從想去清單選擇景點
+       ========================================== -->
+  <div id="wishlist-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>＋ 新增景點至行程</h3>
+        <button type="button" class="btn-modal-close" id="btn-wishlist-modal-close">&times;</button>
+      </div>
       <div class="modal-body">
         <input 
           type="text" 
