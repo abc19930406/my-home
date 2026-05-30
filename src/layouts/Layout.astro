@@ -40,7 +40,7 @@ import '../styles/global.css';
 	</head>
 	<body>
 		<slot />
-		<script>
+		<script is:inline>
 		  // 動態載入 Supabase，Vite 不會掃描此寫法
 		  (function() {
 		    const s = document.createElement('script');
