@@ -121,6 +121,16 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         </button>
       </section>
 
+      <!-- 2.5 行程模式切換列 -->
+      <section class="mode-toggle-container">
+        <button id="btn-mode-map" class="mode-btn active">
+          <i class="ti ti-map-2"></i> 地圖模式
+        </button>
+        <button id="btn-mode-itinerary" class="mode-btn">
+          <i class="ti ti-calendar"></i> 行程模式
+        </button>
+      </section>
+
       <!-- 2.5 搜尋列 -->
       <section class="travel-search-bar" style="position: relative;">
         <input 
@@ -203,8 +213,46 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         </div>
       </section>
 
+      <!-- 6. 行程模式 UI (預設隱藏) -->
+      <section id="itinerary-mode-view" class="itinerary-container" style="display: none;">
+        <div class="itinerary-sidebar">
+          <div id="itinerary-days-list" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- 動態生成天數按鈕 -->
+          </div>
+          <button id="btn-add-day" class="btn-add-day admin-only" style="display: none;">
+            ＋ 新增一天
+          </button>
+        </div>
+        <div class="itinerary-content">
+          <h3 id="itinerary-day-title" style="margin: 0 0 12px 0; font-size: 1.2rem; color: var(--travel-text);">請選擇天數</h3>
+          <div id="itinerary-spots-list" class="spots-list">
+            <div class="empty-state">請先選擇左側天數</div>
+          </div>
+          <button id="btn-open-wishlist-modal" class="btn-add-itinerary-spot admin-only" style="display: none;">
+            ＋ 從想去清單選擇
+          </button>
+        </div>
+      </section>
 
 
+
+    </div>
+  </div>
+
+  <!-- ==========================================
+       彈出視窗：從想去清單選擇景點
+       ========================================== -->
+  <div id="wishlist-modal" class="modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>＋ 新增景點至行程</h3>
+        <button type="button" class="btn-modal-close" id="btn-wishlist-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="wishlist-select-container" class="wishlist-select-list">
+          <!-- JS 動態產生選項 -->
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1399,10 +1447,471 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       }
     }
 
+    // ==========================================
+    // 7. 每日行程 (Itinerary Mode) 邏輯
+    // ==========================================
+    let currentMode = 'map'; // 'map' or 'itinerary'
+    let tripDaysCache = [];
+    let daySpotsCache = [];
+    let currentDayId = null;
+    let itineraryMarkers = [];
+    let itineraryPolyline = null;
+
+    function initItineraryEvents() {
+      const btnMap = document.getElementById('btn-mode-map');
+      const btnItinerary = document.getElementById('btn-mode-itinerary');
+      
+      btnMap?.addEventListener('click', () => toggleMode('map'));
+      btnItinerary?.addEventListener('click', () => toggleMode('itinerary'));
+
+      const btnAddDay = document.getElementById('btn-add-day');
+      btnAddDay?.addEventListener('click', addTripDay);
+
+      const btnOpenWishlist = document.getElementById('btn-open-wishlist-modal');
+      btnOpenWishlist?.addEventListener('click', openWishlistModal);
+
+      const btnCloseWishlist = document.getElementById('btn-wishlist-modal-close');
+      btnCloseWishlist?.addEventListener('click', closeWishlistModal);
+      
+      // 事件委派：天數列表
+      const daysList = document.getElementById('itinerary-days-list');
+      daysList?.addEventListener('click', async (e) => {
+        const delBtn = e.target.closest('.btn-day-delete');
+        if (delBtn) {
+          e.stopPropagation();
+          const dayId = delBtn.dataset.id;
+          if (confirm('確定要刪除這一天嗎？將會一併移除該天的景點安排。')) {
+            await deleteTripDay(dayId);
+          }
+          return;
+        }
+        
+        const dayBtn = e.target.closest('.day-btn');
+        if (dayBtn) {
+          selectTripDay(dayBtn.dataset.id);
+        }
+      });
+      
+      // 事件委派：景點列表
+      const spotsList = document.getElementById('itinerary-spots-list');
+      spotsList?.addEventListener('click', async (e) => {
+        if (!isAdminUser) return;
+        const btn = e.target.closest('.btn-itinerary-action');
+        if (!btn) return;
+        
+        const daySpotId = btn.dataset.id;
+        if (btn.classList.contains('delete')) {
+          if (confirm('確定從行程中移除此景點？')) {
+            await removeSpotFromDay(daySpotId);
+          }
+        } else if (btn.classList.contains('move-up')) {
+          await moveSpotOrder(daySpotId, -1);
+        } else if (btn.classList.contains('move-down')) {
+          await moveSpotOrder(daySpotId, 1);
+        }
+      });
+    }
+
+    async function toggleMode(mode) {
+      if (currentMode === mode) return;
+      currentMode = mode;
+      
+      const btnMap = document.getElementById('btn-mode-map');
+      const btnItinerary = document.getElementById('btn-mode-itinerary');
+      
+      const searchBar = document.querySelector('.travel-search-bar');
+      const filterBar = document.querySelector('.travel-filter-bar');
+      const spotsListSec = document.querySelector('.spots-list-section');
+      const itineraryView = document.getElementById('itinerary-mode-view');
+      
+      if (mode === 'map') {
+        btnMap.classList.add('active');
+        btnItinerary.classList.remove('active');
+        
+        searchBar.style.display = 'block';
+        filterBar.style.display = 'flex';
+        spotsListSec.style.display = 'block';
+        itineraryView.style.display = 'none';
+        
+        clearItineraryMap();
+        filterAndRenderSpots(); // 恢復原始地圖與列表
+      } else {
+        btnMap.classList.remove('active');
+        btnItinerary.classList.add('active');
+        
+        searchBar.style.display = 'none';
+        filterBar.style.display = 'none';
+        spotsListSec.style.display = 'none';
+        itineraryView.style.display = 'flex';
+        
+        clearMapMarkers(); // 清除原始地圖 markers
+        await loadTripDays();
+      }
+    }
+
+    async function loadTripDays() {
+      if (!currentTripId) return;
+      const { data, error } = await supabase
+        .from('trip_days')
+        .select('*')
+        .eq('trip_id', currentTripId)
+        .order('day_number', { ascending: true });
+        
+      if (error) {
+        console.error('載入行程天數失敗:', error);
+        return;
+      }
+      
+      tripDaysCache = data || [];
+      renderTripDays();
+      
+      if (tripDaysCache.length > 0) {
+        selectTripDay(tripDaysCache[0].id);
+      } else {
+        currentDayId = null;
+        document.getElementById('itinerary-day-title').textContent = '請先新增天數';
+        document.getElementById('itinerary-spots-list').innerHTML = '<div class="empty-state">尚無行程天數，請點選左側「新增一天」</div>';
+        clearItineraryMap();
+      }
+    }
+
+    function renderTripDays() {
+      const list = document.getElementById('itinerary-days-list');
+      if (!list) return;
+      
+      let html = '';
+      tripDaysCache.forEach(day => {
+        const isActive = day.id === currentDayId;
+        html += `
+          <div class="day-btn-wrapper">
+            <button class="day-btn ${isActive ? 'active' : ''}" data-id="${day.id}">
+              第 ${day.day_number} 天
+            </button>
+            ${isAdminUser ? `<button class="btn-day-delete admin-only" data-id="${day.id}" title="刪除"><i class="ti ti-trash"></i></button>` : ''}
+          </div>
+        `;
+      });
+      list.innerHTML = html;
+    }
+
+    async function addTripDay() {
+      if (!currentTripId) {
+        showToast('請先選擇或建立旅行行程');
+        return;
+      }
+      const nextDayNum = tripDaysCache.length > 0 
+        ? Math.max(...tripDaysCache.map(d => d.day_number)) + 1 
+        : 1;
+        
+      const { data, error } = await supabase
+        .from('trip_days')
+        .insert([{ trip_id: currentTripId, day_number: nextDayNum }])
+        .select()
+        .single();
+        
+      if (error) {
+        alert('新增天數失敗: ' + error.message);
+        return;
+      }
+      
+      tripDaysCache.push(data);
+      renderTripDays();
+      selectTripDay(data.id);
+      showToast('已新增第 ' + nextDayNum + ' 天');
+    }
+
+    async function deleteTripDay(dayId) {
+      const { error } = await supabase.from('trip_days').delete().eq('id', dayId);
+      if (error) {
+        alert('刪除天數失敗: ' + error.message);
+        return;
+      }
+      showToast('已刪除');
+      if (currentDayId === dayId) currentDayId = null;
+      await loadTripDays();
+    }
+
+    async function selectTripDay(dayId) {
+      currentDayId = dayId;
+      renderTripDays(); // 更新 active 狀態
+      
+      const day = tripDaysCache.find(d => d.id === dayId);
+      if (day) {
+        const titleEl = document.getElementById('itinerary-day-title');
+        if (titleEl) titleEl.textContent = `第 ${day.day_number} 天 行程`;
+      }
+      
+      await loadDaySpots(dayId);
+    }
+
+    async function loadDaySpots(dayId) {
+      if (!dayId) return;
+      const { data, error } = await supabase
+        .from('day_spots')
+        .select('*')
+        .eq('day_id', dayId)
+        .order('order_index', { ascending: true });
+        
+      if (error) {
+        console.error('載入景點安排失敗:', error);
+        return;
+      }
+      
+      // 合併 spotsCache 資料
+      daySpotsCache = (data || []).map(ds => {
+        // Spot ID comparison issues: DOM IDs or string IDs vs BigInt IDs
+        // Supabase returns string for UUID and bigint. JS handles string comparison well.
+        // It's safer to use double equals or string conversion.
+        const spotInfo = spotsCache.find(s => s.id == ds.spot_id) || {};
+        return { ...ds, spot: spotInfo };
+      }).filter(ds => ds.spot && ds.spot.id); // 過濾掉已被刪除的景點
+      
+      renderDaySpots();
+      renderItineraryMap();
+    }
+
+    function renderDaySpots() {
+      const list = document.getElementById('itinerary-spots-list');
+      if (!list) return;
+      
+      if (daySpotsCache.length === 0) {
+        list.innerHTML = '<div class="empty-state">當天尚無景點，請點選「從想去清單選擇」加入。</div>';
+        return;
+      }
+      
+      let html = '';
+      daySpotsCache.forEach((ds, index) => {
+        const spot = ds.spot;
+        const typeInfo = spotTypesCache.find(t => t.id == spot.spot_type_id) || { emoji: '📍' };
+        
+        html += `
+          <div class="itinerary-spot-item" data-id="${ds.id}">
+            <div class="spot-order-badge">${index + 1}</div>
+            <div class="spot-emoji">${typeInfo.emoji}</div>
+            <div class="spot-info">
+              <div class="spot-name">${spot.name}</div>
+              <div class="spot-note">${spot.address || ''}</div>
+            </div>
+            ${isAdminUser ? `
+              <div class="spot-actions admin-only">
+                ${index > 0 ? `<button class="btn-itinerary-action move-up" data-id="${ds.id}"><i class="ti ti-arrow-up"></i></button>` : `<div style="width: 28px;"></div>`}
+                ${index < daySpotsCache.length - 1 ? `<button class="btn-itinerary-action move-down" data-id="${ds.id}"><i class="ti ti-arrow-down"></i></button>` : `<div style="width: 28px;"></div>`}
+                <button class="btn-itinerary-action delete" data-id="${ds.id}"><i class="ti ti-x"></i></button>
+              </div>
+            ` : ''}
+          </div>
+        `;
+      });
+      list.innerHTML = html;
+    }
+
+    function openWishlistModal() {
+      if (!currentTripId || !currentDayId) return;
+      const modal = document.getElementById('wishlist-modal');
+      const container = document.getElementById('wishlist-select-container');
+      
+      // 取得此行程所有的景點
+      const tripSpots = spotsCache.filter(s => s.trip_id == currentTripId);
+      
+      if (tripSpots.length === 0) {
+        container.innerHTML = '<div class="empty-state">此行程尚未建立任何景點。請先切換至地圖模式新增景點。</div>';
+      } else {
+        let html = '';
+        tripSpots.forEach(spot => {
+          // 檢查是否已在當天
+          const isAdded = daySpotsCache.some(ds => ds.spot_id == spot.id);
+          const typeInfo = spotTypesCache.find(t => t.id == spot.spot_type_id) || { emoji: '📍' };
+          
+          html += `
+            <div class="wishlist-item ${isAdded ? 'disabled' : ''}" data-spot-id="${spot.id}">
+              <div class="spot-emoji">${typeInfo.emoji}</div>
+              <div class="spot-info">
+                <div class="spot-name">${spot.name}</div>
+                <div class="spot-note" style="color: ${spot.status==='visited'?'var(--travel-primary)':'#f5a623'};">
+                  ${spot.status === 'visited' ? '已去' : '想去'}
+                </div>
+              </div>
+              ${isAdded ? '<div style="color: #999; font-size: 0.8rem;">已加入</div>' : '<i class="ti ti-plus" style="color: var(--travel-primary);"></i>'}
+            </div>
+          `;
+        });
+        container.innerHTML = html;
+        
+        // 綁定點擊新增事件
+        container.querySelectorAll('.wishlist-item:not(.disabled)').forEach(item => {
+          item.addEventListener('click', () => {
+            const spotId = item.dataset.spotId;
+            addSpotToDay(spotId);
+            closeWishlistModal();
+          });
+        });
+      }
+      
+      modal.classList.add('show');
+      document.body.classList.add('modal-open');
+    }
+
+    function closeWishlistModal() {
+      const modal = document.getElementById('wishlist-modal');
+      if(modal) {
+        modal.classList.remove('show');
+        document.body.classList.remove('modal-open');
+      }
+    }
+
+    async function addSpotToDay(spotId) {
+      const nextOrder = daySpotsCache.length > 0 
+        ? Math.max(...daySpotsCache.map(ds => ds.order_index)) + 1 
+        : 0;
+        
+      const { data, error } = await supabase
+        .from('day_spots')
+        .insert([{ day_id: currentDayId, spot_id: spotId, order_index: nextOrder }])
+        .select()
+        .single();
+        
+      if (error) {
+        alert('加入行程失敗: ' + error.message);
+        return;
+      }
+      showToast('已加入行程');
+      await loadDaySpots(currentDayId);
+    }
+
+    async function removeSpotFromDay(daySpotId) {
+      const { error } = await supabase.from('day_spots').delete().eq('id', daySpotId);
+      if (error) {
+        alert('移除失敗: ' + error.message);
+        return;
+      }
+      showToast('已移除');
+      await loadDaySpots(currentDayId);
+    }
+
+    async function moveSpotOrder(daySpotId, direction) {
+      const currentIndex = daySpotsCache.findIndex(ds => ds.id == daySpotId);
+      if (currentIndex < 0) return;
+      const targetIndex = currentIndex + direction;
+      if (targetIndex < 0 || targetIndex >= daySpotsCache.length) return;
+      
+      const currentItem = daySpotsCache[currentIndex];
+      const targetItem = daySpotsCache[targetIndex];
+      
+      const currentOrder = currentItem.order_index;
+      const targetOrder = targetItem.order_index;
+      
+      // 更新本地暫存以求即時反應
+      currentItem.order_index = targetOrder;
+      targetItem.order_index = currentOrder;
+      daySpotsCache.sort((a, b) => a.order_index - b.order_index);
+      renderDaySpots();
+      
+      // 批次更新資料庫
+      const { error } = await supabase
+        .from('day_spots')
+        .upsert([
+          { id: currentItem.id, day_id: currentItem.day_id, spot_id: currentItem.spot_id, order_index: targetOrder },
+          { id: targetItem.id, day_id: targetItem.day_id, spot_id: targetItem.spot_id, order_index: currentOrder }
+        ]);
+        
+      if (error) {
+        console.error('排序更新失敗', error);
+        await loadDaySpots(currentDayId); // 還原
+      } else {
+        renderItineraryMap();
+      }
+    }
+
+    function clearItineraryMap() {
+      itineraryMarkers.forEach(m => m.map = null);
+      itineraryMarkers = [];
+      if (itineraryPolyline) {
+        itineraryPolyline.setMap(null);
+        itineraryPolyline = null;
+      }
+    }
+
+    async function renderItineraryMap() {
+      clearItineraryMap();
+      if (!googleMap || daySpotsCache.length === 0) return;
+
+      const pathCoords = [];
+      const bounds = new window.google.maps.LatLngBounds();
+
+      const { AdvancedMarkerElement, PinElement } = await window.google.maps.importLibrary("marker");
+
+      daySpotsCache.forEach((ds, index) => {
+        const lat = parseFloat(ds.spot.lat);
+        const lng = parseFloat(ds.spot.lng);
+        if (isNaN(lat) || isNaN(lng)) return;
+        
+        const pos = { lat, lng };
+        pathCoords.push(pos);
+        bounds.extend(pos);
+
+        // 自訂藍色數字圓形標記
+        const markerContent = document.createElement('div');
+        markerContent.style.width = '30px';
+        markerContent.style.height = '30px';
+        markerContent.style.backgroundColor = '#FFFFFF';
+        markerContent.style.border = '2px solid var(--travel-primary)';
+        markerContent.style.borderRadius = '50%';
+        markerContent.style.display = 'flex';
+        markerContent.style.alignItems = 'center';
+        markerContent.style.justifyContent = 'center';
+        markerContent.style.color = 'var(--travel-primary)';
+        markerContent.style.fontWeight = 'bold';
+        markerContent.style.fontSize = '14px';
+        markerContent.style.boxShadow = '0 2px 6px rgba(0,0,0,0.2)';
+        markerContent.textContent = (index + 1).toString();
+
+        const marker = new AdvancedMarkerElement({
+          map: googleMap,
+          position: pos,
+          content: markerContent,
+          title: ds.spot.name
+        });
+        
+        itineraryMarkers.push(marker);
+      });
+
+      // 繪製連線
+      itineraryPolyline = new window.google.maps.Polyline({
+        path: pathCoords,
+        geodesic: true,
+        strokeColor: 'var(--travel-primary)',
+        strokeOpacity: 0.8,
+        strokeWeight: 3,
+        strokePattern: 'dashed',
+        icons: [{
+          icon: {
+            path: 'M 0,-1 0,1',
+            strokeOpacity: 1,
+            scale: 3
+          },
+          offset: '0',
+          repeat: '15px'
+        }],
+      });
+      
+      // 為了達到真正的虛線效果，strokeOpacity 需為 0，改由 icons 顯示
+      itineraryPolyline.setOptions({ strokeOpacity: 0 });
+      itineraryPolyline.setMap(googleMap);
+
+      if (pathCoords.length > 0) {
+        googleMap.fitBounds(bounds);
+        // 若只有一個點，縮放會太大
+        if (pathCoords.length === 1) {
+          googleMap.setZoom(14);
+        }
+      }
+    }
+
     // --- 初始化事件監聽 ---
     const initEvents = () => {
       // 載入資料與身分驗證
       initAuthAndData();
+      initItineraryEvents();
 
       // 0. 綁定編輯與刪除景點事件 (Event Delegation)
       const spotsContainer = document.getElementById('spots-cards-container');
