@@ -1,18 +1,6 @@
-const CACHE_NAME = 'corner-table-v2';
-const urlsToCache = [
-  '/',
-  '/japan',
-  '/travel',
-  '/posts',
-  '/ledger',
-  '/polaroid',
-  '/quotes'
-];
+const CACHE_NAME = 'corner-table-v3';
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(urlsToCache))
-  );
   self.skipWaiting();
 });
 
@@ -30,18 +18,32 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // HTML 頁面用 network-first，確保總是拿到最新版
+  const url = new URL(event.request.url);
+  
+  // HTML 頁面完全不快取，永遠從網路取得
   if (event.request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+  
+  // 只快取靜態資源（字體、圖片）
+  if (
+    url.hostname === 'fonts.googleapis.com' ||
+    url.hostname === 'fonts.gstatic.com' ||
+    event.request.destination === 'image'
+  ) {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match(event.request))
+      caches.match(event.request).then((response) => {
+        return response || fetch(event.request).then((fetchResponse) => {
+          const cache = caches.open(CACHE_NAME);
+          cache.then(c => c.put(event.request, fetchResponse.clone()));
+          return fetchResponse;
+        });
+      })
     );
     return;
   }
   
-  // 其他資源用 cache-first
-  event.respondWith(
-    caches.match(event.request).then((response) => {
-      return response || fetch(event.request);
-    })
-  );
+  // 其他所有資源直接從網路取得，不快取
+  event.respondWith(fetch(event.request));
 });
