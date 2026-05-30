@@ -239,26 +239,32 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     </div>
   </div>
 
-  <!-- ==========================================
-       彈出視窗：從想去清單選擇景點
-       ========================================== -->
-  <div id="wishlist-modal" class="modal-overlay">
-    <div class="modal-box">
-      <div class="modal-header">
-        <h3>＋ 新增景點至行程</h3>
-        <button type="button" class="btn-modal-close" id="btn-wishlist-modal-close">&times;</button>
-      </div>
       <div class="modal-body">
         <input 
           type="text" 
           id="wishlist-search-input" 
-          placeholder="搜尋景點名稱..." 
+          placeholder="搜尋景點名稱或備註..." 
           style="width: 100%; padding: 10px 12px; border-radius: 6px; border: 1px solid var(--travel-border); font-size: 0.9rem; color: var(--travel-text); background-color: #FFFFFF; outline: none; transition: border-color 0.2s ease; margin-bottom: 12px; box-sizing: border-box;"
           autocomplete="off"
         />
         <div id="wishlist-select-container" class="wishlist-select-list">
           <!-- JS 動態產生選項 -->
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       彈出視窗：景點詳情
+       ========================================== -->
+  <div id="spot-detail-modal" class="modal-overlay">
+    <div class="modal-box" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3 id="spot-detail-title">景點名稱</h3>
+        <button type="button" class="btn-modal-close" id="btn-spot-detail-close">&times;</button>
+      </div>
+      <div class="modal-body" id="spot-detail-body" style="padding: 20px; font-size: 14px; color: #5a4a35; line-height: 1.6;">
+        <!-- JS 動態填入 -->
       </div>
     </div>
   </div>
@@ -1480,6 +1486,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
       const btnCloseWishlist = document.getElementById('btn-wishlist-modal-close');
       btnCloseWishlist?.addEventListener('click', closeWishlistModal);
+
+      document.getElementById('btn-spot-detail-close')?.addEventListener('click', () => {
+        document.getElementById('spot-detail-modal').classList.remove('show');
+        document.body.classList.remove('modal-open');
+      });
       
       // 事件委派：天數列表
       const daysList = document.getElementById('itinerary-days-list');
@@ -1517,19 +1528,30 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       // 事件委派：景點列表
       const spotsList = document.getElementById('itinerary-spots-list');
       spotsList?.addEventListener('click', async (e) => {
-        if (!isAdminUser) return;
         const btn = e.target.closest('.btn-itinerary-action');
-        if (!btn) return;
-        
-        const daySpotId = btn.dataset.id;
-        if (btn.classList.contains('delete')) {
-          if (confirm('確定從行程中移除此景點？')) {
-            await removeSpotFromDay(daySpotId);
+        if (btn) {
+          if (!isAdminUser) return;
+          const daySpotId = btn.dataset.id;
+          if (btn.classList.contains('delete')) {
+            if (confirm('確定從行程中移除此景點？')) {
+              await removeSpotFromDay(daySpotId);
+            }
+          } else if (btn.classList.contains('move-up')) {
+            await moveSpotOrder(daySpotId, -1);
+          } else if (btn.classList.contains('move-down')) {
+            await moveSpotOrder(daySpotId, 1);
           }
-        } else if (btn.classList.contains('move-up')) {
-          await moveSpotOrder(daySpotId, -1);
-        } else if (btn.classList.contains('move-down')) {
-          await moveSpotOrder(daySpotId, 1);
+          return;
+        }
+
+        // 點擊卡片顯示詳情
+        const spotItem = e.target.closest('.itinerary-spot-item');
+        if (spotItem) {
+          const dsId = spotItem.dataset.id;
+          const ds = daySpotsCache.find(d => d.id == dsId);
+          if (ds && ds.spot) {
+            openSpotDetailModal(ds.spot);
+          }
         }
       });
 
@@ -1539,8 +1561,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         const keyword = e.target.value.toLowerCase().trim();
         const items = document.querySelectorAll('#wishlist-select-container .wishlist-item');
         items.forEach(item => {
-          const name = item.querySelector('.spot-name')?.textContent.toLowerCase() || '';
-          if (name.includes(keyword)) {
+          const searchText = (item.dataset.searchText || '').toLowerCase();
+          if (searchText.includes(keyword)) {
             item.style.display = 'flex';
           } else {
             item.style.display = 'none';
@@ -1624,14 +1646,14 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         const isFirst = index === 0;
         const isLast = index === tripDaysCache.length - 1;
         html += `
-          <div class="day-btn-wrapper" style="display: flex; align-items: center; gap: 4px;">
-            <button class="day-btn ${isActive ? 'active' : ''}" data-id="${day.id}" style="flex-grow: 1;">
+          <div class="day-btn-wrapper" style="display: flex; align-items: center; gap: 4px; flex-wrap: nowrap;">
+            <button class="day-btn ${isActive ? 'active' : ''}" data-id="${day.id}" style="flex-grow: 1; min-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 10px 8px;">
               第 ${day.day_number} 天
             </button>
             ${isAdminUser ? `
-              <button class="btn-day-up admin-only" data-id="${day.id}" title="向上移" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 2px; color: var(--travel-text-muted); opacity: ${isFirst ? '0.3' : '0.6'}; transition: opacity 0.2s;" ${isFirst ? 'disabled' : ''} onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='${isFirst ? '0.3' : '0.6'}'"><i class="ti ti-arrow-up"></i></button>
-              <button class="btn-day-down admin-only" data-id="${day.id}" title="向下移" style="background: none; border: none; font-size: 1.1rem; cursor: pointer; padding: 2px; color: var(--travel-text-muted); opacity: ${isLast ? '0.3' : '0.6'}; transition: opacity 0.2s; margin-right: 2px;" ${isLast ? 'disabled' : ''} onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='${isLast ? '0.3' : '0.6'}'"><i class="ti ti-arrow-down"></i></button>
-              <button class="btn-day-delete admin-only" data-id="${day.id}" title="刪除"><i class="ti ti-trash"></i></button>
+              <button class="btn-day-up admin-only" data-id="${day.id}" title="向上移" style="background: none; border: none; font-size: 1rem; cursor: pointer; padding: 2px; color: var(--travel-text-muted); opacity: ${isFirst ? '0.3' : '0.6'}; transition: opacity 0.2s;" ${isFirst ? 'disabled' : ''} onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='${isFirst ? '0.3' : '0.6'}'"><i class="ti ti-arrow-up"></i></button>
+              <button class="btn-day-down admin-only" data-id="${day.id}" title="向下移" style="background: none; border: none; font-size: 1rem; cursor: pointer; padding: 2px; color: var(--travel-text-muted); opacity: ${isLast ? '0.3' : '0.6'}; transition: opacity 0.2s; margin-right: 0px;" ${isLast ? 'disabled' : ''} onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='${isLast ? '0.3' : '0.6'}'"><i class="ti ti-arrow-down"></i></button>
+              <button class="btn-day-delete admin-only" data-id="${day.id}" title="刪除" style="font-size: 1rem; padding: 2px;"><i class="ti ti-trash"></i></button>
             ` : ''}
           </div>
         `;
@@ -1762,7 +1784,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         const typeInfo = spotTypesCache.find(t => t.id == spot.spot_type_id) || { emoji: '📍' };
         
         html += `
-          <div class="itinerary-spot-item" data-id="${ds.id}">
+          <div class="itinerary-spot-item" data-id="${ds.id}" style="cursor: pointer;">
             <div class="spot-order-badge">${index + 1}</div>
             <div class="spot-emoji">${typeInfo.emoji}</div>
             <div class="spot-info">
@@ -1798,9 +1820,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           // 檢查是否已在當天
           const isAdded = daySpotsCache.some(ds => ds.spot_id == spot.id);
           const typeInfo = spotTypesCache.find(t => t.id == spot.spot_type_id) || { emoji: '📍' };
+          const searchText = ((spot.name || '') + ' ' + (spot.note || '') + ' ' + (spot.address || '')).replace(/"/g, '&quot;');
           
           html += `
-            <div class="wishlist-item ${isAdded ? 'disabled' : ''}" data-spot-id="${spot.id}">
+            <div class="wishlist-item ${isAdded ? 'disabled' : ''}" data-spot-id="${spot.id}" data-search-text="${searchText}">
               <div class="spot-emoji">${typeInfo.emoji}</div>
               <div class="spot-info">
                 <div class="spot-name">${spot.name}</div>
@@ -1840,6 +1863,45 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         modal.classList.remove('show');
         document.body.classList.remove('modal-open');
       }
+    }
+
+    function openSpotDetailModal(spot) {
+      const modal = document.getElementById('spot-detail-modal');
+      const titleEl = document.getElementById('spot-detail-title');
+      const bodyEl = document.getElementById('spot-detail-body');
+      
+      const typeInfo = spotTypesCache.find(t => t.id == spot.spot_type_id) || { emoji: '📍', name: '未分類' };
+      
+      let subtypeLabel = '';
+      if (spot.spot_subtype_id) {
+        const subtype = spotSubtypesCache.find(st => st.id === spot.spot_subtype_id);
+        if (subtype) subtypeLabel = subtype.name;
+      }
+      
+      const mapsUrl = spot.place_id
+        ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name)}&query_place_id=${spot.place_id}`
+        : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name + ' ' + (spot.address || ''))}`;
+        
+      titleEl.innerHTML = `<span style="margin-right: 8px;">${typeInfo.emoji}</span>${spot.name}`;
+      
+      let html = '';
+      if (subtypeLabel) {
+        html += `<div style="margin-bottom: 12px;"><span style="font-size:12px; background:#f0ebe3; color:#8B7355; padding:4px 10px; border-radius:20px; display:inline-block;">${subtypeLabel}</span></div>`;
+      }
+      if (spot.address) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>📍</span><span style="flex:1;">${spot.address}</span></div>`;
+      if (spot.open_hours) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>🕐</span><span style="flex:1;">${spot.open_hours}</span></div>`;
+      if (spot.price) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>💰</span><span style="flex:1;">${spot.price}</span></div>`;
+      if (spot.note) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>📝</span><span style="flex:1;">${spot.note}</span></div>`;
+      
+      html += `
+        <div style="margin-top: 20px; border-top: 1px solid var(--travel-border); padding-top: 16px;">
+          <a href="${mapsUrl}" target="_blank" style="display:block; text-align:center; padding:10px; background:var(--travel-primary); color:white; border-radius:8px; text-decoration:none; font-weight:600; letter-spacing:0.05em;">🗺 Google Maps</a>
+        </div>
+      `;
+      
+      bodyEl.innerHTML = html;
+      modal.classList.add('show');
+      document.body.classList.add('modal-open');
     }
 
     async function addSpotToDay(spotId) {
