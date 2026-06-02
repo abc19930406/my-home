@@ -749,6 +749,7 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
       const noteTag = item.note ? `<p class="card-note">${item.note}</p>` : '';
 
       const isOwnerWishlisted = item.owner_wishlist === true;
+      console.log('item wishlist:', item.name, item.owner_wishlist, item.owner_quantity);
       let adminCheckboxHtml = '';
       if (isAdminUser) {
         adminCheckboxHtml = `
@@ -756,23 +757,43 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
             ${isOwnerWishlisted ? '❤️' : '🤍'}
           </div>
         `;
+        if (isOwnerWishlisted) {
+          adminCheckboxHtml += `
+            <div class="quantity-adjuster admin" data-id="${item.id}" data-role="admin">
+              <button class="btn-qty-minus">-</button>
+              <span>${item.owner_quantity || 1}</span>
+              <button class="btn-qty-plus">+</button>
+            </div>
+          `;
+        }
       }
 
       let userCheckboxHtml = '';
       if (isAllowedUser && currentUser && !isAdminUser) {
-        const isUserWishlisted = allWishlistItems.some(w => String(w.japan_item_id) === String(item.id) && w.user_id === currentUser.id);
+        const userWishlistItem = allWishlistItems.find(w => String(w.japan_item_id) === String(item.id) && w.user_id === currentUser.id);
+        const isUserWishlisted = !!userWishlistItem;
         userCheckboxHtml = `
           <div class="wishlist-checkbox-user ${isUserWishlisted ? 'active' : ''}" data-id="${item.id}" title="加入我的清單">
             📌
           </div>
         `;
+        if (isUserWishlisted) {
+          userCheckboxHtml += `
+            <div class="quantity-adjuster user" data-id="${item.id}" data-role="user">
+              <button class="btn-qty-minus">-</button>
+              <span>${userWishlistItem.quantity || 1}</span>
+              <button class="btn-qty-plus">+</button>
+            </div>
+          `;
+        }
       }
 
-      const userWishlistCount = allWishlistItems.filter(w => String(w.japan_item_id) === String(item.id)).length;
+      const wItemsForFooter = allWishlistItems.filter(w => String(w.japan_item_id) === String(item.id));
+      const peopleCount = wItemsForFooter.length + (isOwnerWishlisted ? 1 : 0);
       let countHtml = '';
       if (isAdminUser || isAllowedUser) {
-        if (userWishlistCount > 0) {
-          countHtml = `<div class="wishlist-footer" data-id="${item.id}">❤️ ${userWishlistCount} 人想買</div>`;
+        if (peopleCount > 0) {
+          countHtml = `<div class="wishlist-footer" data-id="${item.id}">❤️ ${peopleCount} 人想買</div>`;
         }
       }
 
@@ -1188,6 +1209,41 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
     const btnWishlistAdmin = target.closest('.wishlist-checkbox-admin');
     const btnWishlistUser = target.closest('.wishlist-checkbox-user');
     const footerCount = target.closest('.wishlist-footer');
+    const btnQtyMinus = target.closest('.btn-qty-minus');
+    const btnQtyPlus = target.closest('.btn-qty-plus');
+
+    if (btnQtyMinus || btnQtyPlus) {
+      const adjuster = target.closest('.quantity-adjuster') as HTMLElement;
+      if (!adjuster) return;
+      const id = adjuster.dataset.id;
+      const role = adjuster.dataset.role;
+      const span = adjuster.querySelector('span');
+      if (!id || !span) return;
+      
+      let currentQty = parseInt(span.textContent || '1');
+      const newVal = btnQtyMinus ? Math.max(1, currentQty - 1) : currentQty + 1;
+      
+      if (currentQty === newVal) return;
+      
+      // 即時更新 UI
+      span.textContent = String(newVal);
+      
+      // 背景更新資料庫與快取
+      if (role === 'admin' && isAdminUser) {
+        const cItem = itemsCache.find(i => String(i.id) === String(id));
+        if (cItem) cItem.owner_quantity = newVal;
+        supabase.from('japan_items').update({ owner_quantity: newVal }).eq('id', id).then(({error}) => {
+          if (error) console.error('Admin quantity update failed', error);
+        });
+      } else if (role === 'user' && currentUser) {
+        const wItem = allWishlistItems.find(w => String(w.japan_item_id) === String(id) && w.user_id === currentUser.id);
+        if (wItem) wItem.quantity = newVal;
+        supabase.from('wishlist_items').update({ quantity: newVal }).eq('japan_item_id', id).eq('user_id', currentUser.id).then(({error}) => {
+          if (error) console.error('User quantity update failed', error);
+        });
+      }
+      return;
+    }
 
     // Admin toggles owner_wishlist
     if (btnWishlistAdmin) {
@@ -1195,12 +1251,16 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
       const isActive = btnWishlistAdmin.classList.contains('active');
       const newVal = !isActive;
       
-      const { error } = await supabase.from('japan_items').update({ owner_wishlist: newVal }).eq('id', id);
+      const { error } = await supabase.from('japan_items').update({ owner_wishlist: newVal, owner_quantity: 1 }).eq('id', id);
       if (!error) {
         btnWishlistAdmin.classList.toggle('active');
         btnWishlistAdmin.innerHTML = newVal ? '❤️' : '🤍';
         const cItem = itemsCache.find(i => String(i.id) === String(id));
-        if (cItem) cItem.owner_wishlist = newVal;
+        if (cItem) {
+          cItem.owner_wishlist = newVal;
+          cItem.owner_quantity = 1;
+        }
+        filterAndRenderItems();
         showToast(newVal ? '已加入您的願望清單' : '已從願望清單移除');
       } else {
         alert('操作失敗：' + error.message);
@@ -1232,7 +1292,8 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
           japan_item_id: id,
           user_id: currentUser.id,
           user_email: currentUser.email,
-          user_name: currentUser.user_metadata?.name || currentUser.email
+          user_name: currentUser.user_metadata?.name || currentUser.email,
+          quantity: 1
         };
         const { error } = await supabase.from('wishlist_items').insert([newW]);
         if (!error) {
@@ -1251,11 +1312,30 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
       if (isAdminUser) {
         const id = (footerCount as HTMLElement).dataset.id;
         const wItems = allWishlistItems.filter(w => String(w.japan_item_id) === String(id));
+        const cItem = itemsCache.find(i => String(i.id) === String(id));
         const container = document.getElementById('wishlist-names-container');
         if (container) {
-          container.innerHTML = `<div class="wishlist-names-list">` + 
-            wItems.map(w => `<div class="wishlist-name-item">${w.user_name || w.user_email}</div>`).join('') + 
-            `</div>`;
+          let total = 0;
+          let listHtml = '';
+          
+          if (cItem && cItem.owner_wishlist) {
+            const q = cItem.owner_quantity || 1;
+            total += q;
+            listHtml += `<div class="wishlist-name-item">👤 你：${q} 個</div>`;
+          }
+          
+          wItems.forEach(w => {
+            const q = w.quantity || 1;
+            total += q;
+            listHtml += `<div class="wishlist-name-item">👤 ${w.user_name || w.user_email}：${q} 個</div>`;
+          });
+          
+          listHtml += `
+            <div style="border-top: 1px solid rgba(112, 144, 184, 0.2); margin: 8px 0; padding-top: 12px; font-weight: 600; color: var(--japan-primary); text-align: right;">
+              合計：${total} 個
+            </div>
+          `;
+          container.innerHTML = `<div class="wishlist-names-list">${listHtml}</div>`;
         }
         const m = document.getElementById('wishlist-names-modal');
         if (m) m.style.display = 'flex';
