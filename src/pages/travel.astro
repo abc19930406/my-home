@@ -528,13 +528,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
     // Helper: 將網址轉為超連結
     function linkifyText(text) {
-      if (!text) return '';
-      const urlRegex = /(https?:\\/\\/[^\\s]+)/g;
-      return text.replace(urlRegex, (url) => {
-        return `<a href="${url}" target="_blank" rel="noopener noreferrer" 
-          style="color: inherit; text-decoration: underline; opacity: 0.8;">
-          ${url}
-        </a>`;
+      if (!text) return text;
+      const urlRegex = new RegExp('(https?:\\/\\/[^\\s]+)', 'g');
+      return text.replace(urlRegex, function(url) {
+        return '<a href="' + url + '" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline; opacity: 0.8;">' + url + '</a>';
       });
     }
 
