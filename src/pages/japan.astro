@@ -429,14 +429,11 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
         isAdminUser = true;
         isAllowedUser = true;
       } else {
-        console.log('檢查白名單 email:', currentUser.email);
         const { data: allowedUser, error: allowedError } = await supabase
           .from('allowed_users')
           .select('id')
           .ilike('email', currentUser.email)
           .single();
-        
-        console.log('白名單查詢結果:', allowedUser, allowedError);
 
         if (allowedUser) {
           isAllowedUser = true;
@@ -749,7 +746,6 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
       const noteTag = item.note ? `<p class="card-note">${item.note}</p>` : '';
 
       const isOwnerWishlisted = item.owner_wishlist === true;
-      console.log('item wishlist:', item.name, item.owner_wishlist, item.owner_quantity);
       let adminCheckboxHtml = '';
       if (isAdminUser) {
         adminCheckboxHtml = `
@@ -1429,8 +1425,7 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
   function triggerBuildWebhook() {
     if (!deployWebhookUrl) return;
     fetch(deployWebhookUrl, { method: 'POST' })
-      .then(res => {
-        console.log('Deploy webhook triggered quietly:', res.status);
+      .then(() => {
       })
       .catch(err => {
         console.warn('Webhook trigger failed:', err);
