@@ -526,6 +526,18 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     let openInfoWindow = null; // 指向當前開啟的氣泡視窗
     let openAddSpotModal = null; // 全域新增景點 Modal 控制器
 
+    // Helper: 將網址轉為超連結
+    function linkifyText(text) {
+      if (!text) return '';
+      const urlRegex = /(https?:\\/\\/[^\\s]+)/g;
+      return text.replace(urlRegex, (url) => {
+        return `<a href="${url}" target="_blank" rel="noopener noreferrer" 
+          style="color: inherit; text-decoration: underline; opacity: 0.8;">
+          ${url}
+        </a>`;
+      });
+    }
+
     // 動態渲染首頁上方篩選列
     window.renderCategoryFilters = function() {
       const catGroup = document.getElementById('category-filter-group');
@@ -1123,7 +1135,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   
   ${spot.note ? `
   <div style="display:flex; gap:6px; margin-bottom:12px; font-size:13px; color:#5a4a35;">
-    <span>📝</span><span style="line-height:1.4;">${spot.note}</span>
+    <span>📝</span><span style="line-height:1.4;">${linkifyText(spot.note)}</span>
   </div>` : ''}
   
   <!-- 按鈕列 -->
@@ -1327,7 +1339,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
                 ${ratingBadge}
               </div>
               ${metaRow}
-              ${spot.note ? `<p class="spot-note">${spot.note}</p>` : ''}
+              ${spot.note ? `<p class="spot-note">${linkifyText(spot.note)}</p>` : ''}
               ${imagesRow}
             </div>
             ${adminActions}
@@ -1905,7 +1917,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       if (spot.address) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>📍</span><span style="flex:1;">${spot.address}</span></div>`;
       if (spot.open_hours) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>🕐</span><span style="flex:1;">${spot.open_hours}</span></div>`;
       if (spot.price) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>💰</span><span style="flex:1;">${spot.price}</span></div>`;
-      if (spot.note) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>📝</span><span style="flex:1;">${spot.note}</span></div>`;
+      if (spot.note) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>📝</span><span style="flex:1;">${linkifyText(spot.note)}</span></div>`;
       
       html += `
         <div style="margin-top: 20px; border-top: 1px solid var(--travel-border); padding-top: 16px;">
