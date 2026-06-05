@@ -518,6 +518,7 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
     // 3. 重繪篩選器與卡片 (確保 Client Side 最新)
     renderFilterBar();
     filterAndRenderItems();
+    console.log('日本收藏頁面初始化完成，當前角色：', isAdminUser ? 'admin' : currentUser ? 'user' : 'guest');
   }
 
   function updateHeaderAuthUI() {
@@ -756,9 +757,9 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
         if (isOwnerWishlisted) {
           adminCheckboxHtml += `
             <div class="quantity-adjuster admin" data-id="${item.id}" data-role="admin">
-              <button class="btn-qty-minus">-</button>
+              <button class="btn-qty-minus" data-action="qty-minus" data-item-id="${item.id}" data-role="admin">-</button>
               <span>${item.owner_quantity || 1}</span>
-              <button class="btn-qty-plus">+</button>
+              <button class="btn-qty-plus" data-action="qty-plus" data-item-id="${item.id}" data-role="admin">+</button>
             </div>
           `;
         }
@@ -776,9 +777,9 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
         if (isUserWishlisted) {
           userCheckboxHtml += `
             <div class="quantity-adjuster user" data-id="${item.id}" data-role="user">
-              <button class="btn-qty-minus">-</button>
+              <button class="btn-qty-minus" data-action="qty-minus" data-item-id="${item.id}" data-role="user">-</button>
               <span>${userWishlistItem.quantity || 1}</span>
-              <button class="btn-qty-plus">+</button>
+              <button class="btn-qty-plus" data-action="qty-plus" data-item-id="${item.id}" data-role="user">+</button>
             </div>
           `;
         }
@@ -1199,27 +1200,32 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
   // --- 磚牆卡片點擊事件委派 (編輯 & 刪除) ---
   const itemsGrid = document.getElementById('japan-items-grid');
   itemsGrid?.addEventListener('click', async (e) => {
+    console.log('items-grid 被點擊，target：', e.target, 'dataset：', (e.target as HTMLElement).dataset);
     const target = e.target as HTMLElement;
     const btnEdit = target.closest('.btn-edit');
     const btnDelete = target.closest('.btn-delete');
     const btnWishlistAdmin = target.closest('.wishlist-checkbox-admin');
     const btnWishlistUser = target.closest('.wishlist-checkbox-user');
     const footerCount = target.closest('.wishlist-footer');
-    const btnQtyMinus = target.closest('.btn-qty-minus');
-    const btnQtyPlus = target.closest('.btn-qty-plus');
+    const btnQtyMinus = target.closest('.btn-qty-minus') || target.closest('[data-action="qty-minus"]');
+    const btnQtyPlus = target.closest('.btn-qty-plus') || target.closest('[data-action="qty-plus"]');
 
     if (btnQtyMinus || btnQtyPlus) {
+      const btn = (btnQtyMinus || btnQtyPlus) as HTMLElement;
       const adjuster = target.closest('.quantity-adjuster') as HTMLElement;
-      if (!adjuster) return;
-      const id = adjuster.dataset.id;
-      const role = adjuster.dataset.role;
-      const span = adjuster.querySelector('span');
+      if (!adjuster && !btn) return;
+      
+      const id = btn.dataset.itemId || adjuster?.dataset.id;
+      const role = btn.dataset.role || adjuster?.dataset.role;
+      const span = adjuster ? adjuster.querySelector('span') : target.closest('.quantity-adjuster')?.querySelector('span');
       if (!id || !span) return;
       
       let currentQty = parseInt(span.textContent || '1');
       const newVal = btnQtyMinus ? Math.max(1, currentQty - 1) : currentQty + 1;
       
       if (currentQty === newVal) return;
+      
+      console.log('數量調整點擊：', role === 'admin' ? 'admin' : 'user', id, newVal);
       
       // 即時更新 UI
       span.textContent = String(newVal);

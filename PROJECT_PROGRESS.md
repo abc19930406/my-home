@@ -15,19 +15,15 @@
 - 管理員登入系統（/login 頁面，Supabase Auth）
 - 管理後台（/admin 頁面，需登入才能進入）
 - Vercel Deploy Webhook 正常運作
-- **架構升級**：Astro output 改為 `server` 模式 + `@astrojs/vercel` 適配器，支援 Serverless Function
-- 所有現有靜態頁面加上 `export const prerender = true` 維持靜態輸出
-- **PWA**：manifest.json 設定，可從 Safari 加入主畫面（已移除 Service Worker，避免快取問題）
+- **架構升級**：Astro output 改為 `server` 模式 + `@astrojs/vercel` 適配器
+- **PWA**：manifest.json 設定，可從 Safari 加入主畫面（已移除 Service Worker）
 
 ### ✅ 首頁
 - 深木奶油色系視覺風格（背景 #2C1E14）
 - 資料驅動卡片架構（src/data/links.ts 集中管理）
 - 三個卡片分區：知識與創作 / 生活記錄 / 工具
 - 登入後每張卡片出現編輯按鈕
-- 「旅行地圖」卡片點擊後展開子選單：
-  - 🗺 旅行地圖 → /travel
-  - 🇯🇵 日本收藏 → /japan
-  - 點擊卡片外部自動收合，展開時有淡入動畫
+- 「旅行地圖」卡片點擊後展開子選單（/travel 和 /japan）
 
 ### ✅ 現在狀態便條紙（首頁卡片上方）
 - 淡黃色便條紙 + 頂部琥珀色紙膠帶 + 微傾斜
@@ -38,8 +34,7 @@
 - 列表頁時間軸、單篇 Markdown 渲染、照片幻燈片
 - 權限系統 public / friends / private
 - 日夜切換主題、前台管理（新增/編輯/刪除）
-- 單篇頁改為 SSR（移除 prerender = true）
-- 權限控制在 client side JS 處理
+- 單篇頁改為 SSR，權限控制在 client side JS
 - 右上角登入/登出按鈕
 
 ### ✅ 語錄收藏（/quotes）
@@ -60,7 +55,7 @@
 - 右上角「⚙️ 管理類別」+ 登出按鈕
 - **自訂類別管理**：income_categories、expense_categories 動態管理
 - **橫條圖點擊顯示明細**：所有分類都可點擊查看該月明細
-- **日幣記帳功能**：即時匯率（後端 API 路由 /api/exchange-rate）、日幣換算
+- **日幣記帳功能**：即時匯率（後端 API /api/exchange-rate）、日幣換算
 
 ### ✅ 日本收藏（/japan）— 完整上線
 - 晨霧富士淡藍灰風格（#E8EEF5 + 格紋）
@@ -69,6 +64,11 @@
 - 探索日本搜尋功能（SerpApi）
 - **願望清單功能**：三種登入方式、白名單機制、管理者/朋友功能
 - **「❤️ 我想買」雙層篩選**：點選後動態出現子分類篩選列
+- **數量選擇功能**（完整上線）：
+  - 已勾選商品旁顯示「－ N ＋」數量調整器
+  - 管理者數量存於 japan_items.owner_quantity
+  - 朋友數量存於 wishlist_items.quantity
+  - 「❤️ N 人想買」彈出視窗顯示每人數量 + 合計
 - 右上角登入/登出按鈕
 
 ### ✅ 旅行地圖（/travel）— 完整上線
@@ -79,24 +79,16 @@
 - Google Maps 動態載入（Places API New）
 - 搜尋功能：即時聯想 + 按鈕搜尋（限制在地圖視野內）
 - 點擊景點 Marker 顯示 InfoWindow
+- 景點備註網址自動轉為超連結
 - **每日行程功能**（完整上線）：
   - 「🗺 地圖模式」/「📅 行程模式」切換
-  - 行程模式：左側天數列表、右側景點清單
-  - 新增/刪除天數、上下排序天數
-  - 從想去清單選擇景點加入當天行程（含搜尋框）
-  - 景點上下排序、刪除
-  - 點擊景點卡片顯示詳情 Modal
-  - 地圖連動：當天景點數字 Marker + 藍色虛線連接
-  - 切換行程時自動更新天數列表
-- Supabase 資料庫：trips、spots、spot_types、spot_subtypes、trip_days、day_spots
+  - 天數管理：新增/刪除/上下排序
+  - 從想去清單選擇景點（含搜尋框）
+  - 景點排序、刪除、點擊顯示詳情
+  - 地圖連動：數字 Marker + 藍色虛線
+  - 行程切換自動更新天數列表
+- Supabase：trips、spots、spot_types、spot_subtypes、trip_days、day_spots
 - 右上角登入/登出按鈕
-
-**已啟用的 Google API：**
-- Maps JavaScript API ✅
-- Places API (New) ✅
-- Geocoding API ✅
-- Google OAuth ✅
-- Vercel 環境變數：PUBLIC_GOOGLE_MAPS_KEY、PUBLIC_ADMIN_EMAIL
 
 ---
 
@@ -110,29 +102,19 @@
 ## 三、重要注意事項
 
 1. 單篇頁為 SSR，即時可訪問
-2. `<script define:vars>` 不支援頂層 await，所有非同步邏輯包在 `(async () => { ... })()` 內
-3. `<script define:vars>` 內不能用 import，Supabase 用全域變數 window._supabaseCreateClient
-4. 所有日期處理用本地時區避免 UTC 偏移
-5. 私密頁面在 IIFE 開頭確認 session，無 session 立即導向 /login?from=/xxx
-6. **架構注意**：output: 'server'，所有靜態頁面必須有 `export const prerender = true`
-7. API 路由放在 src/pages/api/，需加 `export const prerender = false`
-8. **Supabase CDN 載入方式**：
-   - Layout.astro 用 `<script is:inline>` 動態注入載入 Supabase
-   - 各頁面用 `window.addEventListener('supabase-ready', ...)` 等待
-   - 不能在 `<script>` 裡直接 import CDN URL，會被 Vite 掃描產生錯誤的 modulepreload
-9. **astro.config.mjs** 有 Vite plugin 移除所有 modulepreload 標籤
-10. **PWA**：已移除 Service Worker（避免快取問題），manifest.json 保留
-    - Layout.astro 有主動 unregister 舊 SW 的程式碼
-11. **Google Maps 載入**：必須在 JS IIFE 裡動態建立 script 標籤
-12. **AdvancedMarkerElement**：需要 mapId，點擊事件用 'gmp-click'
-13. **搜尋**：AutocompleteSuggestion（即時聯想）+ Place.searchByText（按鈕搜尋）
-14. **日本收藏多角色登入**：
-    - 白名單 email 比對用 ilike（大小寫不敏感）
-    - Google OAuth 同意畫面需設為「實際運作中」
-    - 朋友需用 Safari 或 Chrome，不能用 App 內建瀏覽器
-15. **記帳匯率**：後端 API 路由 /api/exchange-rate，多重備援
-16. **spot_types/spot_subtypes**：用 id 關聯，不存文字
-17. **trip_days/day_spots**：id 都是 uuid
+2. `<script define:vars>` 不支援頂層 await，包在 `(async () => { ... })()` 內
+3. **Supabase CDN 載入**：Layout.astro 用 `<script is:inline>` 動態注入，各頁面用 `window.addEventListener('supabase-ready', ...)` 等待
+4. **astro.config.mjs** 有 Vite plugin 移除所有 modulepreload 標籤
+5. **PWA**：已移除 Service Worker，Layout.astro 有主動 unregister 舊 SW 的程式碼
+6. **Google Maps**：必須在 JS IIFE 裡動態建立 script 標籤載入
+7. **AdvancedMarkerElement**：需要 mapId，點擊事件用 'gmp-click'
+8. **Places API New**：AutocompleteSuggestion（即時聯想）+ Place.searchByText（按鈕搜尋）
+9. **日本收藏多角色登入**：
+   - 白名單 email 比對用 ilike（大小寫不敏感）
+   - Google OAuth 同意畫面需設為「實際運作中」
+   - 朋友需用 Safari 或 Chrome，不能用 App 內建瀏覽器
+10. **記帳匯率**：後端 API /api/exchange-rate，多重備援
+11. **trip_days/day_spots**：id 都是 uuid
 
 ---
 
@@ -149,9 +131,9 @@
 | income_categories | 收入來源（動態管理） |
 | expense_categories | 支出分類（動態管理） |
 | japan_categories | 日本收藏分類（兩層） |
-| japan_items | 日本收藏品項（含 owner_wishlist） |
+| japan_items | 日本收藏品項（含 owner_wishlist、owner_quantity） |
 | allowed_users | 日本收藏白名單 |
-| wishlist_items | 朋友/家人願望清單 |
+| wishlist_items | 朋友/家人願望清單（含 quantity） |
 | trips | 旅行行程 |
 | spots | 旅行景點（含 spot_type_id、spot_subtype_id、place_id） |
 | spot_types | 景點主類型 |
