@@ -518,7 +518,6 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
     // 3. 重繪篩選器與卡片 (確保 Client Side 最新)
     renderFilterBar();
     filterAndRenderItems();
-    console.log('日本收藏頁面初始化完成，當前角色：', isAdminUser ? 'admin' : currentUser ? 'user' : 'guest');
   }
 
   function updateHeaderAuthUI() {
@@ -1200,7 +1199,6 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
   // --- 磚牆卡片點擊事件委派 (編輯 & 刪除) ---
   const itemsGrid = document.getElementById('japan-items-grid');
   itemsGrid?.addEventListener('click', async (e) => {
-    console.log('items-grid 被點擊，target：', e.target, 'dataset：', (e.target as HTMLElement).dataset);
     const target = e.target as HTMLElement;
     const btnEdit = target.closest('.btn-edit');
     const btnDelete = target.closest('.btn-delete');
@@ -1225,8 +1223,6 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
       
       if (currentQty === newVal) return;
       
-      console.log('數量調整點擊：', role === 'admin' ? 'admin' : 'user', id, newVal);
-      
       // 即時更新 UI
       span.textContent = String(newVal);
       
@@ -1238,7 +1234,6 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
           if (error) console.error('Admin quantity update failed', error);
         });
       } else if (role === 'user' && currentUser) {
-        console.log('currentUser.id:', currentUser?.id);
         const wItem = allWishlistItems.find(w => String(w.japan_item_id) === String(id) && w.user_id === currentUser.id);
         if (wItem) wItem.quantity = newVal;
         
@@ -1247,8 +1242,7 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
           .update({ quantity: newVal })
           .eq('japan_item_id', parseInt(id))
           .eq('user_id', currentUser.id)
-          .then(({ data, error }) => {
-            console.log('wishlist update result:', data, error);
+          .then(({ error }) => {
             if (error) {
               console.error('wishlist update error:', error.message, error.details, error.hint);
             }
