@@ -67,7 +67,7 @@
 - **數量選擇功能**（完整上線）：
   - 已勾選商品旁顯示「－ N ＋」數量調整器
   - 管理者數量存於 japan_items.owner_quantity
-  - 朋友數量存於 wishlist_items.quantity
+  - 朋友數量存於 wishlist_items.quantity（需 UPDATE RLS policy）
   - 「❤️ N 人想買」彈出視窗顯示每人數量 + 合計
 - 右上角登入/登出按鈕
 
@@ -107,7 +107,7 @@
 4. **astro.config.mjs** 有 Vite plugin 移除所有 modulepreload 標籤
 5. **PWA**：已移除 Service Worker，Layout.astro 有主動 unregister 舊 SW 的程式碼
 6. **Google Maps**：必須在 JS IIFE 裡動態建立 script 標籤載入
-7. **AdvancedMarkerElement**：需要 mapId，點擊事件用 'gmp-click'
+7. **AdvancedMarkerElement**：需要 mapId，點擊事件用 'gmp-click'，需要 gmpClickable: true
 8. **Places API New**：AutocompleteSuggestion（即時聯想）+ Place.searchByText（按鈕搜尋）
 9. **日本收藏多角色登入**：
    - 白名單 email 比對用 ilike（大小寫不敏感）
@@ -115,6 +115,8 @@
    - 朋友需用 Safari 或 Chrome，不能用 App 內建瀏覽器
 10. **記帳匯率**：後端 API /api/exchange-rate，多重備援
 11. **trip_days/day_spots**：id 都是 uuid
+12. **wishlist_items RLS**：需要 SELECT、INSERT、UPDATE、DELETE 四個 policy
+    - UPDATE policy：`auth.uid() = user_id`（朋友才能更新自己的數量）
 
 ---
 

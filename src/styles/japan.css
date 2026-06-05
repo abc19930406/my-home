@@ -33,8 +33,7 @@
   padding: 50px 20px 80px;
   font-family: 'Noto Serif TC', 'Georgia', serif;
   box-sizing: border-box;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: visible;
   max-width: 100%;
 }
 
@@ -42,7 +41,7 @@
   max-width: 1080px;
   margin: 0 auto;
   width: 100%;
-  overflow-x: hidden;
+  overflow: visible;
 }
 
 /* ==========================================================
@@ -136,10 +135,14 @@
    分類篩選列 (Category Filter Bar)
    ========================================================== */
 .japan-filter-bar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: #E8EEF5;
+  padding-bottom: 10px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  background: var(--japan-card-bg);
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: 12px;

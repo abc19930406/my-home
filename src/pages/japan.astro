@@ -72,7 +72,7 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
   <style is:global>
     html, body {
       background-color: #E8EEF5 !important;
-      overflow-y: auto !important;
+      overflow: visible !important;
       height: auto !important;
     }
   </style>
@@ -388,6 +388,7 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
   let categoriesCache: any[] = [];
   let itemsCache: any[] = [];
   let allWishlistItems: any[] = [];
+  let allowedUsersCache: any[] = [];
   let currentMainFilter: string = 'all';
   let currentSubFilter: string = 'all';
   let currentSearchQuery = '';
@@ -428,6 +429,8 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
       if (currentUser.email === adminEmail) {
         isAdminUser = true;
         isAllowedUser = true;
+        const { data: users } = await supabase.from('allowed_users').select('*');
+        allowedUsersCache = users || [];
       } else {
         const { data: allowedUser, error: allowedError } = await supabase
           .from('allowed_users')
@@ -560,6 +563,7 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
     if (isAdminUser) {
       const uniqueEmails = [...new Set(allWishlistItems.map(w => w.user_email))];
       let friendOpts = '<option value="all">👥 朋友清單</option>';
+      friendOpts += '<option value="__everyone__">所有人</option>';
       uniqueEmails.forEach(email => {
         const wItem = allWishlistItems.find(w => w.user_email === email);
         const name = wItem?.user_name || email;
@@ -714,7 +718,10 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
     }
     
     // 朋友清單過濾 (僅管理員)
-    if (isAdminUser && currentFriendFilter !== 'all') {
+    if (isAdminUser && currentFriendFilter === '__everyone__') {
+      const itemsWithWishlist = new Set(allWishlistItems.map(w => String(w.japan_item_id)));
+      filtered = filtered.filter(item => itemsWithWishlist.has(String(item.id)) || item.owner_wishlist);
+    } else if (isAdminUser && currentFriendFilter !== 'all') {
       const userWishlistIds = allWishlistItems
         .filter(w => w.user_email === currentFriendFilter)
         .map(w => String(w.japan_item_id));
@@ -1331,9 +1338,11 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
           }
           
           wItems.forEach(w => {
+            const allowedUser = allowedUsersCache.find(u => u.email.toLowerCase() === w.user_email?.toLowerCase());
+            const name = allowedUser?.display_name || w.user_name || w.user_email;
             const q = w.quantity || 1;
             total += q;
-            listHtml += `<div class="wishlist-name-item">👤 ${w.user_name || w.user_email}：${q} 個</div>`;
+            listHtml += `<div class="wishlist-name-item">👤 ${name}：${q} 個</div>`;
           });
           
           listHtml += `
