@@ -57,6 +57,77 @@ import '../styles/global.css';
 		    document.head.appendChild(s);
 		  })();
 		</script>
+		<div id="ptr-spinner" class="ptr-spinner"></div>
+		<style>
+		  .ptr-spinner {
+		    position: fixed;
+		    top: 20px;
+		    left: 50%;
+		    transform: translateX(-50%);
+		    width: 32px;
+		    height: 32px;
+		    border: 3px solid rgba(255, 255, 255, 0.3);
+		    border-top: 3px solid rgba(255, 255, 255, 0.8);
+		    border-radius: 50%;
+		    z-index: 9999;
+		    display: none;
+		    animation: ptr-spin 1s linear infinite;
+		  }
+		  @keyframes ptr-spin {
+		    0% { transform: translateX(-50%) rotate(0deg); }
+		    100% { transform: translateX(-50%) rotate(360deg); }
+		  }
+		</style>
+		<script is:inline>
+		  (function() {
+		    const spinner = document.getElementById('ptr-spinner');
+		    if (!spinner) return;
+		    let startY = 0;
+		    let startX = 0;
+		    let isPulling = false;
+
+		    document.addEventListener('touchstart', (e) => {
+		      if (window.scrollY <= 0) {
+		        startY = e.touches[0].clientY;
+		        startX = e.touches[0].clientX;
+		        isPulling = true;
+		      }
+		    }, { passive: true });
+
+		    document.addEventListener('touchmove', (e) => {
+		      if (!isPulling) return;
+		      const currentY = e.touches[0].clientY;
+		      const currentX = e.touches[0].clientX;
+		      const deltaY = currentY - startY;
+		      const deltaX = Math.abs(currentX - startX);
+
+		      // 避免與橫向滑動衝突
+		      if (deltaX > deltaY) {
+		        isPulling = false;
+		        return;
+		      }
+
+		      if (window.scrollY <= 0 && deltaY > 0) {
+		        if (deltaY > 20) {
+		          spinner.style.display = 'block';
+		        }
+		      }
+		    }, { passive: true });
+
+		    document.addEventListener('touchend', (e) => {
+		      if (!isPulling) return;
+		      const currentY = e.changedTouches[0].clientY;
+		      const deltaY = currentY - startY;
+
+		      if (window.scrollY <= 0 && deltaY > 80) {
+		        location.reload();
+		      } else {
+		        spinner.style.display = 'none';
+		      }
+		      isPulling = false;
+		    });
+		  })();
+		</script>
 	</body>
 </html>
 

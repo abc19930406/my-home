@@ -75,6 +75,9 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
       overflow: visible !important;
       height: auto !important;
     }
+    body.modal-open {
+      overflow: hidden !important;
+    }
   </style>
 
   <div class="japan-body">
@@ -665,6 +668,30 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
     filterAndRenderItems();
   }
 
+  function updateCardFooter(card: HTMLElement, itemId: string) {
+    if (!card) return;
+    const cItem = itemsCache.find(i => String(i.id) === String(itemId));
+    const isOwnerWishlisted = cItem ? cItem.owner_wishlist : false;
+    const wItemsForFooter = allWishlistItems.filter(w => String(w.japan_item_id) === String(itemId));
+    const peopleCount = wItemsForFooter.length + (isOwnerWishlisted ? 1 : 0);
+    
+    const infoDiv = card.querySelector('.card-info');
+    if (!infoDiv) return;
+    
+    let footer = infoDiv.querySelector('.wishlist-footer');
+    if (peopleCount > 0 && (isAdminUser || isAllowedUser)) {
+      if (!footer) {
+        footer = document.createElement('div');
+        footer.className = 'wishlist-footer';
+        (footer as HTMLElement).dataset.id = itemId;
+        infoDiv.appendChild(footer);
+      }
+      footer.innerHTML = `❤️ ${peopleCount} 人想買`;
+    } else {
+      if (footer) footer.remove();
+    }
+  }
+
   // --- 卡片過濾與繪製 (磚牆式 Masonry) ---
   function filterAndRenderItems() {
     const grid = document.getElementById('japan-items-grid');
@@ -1127,10 +1154,14 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
     }
 
     modal.style.display = 'flex';
+    document.body.classList.add('modal-open');
   }
 
   function closeModal() {
-    if (modal) modal.style.display = 'none';
+    if (modal) {
+      modal.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
   }
 
   document.getElementById('btn-open-add-modal')?.addEventListener('click', () => openModal(false));
@@ -1273,7 +1304,27 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
           cItem.owner_wishlist = newVal;
           cItem.owner_quantity = 1;
         }
-        filterAndRenderItems();
+        const card = btnWishlistAdmin.closest('.japan-card') as HTMLElement;
+        if (card) {
+          if (newVal) {
+            if (!card.querySelector(`.quantity-adjuster.admin[data-id="${id}"]`)) {
+              const adj = document.createElement('div');
+              adj.className = 'quantity-adjuster admin';
+              adj.dataset.id = String(id);
+              adj.dataset.role = 'admin';
+              adj.innerHTML = `
+                <button class="btn-qty-minus" data-action="qty-minus" data-item-id="${id}" data-role="admin">-</button>
+                <span>1</span>
+                <button class="btn-qty-plus" data-action="qty-plus" data-item-id="${id}" data-role="admin">+</button>
+              `;
+              btnWishlistAdmin.insertAdjacentElement('afterend', adj);
+            }
+          } else {
+            const adj = card.querySelector(`.quantity-adjuster.admin[data-id="${id}"]`);
+            if (adj) adj.remove();
+          }
+          updateCardFooter(card, String(id));
+        }
         showToast(newVal ? '已加入您的願望清單' : '已從願望清單移除');
       } else {
         alert('操作失敗：' + error.message);
@@ -1296,7 +1347,13 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
           
         if (!error) {
           allWishlistItems = allWishlistItems.filter(w => !(String(w.japan_item_id) === String(id) && w.user_id === currentUser.id));
-          filterAndRenderItems(); // re-render to update count & icon
+          btnWishlistUser.classList.remove('active');
+          const card = btnWishlistUser.closest('.japan-card') as HTMLElement;
+          if (card) {
+            const adj = card.querySelector(`.quantity-adjuster.user[data-id="${id}"]`);
+            if (adj) adj.remove();
+            updateCardFooter(card, String(id));
+          }
           showToast('已從我的清單移除');
         }
       } else {
@@ -1311,7 +1368,23 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
         const { error } = await supabase.from('wishlist_items').insert([newW]);
         if (!error) {
           allWishlistItems.push(newW);
-          filterAndRenderItems();
+          btnWishlistUser.classList.add('active');
+          const card = btnWishlistUser.closest('.japan-card') as HTMLElement;
+          if (card) {
+            if (!card.querySelector(`.quantity-adjuster.user[data-id="${id}"]`)) {
+              const adj = document.createElement('div');
+              adj.className = 'quantity-adjuster user';
+              adj.dataset.id = String(id);
+              adj.dataset.role = 'user';
+              adj.innerHTML = `
+                <button class="btn-qty-minus" data-action="qty-minus" data-item-id="${id}" data-role="user">-</button>
+                <span>1</span>
+                <button class="btn-qty-plus" data-action="qty-plus" data-item-id="${id}" data-role="user">+</button>
+              `;
+              btnWishlistUser.insertAdjacentElement('afterend', adj);
+            }
+            updateCardFooter(card, String(id));
+          }
           showToast('已加入我的清單');
         } else {
           alert('操作失敗：' + error.message);
@@ -1353,7 +1426,10 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
           container.innerHTML = `<div class="wishlist-names-list">${listHtml}</div>`;
         }
         const m = document.getElementById('wishlist-names-modal');
-        if (m) m.style.display = 'flex';
+        if (m) {
+          m.style.display = 'flex';
+          document.body.classList.add('modal-open');
+        }
       }
       return;
     }
@@ -1396,17 +1472,26 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
   // --- Auth UI 控制 ---
   document.getElementById('btn-login-modal')?.addEventListener('click', () => {
     const m = document.getElementById('auth-modal');
-    if (m) m.style.display = 'flex';
+    if (m) {
+      m.style.display = 'flex';
+      document.body.classList.add('modal-open');
+    }
   });
 
   document.getElementById('btn-auth-close')?.addEventListener('click', () => {
     const m = document.getElementById('auth-modal');
-    if (m) m.style.display = 'none';
+    if (m) {
+      m.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
   });
   
   document.getElementById('btn-wishlist-names-close')?.addEventListener('click', () => {
     const m = document.getElementById('wishlist-names-modal');
-    if (m) m.style.display = 'none';
+    if (m) {
+      m.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
   });
 
   document.getElementById('btn-logout')?.addEventListener('click', async () => {
@@ -1461,18 +1546,28 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
       if (lightboxImg && lightbox) {
         lightboxImg.src = (target as HTMLImageElement).src;
         lightbox.style.display = 'flex';
+        document.body.classList.add('modal-open');
       }
     }
   });
 
   document.getElementById('lightbox-overlay')?.addEventListener('click', () => {
-    if (lightbox) lightbox.style.display = 'none';
+    if (lightbox) {
+      lightbox.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
   });
   document.getElementById('lightbox-close')?.addEventListener('click', () => {
-    if (lightbox) lightbox.style.display = 'none';
+    if (lightbox) {
+      lightbox.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && lightbox) lightbox.style.display = 'none';
+    if (e.key === 'Escape' && lightbox) {
+      lightbox.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
   });
 
   // --- 收藏品即時搜尋事件監聽 (Collection Real-time Search) ---
@@ -1639,6 +1734,7 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
     populateCollectCategoryDropdown();
     if (collectModal) {
       collectModal.style.display = 'flex';
+      document.body.classList.add('modal-open');
     }
   });
 
@@ -1670,7 +1766,10 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
 
   // 4. Modal 控制按鈕
   function closeCollectModal() {
-    if (collectModal) collectModal.style.display = 'none';
+    if (collectModal) {
+      collectModal.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
     pendingCollectItem = null;
     if (collectSelect) collectSelect.value = '';
   }
