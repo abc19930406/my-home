@@ -1238,11 +1238,21 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
           if (error) console.error('Admin quantity update failed', error);
         });
       } else if (role === 'user' && currentUser) {
+        console.log('currentUser.id:', currentUser?.id);
         const wItem = allWishlistItems.find(w => String(w.japan_item_id) === String(id) && w.user_id === currentUser.id);
         if (wItem) wItem.quantity = newVal;
-        supabase.from('wishlist_items').update({ quantity: newVal }).eq('japan_item_id', id).eq('user_id', currentUser.id).then(({error}) => {
-          if (error) console.error('User quantity update failed', error);
-        });
+        
+        supabase
+          .from('wishlist_items')
+          .update({ quantity: newVal })
+          .eq('japan_item_id', parseInt(id))
+          .eq('user_id', currentUser.id)
+          .then(({ data, error }) => {
+            console.log('wishlist update result:', data, error);
+            if (error) {
+              console.error('wishlist update error:', error.message, error.details, error.hint);
+            }
+          });
       }
       return;
     }
