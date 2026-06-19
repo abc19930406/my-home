@@ -115,7 +115,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       window.sharedSupabase = createClient(supabaseUrl, supabaseAnonKey);
       const supabase = window.sharedSupabase;
 
-      supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+      supabase.auth.onAuthStateChange(async (event, session) => {
         if (event === 'SIGNED_IN') {
           if (window.location.hash.includes('access_token')) {
             window.history.replaceState(null, '', window.location.pathname);
@@ -137,7 +137,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         isAdminUser = true;
         // 顯示所有 "返回首頁" 連結
         document.querySelectorAll('.admin-home-link').forEach(el => {
-          (el as HTMLElement).style.display = 'flex'; 
+          el.style.display = 'flex'; 
         });
       }
     } catch (err) {
@@ -146,7 +146,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   })();
 
   // --- 2. 分頁切換邏輯 (Desktop & Mobile 共用) ---
-  function switchTab(tabName: string) {
+  function switchTab(tabName) {
     // 隱藏所有 tab-pane
     document.querySelectorAll('.tab-pane').forEach(pane => {
       pane.classList.remove('active');
@@ -160,7 +160,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
     // 更新 Desktop 側邊欄 active 樣式
     document.querySelectorAll('.trip-sidebar .nav-btn').forEach(btn => {
-      if ((btn as HTMLElement).dataset.target === tabName) {
+      if (btn.dataset.target === tabName) {
         btn.classList.add('active');
       } else {
         btn.classList.remove('active');
@@ -169,7 +169,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
     // 更新 Mobile 選單 active 樣式
     document.querySelectorAll('.mobile-dropdown .mobile-nav-btn').forEach(btn => {
-      if ((btn as HTMLElement).dataset.target === tabName) {
+      if (btn.dataset.target === tabName) {
         btn.classList.add('active');
       } else {
         btn.classList.remove('active');
@@ -190,7 +190,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   // 綁定所有導覽按鈕的點擊事件
   document.querySelectorAll('.nav-btn, .mobile-nav-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
-      const target = (e.currentTarget as HTMLElement).dataset.target;
+      const target = e.currentTarget.dataset.target;
       if (target) {
         switchTab(target);
       }
