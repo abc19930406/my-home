@@ -12,15 +12,17 @@ export default defineConfig({
       tailwindcss(),
       {
         name: 'remove-modulepreload',
-        transformIndexHtml(html) {
-          // 從最終 HTML 移除所有 modulepreload link 標籤
-          return html.replace(
-            /<link[^>]*rel="modulepreload"[^>]*>/g,
-            ''
-          );
+        transformIndexHtml: {
+          order: 'post',
+          handler(html) {
+            return html.replace(/<link[^>]*rel="modulepreload"[^>]*>\s*/g, '');
+          }
         }
       }
     ],
+    optimizeDeps: {
+      exclude: ['@supabase/supabase-js']
+    },
     build: {
       modulePreload: {
         polyfill: false,
