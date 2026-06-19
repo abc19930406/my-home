@@ -491,7 +491,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     });
     await waitForSupabase();
     const createClient = window._supabaseCreateClient;
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+    const supabase = (window as any).sharedSupabase || createClient(supabaseUrl, supabaseAnonKey);
 
     // 2. 動態載入 Google Maps Script
     const googleMapsPromise = new Promise((resolve, reject) => {
@@ -1549,12 +1549,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         }
       }
 
-      supabase.auth.onAuthStateChange((event, currentSession) => {
-        if (event === 'SIGNED_IN' && currentSession) {
+      window.addEventListener('auth-state-changed', async (e: any) => {
+        const { event, session: currentSession } = e.detail;
+        if (event === 'SIGNED_IN') {
           updateAuthUI(currentSession);
-          if (window.location.hash.includes('access_token')) {
-            window.history.replaceState(null, '', window.location.pathname);
-          }
         }
         if (event === 'SIGNED_OUT') {
           updateAuthUI(null);

@@ -112,7 +112,24 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       });
       await waitForSupabase();
       const createClient = (window as any)._supabaseCreateClient;
-      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+      (window as any).sharedSupabase = createClient(supabaseUrl, supabaseAnonKey);
+      const supabase = (window as any).sharedSupabase;
+
+      supabase.auth.onAuthStateChange(async (event: any, session: any) => {
+        if (event === 'SIGNED_IN') {
+          if (window.location.hash.includes('access_token')) {
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+          window.dispatchEvent(new CustomEvent('auth-state-changed', { 
+            detail: { event, session } 
+          }));
+        }
+        if (event === 'SIGNED_OUT') {
+          window.dispatchEvent(new CustomEvent('auth-state-changed', { 
+            detail: { event, session: null } 
+          }));
+        }
+      });
 
       const { data: { session } } = await supabase.auth.getSession();
       

@@ -386,7 +386,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   });
   await waitForSupabase();
   const createClient = (window as any)._supabaseCreateClient;
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const supabase = (window as any).sharedSupabase || createClient(supabaseUrl, supabaseAnonKey);
   
   const toast = document.getElementById('japan-toast');
 
@@ -1814,14 +1814,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     }
   });
 
-  supabase.auth.onAuthStateChange(async (event, session) => {
+  window.addEventListener('auth-state-changed', async (e: any) => {
+    const { event, session } = e.detail;
     if (event === 'SIGNED_IN' && session) {
       // OAuth 回調後 token 寫入完成，重新初始化
       await init();
-      // 清除 URL hash（避免 token 殘留在網址列）
-      if (window.location.hash.includes('access_token')) {
-        window.history.replaceState(null, '', window.location.pathname);
-      }
     }
     if (event === 'SIGNED_OUT') {
       await init();
