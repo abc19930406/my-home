@@ -88,9 +88,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 </script>
 
 <script>
-  const adminEmail = (window as any).__ADMIN_EMAIL__ || '';
-  const supabaseUrl = (window as any).__SUPABASE_URL__ || '';
-  const supabaseAnonKey = (window as any).__SUPABASE_ANON_KEY__ || '';
+  const adminEmail = window.__ADMIN_EMAIL__ || '';
+  const supabaseUrl = window.__SUPABASE_URL__ || '';
+  const supabaseAnonKey = window.__SUPABASE_ANON_KEY__ || '';
 
   // 提升 auth-modal 到 document.body，避免受 tab 容器 display: none 影響
   document.addEventListener('DOMContentLoaded', () => {
@@ -107,13 +107,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     try {
       // 依據架構要求：等待 Supabase CDN 準備就緒
       const waitForSupabase = () => new Promise(resolve => {
-        if ((window as any)._supabaseCreateClient) return resolve(true);
+        if (window._supabaseCreateClient) return resolve(true);
         window.addEventListener('supabase-ready', resolve, { once: true });
       });
       await waitForSupabase();
-      const createClient = (window as any)._supabaseCreateClient;
-      (window as any).sharedSupabase = createClient(supabaseUrl, supabaseAnonKey);
-      const supabase = (window as any).sharedSupabase;
+      const createClient = window._supabaseCreateClient;
+      window.sharedSupabase = createClient(supabaseUrl, supabaseAnonKey);
+      const supabase = window.sharedSupabase;
 
       supabase.auth.onAuthStateChange(async (event: any, session: any) => {
         if (event === 'SIGNED_IN') {
@@ -180,9 +180,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     closeMobileMenu();
 
     // 當切換到行程分頁時，重新觸發地圖 resize 確保顯示正常
-    if (tabName === 'trip' && (window as any).resizeTravelMap) {
+    if (tabName === 'trip' && window.resizeTravelMap) {
       setTimeout(() => {
-        (window as any).resizeTravelMap();
+        window.resizeTravelMap();
       }, 50);
     }
   }

@@ -375,18 +375,18 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   window.__SUPABASE_ANON_KEY__ = supabaseAnonKey;
 </script>
 <script>
-  const deployWebhookUrl = (window as any).__WEBHOOK_URL__ || '';
-  const adminEmail = (window as any).__ADMIN_EMAIL__ || '';
-  const supabaseUrl = (window as any).__SUPABASE_URL__ || '';
-  const supabaseAnonKey = (window as any).__SUPABASE_ANON_KEY__ || '';
+  const deployWebhookUrl = window.__WEBHOOK_URL__ || '';
+  const adminEmail = window.__ADMIN_EMAIL__ || '';
+  const supabaseUrl = window.__SUPABASE_URL__ || '';
+  const supabaseAnonKey = window.__SUPABASE_ANON_KEY__ || '';
 
   const waitForSupabase = () => new Promise(resolve => {
-    if ((window as any)._supabaseCreateClient) return resolve(true);
+    if (window._supabaseCreateClient) return resolve(true);
     window.addEventListener('supabase-ready', resolve, { once: true });
   });
   await waitForSupabase();
-  const createClient = (window as any)._supabaseCreateClient;
-  const supabase = (window as any).sharedSupabase || createClient(supabaseUrl, supabaseAnonKey);
+  const createClient = window._supabaseCreateClient;
+  const supabase = window.sharedSupabase || createClient(supabaseUrl, supabaseAnonKey);
   
   const toast = document.getElementById('japan-toast');
 
