@@ -17,6 +17,7 @@
 - Vercel Deploy Webhook 正常運作
 - **架構升級**：Astro output 改為 `server` 模式 + `@astrojs/vercel` 適配器
 - **PWA**：manifest.json 設定，可從 Safari 加入主畫面（已移除 Service Worker）
+- **全站 Pull to Refresh**：手機下拉重新整理功能，捲到頁面頂部往下拉超過 80px 即觸發 location.reload()，含白色 spinner 視覺回饋，實作於 Layout.astro
 
 ### ✅ 首頁
 - 深木奶油色系視覺風格（背景 #2C1E14）
@@ -69,6 +70,10 @@
   - 管理者數量存於 japan_items.owner_quantity
   - 朋友數量存於 wishlist_items.quantity（需 UPDATE RLS policy）
   - 「❤️ N 人想買」彈出視窗顯示每人數量 + 合計
+- **篩選列置頂**：搜尋框 + 分類篩選列 + 管理按鈕整區 sticky 吸頂，手機與網頁皆適用
+- **朋友清單新增「所有人」模式**（管理員限定）：下拉選單可選「所有人」，顯示所有人標記的願望商品，點擊「❤️ N 人想買」跳出 Modal 列出每人 display_name 與數量
+- **修正卡片點擊跳動**：點擊愛心/數量按鈕改為局部 DOM 更新（updateCardFooter），不再重建整個卡片網格
+- **Modal 滾動鎖定**：所有 Modal 開啟時加上 modal-open class 鎖定背景捲動，關閉後移除
 - 右上角登入/登出按鈕
 
 ### ✅ 旅行地圖（/travel）— 完整上線
@@ -117,6 +122,8 @@
 11. **trip_days/day_spots**：id 都是 uuid
 12. **wishlist_items RLS**：需要 SELECT、INSERT、UPDATE、DELETE 四個 policy
     - UPDATE policy：`auth.uid() = user_id`（朋友才能更新自己的數量）
+13. **日本收藏卡片更新**：點擊愛心/數量按鈕用局部 DOM 更新（updateCardFooter），避免全版重渲染造成跳動
+14. **Modal 滾動鎖定**：開啟 Modal 時加 `document.body.classList.add('modal-open')`，關閉時移除，CSS 需有 `body.modal-open { overflow: hidden; }`
 
 ---
 

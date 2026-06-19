@@ -1,0 +1,17 @@
+
+> my-home@0.0.1 dev
+> astro dev
+
+[vite] connected.
+14:38:31 [types] Generated 0ms
+14:38:31 [vite] Re-optimizing dependencies because vite config has changed
+14:38:31 [vite] Port 4321 is in use, trying another one...
+14:38:31 [vite] Port 4322 is in use, trying another one...
+ astro  v6.3.1 ready in 1497 ms
+┃ Local    http://localhost:4323/
+┃ Network  use --host to expose
+14:38:31 watching for file changes...
+
+ update  ▶ New version of Astro available: 6.4.6
+  Run npx @astrojs/upgrade to update
+

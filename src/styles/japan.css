@@ -667,9 +667,11 @@
 /* ==========================================================
    新增/編輯 Modal
    ========================================================== */
-.modal-overlay {
+.japan-modal-overlay {
   position: fixed;
   inset: 0;
+  width: 100%;
+  height: 100%;
   background: rgba(45, 64, 96, 0.4);
   backdrop-filter: blur(4px);
   z-index: 1000;
@@ -678,6 +680,11 @@
   justify-content: center;
   padding: 20px;
   animation: fadeIn 0.25s ease-out;
+}
+
+.japan-modal-overlay.show,
+.japan-modal-overlay[style*="display: flex"] {
+  display: flex !important;
 }
 
 .modal-box {
@@ -966,7 +973,8 @@
 /* ==========================================================
    點擊照片放大檢視 (Lightbox)
    ========================================================== */
-#lightbox {
+/* Lightbox */
+#japan-lightbox {
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -974,13 +982,13 @@
   align-items: center;
   justify-content: center;
 }
-#lightbox-overlay {
+#japan-lightbox-overlay {
   position: absolute;
   inset: 0;
   background: rgba(0,0,0,0.85);
   cursor: pointer;
 }
-#lightbox-img {
+#japan-lightbox-img {
   position: relative;
   max-width: 90vw;
   max-height: 90vh;
@@ -988,7 +996,7 @@
   border-radius: 4px;
   z-index: 1;
 }
-#lightbox-close {
+#japan-lightbox-close {
   position: absolute;
   top: 20px;
   right: 24px;

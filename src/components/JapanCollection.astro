@@ -1,0 +1,1833 @@
+---
+export const prerender = true;
+import { supabase } from '../lib/supabase-client';
+import '../styles/japan.css';
+
+// 1. Build Time: 靜態抓取所有分類與品項，確保極速載入
+let initialCategories = [];
+let initialItems = [];
+let initialStatus = { japan_explore_public: false };
+
+try {
+  // 抓取分類
+  const { data: catData, error: catError } = await supabase
+    .from('japan_categories')
+    .select('*')
+    .order('sort_order', { ascending: true });
+  
+  if (!catError && catData) {
+    initialCategories = catData;
+  }
+
+  // 抓取品項
+  const { data: itemData, error: itemError } = await supabase
+    .from('japan_items')
+    .select('*')
+    .order('created_at', { ascending: false });
+
+  if (!itemError && itemData) {
+    initialItems = itemData;
+  }
+
+  // 抓取狀態中的日本探索隱私設定
+  const { data: statusData, error: statusError } = await supabase
+    .from('status')
+    .select('japan_explore_public')
+    .eq('id', 1)
+    .single();
+
+  if (!statusError && statusData) {
+    initialStatus = statusData;
+  }
+} catch (err) {
+  console.warn('⚠️ Build Warning: 日本收藏 Supabase 讀取失敗，使用備用資料。', err);
+}
+
+// 備用資料 (以防資料庫在 build 時無法連線)
+const fallbackCategories = [
+  { id: 1, name: '藥妝', parent_id: null, sort_order: 1 },
+  { id: 2, name: '零食', parent_id: null, sort_order: 2 },
+  { id: 3, name: '伴手禮', parent_id: null, sort_order: 3 },
+  { id: 4, name: '景點', parent_id: null, sort_order: 4 }
+];
+
+const categories = initialCategories.length > 0 ? initialCategories : fallbackCategories;
+const items = initialItems;
+
+const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
+const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
+const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL ?? '';
+const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
+---
+
+  <div class="top-right-auth-container">
+    <div id="auth-guest" style="display: none;">
+      <button id="btn-login-modal" class="btn-top-auth">🔑 登入</button>
+    </div>
+    <div id="auth-user" style="display: none;">
+      <button id="btn-logout" class="btn-top-auth">登出</button>
+    </div>
+  </div>
+  <!-- 全域背景覆蓋：確保 Layout 的深色背景被晨霧富士的粉藍灰覆蓋 -->
+  <style is:global>
+    html, body {
+      background-color: #E8EEF5 !important;
+      overflow: visible !important;
+      height: auto !important;
+    }
+    body.modal-open {
+      overflow: hidden !important;
+    }
+  </style>
+
+  <div class="japan-body">
+    <div class="japan-container">
+      
+
+
+      <!-- 探索日本搜尋區 -->
+      <section class="explore-section" id="explore-japan-section" data-explore-public={String(initialStatus.japan_explore_public)} style={initialStatus.japan_explore_public ? '' : 'display: none;'}>
+        <div class="explore-header">
+          <span class="explore-title-text">🔍 探索日本</span>
+          <!-- 管理開關 (預設隱藏，登入後顯示) -->
+          <div id="explore-toggle-container" class="admin-only explore-toggle-container" style="display: none;">
+            <span id="explore-toggle-label" class="explore-toggle-label">私人</span>
+            <label class="explore-switch">
+              <input type="checkbox" id="explore-toggle-checkbox" />
+              <span class="explore-switch-slider"></span>
+            </label>
+          </div>
+        </div>
+        <p class="explore-sub">搜尋最新網路資訊・網友熱門推薦</p>
+        <div class="explore-input-row">
+          <input type="text" id="explore-input" 
+            placeholder="例如：最近熱門藥妝、京都必去景點..."/>
+          <button id="explore-btn">搜尋</button>
+        </div>
+        <!-- 快速標籤 -->
+        <div class="explore-tags">
+          <span class="explore-tag">防曬推薦</span>
+          <span class="explore-tag">京都景點</span>
+          <span class="explore-tag">北海道零食</span>
+          <span class="explore-tag">藥妝必買</span>
+        </div>
+        <!-- 結果區（預設隱藏） -->
+        <div id="explore-results" style="display:none;"></div>
+      </section>
+
+      <!-- 2. 分類篩選列 -->
+      <section class="japan-filter-bar">
+        <!-- 收藏品即時搜尋框 -->
+        <div class="collection-search-container">
+          <div class="collection-search-wrapper">
+            <i class="ti ti-search search-icon"></i>
+            <input type="text" id="collection-search-input" placeholder="搜尋收藏品名或備註..." autocomplete="off" />
+            <button type="button" id="btn-collection-search-clear" style="display: none;">✕</button>
+          </div>
+        </div>
+
+        <div class="filter-row">
+          <!-- 主分類標籤區 -->
+          <div class="main-categories" id="main-categories-filter">
+            <button class="tag-btn active" data-cat-id="all">全部</button>
+            {categories.filter(c => c.parent_id === null).map(cat => (
+              <button class="tag-btn" data-cat-id={cat.id}>{cat.name}</button>
+            ))}
+            <button class="tag-btn" data-cat-id="recommend">網友推薦</button>
+          </div>
+
+          <!-- 登入後管理按鈕 (預設隱藏) -->
+          <div class="admin-actions admin-only" style="display: none;">
+            <button id="btn-toggle-manage" class="btn-action">
+              <i class="ti ti-settings"></i> 管理分類
+            </button>
+            <button id="btn-open-add-modal" class="btn-action-primary">
+              <i class="ti ti-plus"></i> 新增品項
+            </button>
+          </div>
+        </div>
+
+        <!-- 子分類展開區 (JS 動態控制隱顯) -->
+        <div class="sub-categories" id="sub-categories-filter" style="display: none;">
+          <!-- JS 動態插入子分類標籤 -->
+        </div>
+      </section>
+
+      <!-- 3. 管理分類面板 (點「管理分類」展開) -->
+      <section id="manage-category-panel" class="manage-panel">
+        <h3><i class="ti ti-category"></i> 分類管理面板</h3>
+        <div class="category-rows" id="manage-category-rows">
+          <!-- JS 動態生成主分類與對應的子分類列 -->
+        </div>
+        <div class="panel-footer">
+          <button id="btn-add-main-cat" class="btn-dashed-add">
+            <i class="ti ti-plus"></i> 新增主分類
+          </button>
+          <button id="btn-close-manage" class="btn-action-primary">完成</button>
+        </div>
+      </section>
+
+      <!-- 4. 磚牆式卡片區 -->
+      <main class="items-grid" id="japan-items-grid">
+        {items.map(item => {
+          // 找出分類名稱
+          const cat = categories.find(c => c.id === item.category_id);
+          const catName = cat ? cat.name : '未分類';
+          return (
+            <div 
+              class="japan-card" 
+              data-id={item.id} 
+              data-category-id={item.category_id}
+              data-name={item.name}
+              data-note={item.note || ''}
+              data-image-url={item.image_url || ''}
+            >
+              <!-- 登入後編輯/刪除圖示 -->
+              <div class="card-admin-actions admin-only" style="display: none;">
+                <button class="btn-card-icon btn-edit" title="編輯">
+                  <i class="ti ti-pencil"></i>
+                </button>
+                <button class="btn-card-icon btn-delete" title="刪除">
+                  <i class="ti ti-trash"></i>
+                </button>
+              </div>
+
+              <!-- 照片區 -->
+              <div class="card-img-wrap">
+                {item.image_url ? (
+                  <img src={item.image_url} alt={item.name} class="item-image" loading="lazy" />
+                ) : (
+                  <div class="card-img-placeholder">
+                    <i class="ti ti-photo-off"></i>
+                    <span>NO IMAGE</span>
+                  </div>
+                )}
+              </div>
+
+              <!-- 品項資訊 -->
+              <div class="card-info">
+                <div class="card-title-row">
+                  <h4 class="card-title">{item.name}</h4>
+                  <span class="card-tag">{catName}</span>
+                </div>
+                {item.note && <p class="card-note">{item.note}</p>}
+              </div>
+            </div>
+          );
+        })}
+        {items.length === 0 && (
+          <div class="empty-state" id="empty-state-msg">
+            目前沒有任何收藏品項，登入後即可開始新增！
+          </div>
+        )}
+      </main>
+
+      <!-- 5. 新增/編輯 Modal -->
+      <div id="item-modal" class="japan-modal-overlay modal-overlay">
+        <div class="modal-box">
+          <div class="modal-header">
+            <h3 id="modal-title">新增品項</h3>
+            <button id="btn-modal-close" class="btn-modal-close">&times;</button>
+          </div>
+          <form id="item-form">
+            <div class="modal-body">
+              <input type="hidden" id="form-item-id" />
+              
+              <!-- 品項名稱 -->
+              <div class="form-group">
+                <label for="form-item-name">品項名稱 <span style="color: var(--japan-danger)">*</span></label>
+                <input type="text" id="form-item-name" required placeholder="請輸入品項名稱，例如：合利他命 EX Plus" />
+              </div>
+
+              <!-- 主分類下拉選單 -->
+              <div class="form-group">
+                <label for="form-main-cat">主分類</label>
+                <select id="form-main-cat">
+                  <option value="">請選擇主分類</option>
+                  <!-- JS 動態插入 -->
+                </select>
+              </div>
+
+              <!-- 子分類下拉選單 (選完主分類後動態顯示) -->
+              <div class="form-group" id="form-sub-cat-group" style="display: none;">
+                <label for="form-sub-cat">子分類</label>
+                <select id="form-sub-cat">
+                  <option value="">請選擇子分類</option>
+                  <!-- JS 動態插入 -->
+                </select>
+              </div>
+
+              <!-- 備註 -->
+              <div class="form-group">
+                <label for="form-item-note">備註</label>
+                <textarea id="form-item-note" rows="3" placeholder="例如：代購熱門款、每日兩錠、購買地點等..."></textarea>
+              </div>
+
+              <!-- 照片上傳 -->
+              <div class="form-group">
+                <label>照片上傳</label>
+                <div class="file-upload-wrap">
+                  <i class="ti ti-cloud-upload upload-icon"></i>
+                  <p class="upload-text">點擊或拖曳照片至此上傳</p>
+                  <input type="file" id="form-item-image-file" accept="image/*" />
+                </div>
+                <input type="hidden" id="form-item-image-url" />
+                <div class="upload-preview" id="image-upload-preview">
+                  <!-- 上傳預覽圖 -->
+                  <img src="" id="image-preview-img" alt="Preview" />
+                  <button type="button" class="btn-remove-preview" id="btn-remove-image">&times;</button>
+                </div>
+              </div>
+            </div>
+            
+            <div class="modal-footer">
+              <button type="button" id="btn-modal-cancel" class="btn-action">取消</button>
+              <button type="submit" id="btn-modal-save" class="btn-action-primary">儲存</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+
+
+    </div>
+  </div>
+
+  <!-- Lightbox 圖片放大檢視 -->
+  <div id="japan-lightbox" style="display:none;">
+    <div id="japan-lightbox-overlay"></div>
+    <img id="japan-lightbox-img" src="" alt="" />
+    <button id="japan-lightbox-close">✕</button>
+  </div>
+
+  <!-- 網友推薦收藏分類選擇 Modal -->
+  <div id="collect-modal" class="japan-modal-overlay modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>📌 選擇收藏分類</h3>
+        <button type="button" class="btn-modal-close" id="btn-collect-modal-close">&times;</button>
+      </div>
+      <div class="modal-body" style="padding: 24px;">
+        <p style="margin: 0 0 16px 0; font-size: 0.9rem; color: var(--japan-text); line-height: 1.5;">請選擇要將「<span id="collect-item-name-preview" style="font-weight: 600; color: var(--japan-primary);"></span>」加入的分類：</p>
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 8px;">
+          <label for="collect-category-select" style="font-size: 0.85rem; font-weight: 500; color: var(--japan-text-muted);">選擇分類 <span style="color: var(--japan-danger)">*</span></label>
+          <select id="collect-category-select" style="width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(112, 144, 184, 0.3); font-family: inherit; font-size: 0.9rem; color: var(--japan-text); background: white; outline: none; transition: border-color 0.2s;">
+            <option value="">-- 請選擇分類 --</option>
+            <!-- JS 動態插入所有主分類與子分類 -->
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer" style="padding: 20px 24px; border-top: 1px solid rgba(112, 144, 184, 0.15); display: flex; justify-content: flex-end; gap: 12px; background: rgba(100, 120, 160, 0.02);">
+        <button type="button" id="btn-collect-cancel" class="btn-action">取消</button>
+        <button type="button" id="btn-collect-confirm" class="btn-action-primary">確認收藏</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 訪客登入 Modal -->
+  <div id="auth-modal" class="japan-modal-overlay modal-overlay" style="display:none;">
+    <div class="modal-box" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3>🔑 登入願望清單</h3>
+        <button type="button" class="btn-modal-close" id="btn-auth-close">&times;</button>
+      </div>
+      <div class="modal-body auth-modal-content">
+        <button type="button" id="btn-google-login" class="btn-google-auth">
+          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" height="18" alt="Google">
+          使用 Google 帳號登入
+        </button>
+        <div class="auth-divider">或</div>
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="auth-email" placeholder="輸入您的 Email" />
+        </div>
+        <div class="form-group">
+          <label>密碼</label>
+          <input type="password" id="auth-password" placeholder="輸入您的密碼" />
+        </div>
+        <button type="button" id="btn-email-login" class="btn-action-primary" style="width: 100%;">登入</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 願望清單名單 Modal -->
+  <div id="wishlist-names-modal" class="japan-modal-overlay modal-overlay" style="display:none;">
+    <div class="modal-box" style="max-width: 400px;">
+      <div class="modal-header">
+        <h3>❤️ 想買清單</h3>
+        <button type="button" class="btn-modal-close" id="btn-wishlist-names-close">&times;</button>
+      </div>
+      <div class="modal-body" id="wishlist-names-container">
+        <!-- JS dynamically inserts names here -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 訊息通知 -->
+  <div id="japan-toast" class="toast">已成功儲存</div>
+
+
+<!-- 環境變數傳遞 -->
+<script define:vars={{ webhookUrl, adminEmail, supabaseUrl, supabaseAnonKey }} is:inline>
+  window.__WEBHOOK_URL__ = webhookUrl;
+  window.__ADMIN_EMAIL__ = adminEmail;
+  window.__SUPABASE_URL__ = supabaseUrl;
+  window.__SUPABASE_ANON_KEY__ = supabaseAnonKey;
+</script>
+<script>
+  const deployWebhookUrl = (window as any).__WEBHOOK_URL__ || '';
+  const adminEmail = (window as any).__ADMIN_EMAIL__ || '';
+  const supabaseUrl = (window as any).__SUPABASE_URL__ || '';
+  const supabaseAnonKey = (window as any).__SUPABASE_ANON_KEY__ || '';
+
+  const waitForSupabase = () => new Promise(resolve => {
+    if ((window as any)._supabaseCreateClient) return resolve(true);
+    window.addEventListener('supabase-ready', resolve, { once: true });
+  });
+  await waitForSupabase();
+  const createClient = (window as any)._supabaseCreateClient;
+  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  
+  const toast = document.getElementById('japan-toast');
+
+  // 本地快取狀態
+  let categoriesCache: any[] = [];
+  let itemsCache: any[] = [];
+  let allWishlistItems: any[] = [];
+  let allowedUsersCache: any[] = [];
+  let currentMainFilter: string = 'all';
+  let currentSubFilter: string = 'all';
+  let currentSearchQuery = '';
+  let currentFriendFilter = 'all';
+  let isAdminUser = false;
+  let isAllowedUser = false;
+  let currentUser: any = null;
+
+  // --- Utility Functions ---
+  function showToast(message: string) {
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => {
+      toast.classList.remove('show');
+    }, 2000);
+  }
+
+  // --- 讀取資料庫快取與驗證 ---
+  async function init() {
+    // 1. 抓取資料以維持最新狀態
+    const { data: cats } = await supabase.from('japan_categories').select('*').order('sort_order', { ascending: true });
+    const { data: items } = await supabase.from('japan_items').select('*').order('created_at', { ascending: false });
+    const { data: wishlists } = await supabase.from('wishlist_items').select('*');
+    
+    categoriesCache = cats || [];
+    itemsCache = items || [];
+    allWishlistItems = wishlists || [];
+
+    // 2. 身分驗證與即時探索隱私狀態檢查
+    const { data: { session } } = await supabase.auth.getSession();
+    const { data: statusObj } = await supabase.from('status').select('japan_explore_public').eq('id', 1).single();
+    const isPublic = statusObj ? !!statusObj.japan_explore_public : false;
+
+    if (session) {
+      currentUser = session.user;
+      if (currentUser.email === adminEmail) {
+        isAdminUser = true;
+        isAllowedUser = true;
+        const { data: users } = await supabase.from('allowed_users').select('*');
+        allowedUsersCache = users || [];
+      } else {
+        const { data: allowedUser, error: allowedError } = await supabase
+          .from('allowed_users')
+          .select('id')
+          .ilike('email', currentUser.email)
+          .single();
+
+        if (allowedUser) {
+          isAllowedUser = true;
+        } else {
+          alert('此功能僅限受邀用戶使用。');
+          await supabase.auth.signOut();
+          window.location.reload();
+          return;
+        }
+      }
+    }
+
+    updateHeaderAuthUI();
+
+    const exploreSection = document.getElementById('explore-japan-section');
+    const toggleCheckbox = document.getElementById('explore-toggle-checkbox') as HTMLInputElement;
+    const toggleLabel = document.getElementById('explore-toggle-label');
+
+    if (isAdminUser) {
+      document.querySelectorAll('.admin-only').forEach(el => {
+        (el as HTMLElement).style.display = 'flex';
+      });
+      const loginHint = document.getElementById('login-hint');
+      if (loginHint) loginHint.style.display = 'none';
+
+      // 載入管理選單與 Modal 相關下拉
+      renderManageCategoryRows();
+      populateMainCategoryDropdown();
+
+      // 管理員：不論公開或私人均保持可見以進行設定
+      if (exploreSection) exploreSection.style.display = 'block';
+
+      // 初始化開關狀態
+      if (toggleCheckbox) {
+        toggleCheckbox.checked = isPublic;
+      }
+      if (toggleLabel) {
+        toggleLabel.textContent = isPublic ? '公開' : '私人';
+        if (isPublic) {
+          toggleLabel.classList.add('is-public');
+        } else {
+          toggleLabel.classList.remove('is-public');
+        }
+      }
+
+      // 監聽管理開關狀態變更
+      toggleCheckbox?.addEventListener('change', async (e) => {
+        const checked = (e.target as HTMLInputElement).checked;
+        try {
+          const { error } = await supabase
+            .from('status')
+            .update({ japan_explore_public: checked })
+            .eq('id', 1);
+            
+          if (error) throw error;
+          
+          showToast(checked ? '探索功能已公開' : '探索功能已設為私人');
+          
+          if (toggleLabel) {
+            toggleLabel.textContent = checked ? '公開' : '私人';
+            if (checked) {
+              toggleLabel.classList.add('is-public');
+            } else {
+              toggleLabel.classList.remove('is-public');
+            }
+          }
+        } catch (err) {
+          console.error('Failed to update explore visibility:', err);
+          showToast('設定失敗，請稍後重試！');
+          if (toggleCheckbox) {
+            toggleCheckbox.checked = !checked;
+          }
+        }
+      });
+    } else {
+      // 訪客端：根據 Supabase 真實狀態即時控制探索日本區塊的顯隱
+      if (exploreSection) {
+        exploreSection.style.display = isPublic ? 'block' : 'none';
+      }
+    }
+
+    // 3. 重繪篩選器與卡片 (確保 Client Side 最新)
+    renderFilterBar();
+    filterAndRenderItems();
+  }
+
+  function updateHeaderAuthUI() {
+    const authGuest = document.getElementById('auth-guest');
+    const authUser = document.getElementById('auth-user');
+    
+    if (isAdminUser) {
+      if (authGuest) authGuest.style.display = 'none';
+      if (authUser) authUser.style.display = 'block';
+    } else if (isAllowedUser && currentUser) {
+      if (authGuest) authGuest.style.display = 'none';
+      if (authUser) authUser.style.display = 'block';
+    } else {
+      if (authGuest) authGuest.style.display = 'block';
+      if (authUser) authUser.style.display = 'none';
+    }
+  }
+
+  // --- 渲染分類篩選列 ---
+  function renderFilterBar() {
+    const mainContainer = document.getElementById('main-categories-filter');
+    if (!mainContainer) return;
+
+    // 保留 "全部"
+    const activeId = currentMainFilter;
+    const mainCats = categoriesCache.filter(c => c.parent_id === null);
+
+    let html = `<button class="tag-btn ${activeId === 'all' ? 'active' : ''}" data-cat-id="all">全部</button>`;
+    mainCats.forEach(cat => {
+      html += `<button class="tag-btn ${String(cat.id) === String(activeId) ? 'active' : ''}" data-cat-id="${cat.id}">${cat.name}</button>`;
+    });
+    
+    // 願望清單功能 (個人化)
+    if (isAdminUser || isAllowedUser) {
+      html += `<button class="tag-btn ${activeId === 'wishlist' ? 'active' : ''}" data-cat-id="wishlist">❤️ 我想買</button>`;
+    }
+    
+    html += `<button class="tag-btn ${activeId === 'recommend' ? 'active' : ''}" data-cat-id="recommend">網友推薦</button>`;
+    
+    if (isAdminUser) {
+      const uniqueEmails = [...new Set(allWishlistItems.map(w => w.user_email))];
+      let friendOpts = '<option value="all">👥 朋友清單</option>';
+      friendOpts += '<option value="__everyone__">所有人</option>';
+      uniqueEmails.forEach(email => {
+        const wItem = allWishlistItems.find(w => w.user_email === email);
+        const name = wItem?.user_name || email;
+        friendOpts += `<option value="${email}" ${currentFriendFilter === email ? 'selected' : ''}>${name}</option>`;
+      });
+      html += `<div class="friend-filter-container"><select class="friend-select" id="friend-filter-select">${friendOpts}</select></div>`;
+    }
+
+    mainContainer.innerHTML = html;
+
+    // 綁定主分類點擊事件
+    mainContainer.querySelectorAll('.tag-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const id = (e.currentTarget as HTMLElement).dataset.catId || 'all';
+        selectMainCategory(id);
+      });
+    });
+
+    const friendSelect = document.getElementById('friend-filter-select');
+    if (friendSelect) {
+      friendSelect.addEventListener('change', (e) => {
+        currentFriendFilter = (e.target as HTMLSelectElement).value;
+        filterAndRenderItems();
+      });
+    }
+
+    // 渲染子分類
+    renderSubFilterBar();
+  }
+
+  function renderSubFilterBar() {
+    const subContainer = document.getElementById('sub-categories-filter');
+    if (!subContainer) return;
+
+    if (currentMainFilter === 'all' || currentMainFilter === 'recommend') {
+      subContainer.style.display = 'none';
+      subContainer.innerHTML = '';
+      return;
+    }
+
+    let subs: any[] = [];
+
+    if (currentMainFilter === 'wishlist') {
+      let wishlistItems: any[] = [];
+      if (isAdminUser) {
+        wishlistItems = itemsCache.filter(item => item.owner_wishlist === true);
+      } else if (isAllowedUser && currentUser) {
+        const userWishlistIds = allWishlistItems
+          .filter(w => w.user_id === currentUser.id)
+          .map(w => String(w.japan_item_id));
+        wishlistItems = itemsCache.filter(item => userWishlistIds.includes(String(item.id)));
+      }
+      const catIds = [...new Set(wishlistItems.map(item => String(item.category_id)))];
+      subs = catIds.map(id => categoriesCache.find(c => String(c.id) === id)).filter(Boolean);
+    } else {
+      subs = categoriesCache.filter(c => String(c.parent_id) === String(currentMainFilter));
+    }
+
+    if (subs.length === 0) {
+      subContainer.style.display = 'none';
+      subContainer.innerHTML = '';
+      return;
+    }
+
+    subContainer.style.display = 'flex';
+    let html = `<button class="tag-btn sub-tag-btn ${currentSubFilter === 'all' ? 'active' : ''}" data-sub-id="all">全部</button>`;
+    subs.forEach(sub => {
+      html += `<button class="tag-btn sub-tag-btn ${String(sub.id) === String(currentSubFilter) ? 'active' : ''}" data-sub-id="${sub.id}">${sub.name}</button>`;
+    });
+    subContainer.innerHTML = html;
+
+    // 綁定子分類點擊事件
+    subContainer.querySelectorAll('.tag-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const subId = (e.currentTarget as HTMLElement).dataset.subId || 'all';
+        currentSubFilter = subId;
+        subContainer.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('active'));
+        (e.currentTarget as HTMLElement).classList.add('active');
+        filterAndRenderItems();
+      });
+    });
+  }
+
+  function selectMainCategory(id: string) {
+    currentMainFilter = id;
+    currentSubFilter = 'all'; // 重設子分類
+    
+    // 更新主分類樣式
+    const mainContainer = document.getElementById('main-categories-filter');
+    mainContainer?.querySelectorAll('.tag-btn').forEach(btn => {
+      if ((btn as HTMLElement).dataset.catId === id) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+
+    renderSubFilterBar();
+    filterAndRenderItems();
+  }
+
+  function updateCardFooter(card: HTMLElement, itemId: string) {
+    if (!card) return;
+    const cItem = itemsCache.find(i => String(i.id) === String(itemId));
+    const isOwnerWishlisted = cItem ? cItem.owner_wishlist : false;
+    const wItemsForFooter = allWishlistItems.filter(w => String(w.japan_item_id) === String(itemId));
+    const peopleCount = wItemsForFooter.length + (isOwnerWishlisted ? 1 : 0);
+    
+    const infoDiv = card.querySelector('.card-info');
+    if (!infoDiv) return;
+    
+    let footer = infoDiv.querySelector('.wishlist-footer');
+    if (peopleCount > 0 && (isAdminUser || isAllowedUser)) {
+      if (!footer) {
+        footer = document.createElement('div');
+        footer.className = 'wishlist-footer';
+        (footer as HTMLElement).dataset.id = itemId;
+        infoDiv.appendChild(footer);
+      }
+      footer.innerHTML = `❤️ ${peopleCount} 人想買`;
+    } else {
+      if (footer) footer.remove();
+    }
+  }
+
+  // --- 卡片過濾與繪製 (磚牆式 Masonry) ---
+  function filterAndRenderItems() {
+    const grid = document.getElementById('japan-items-grid');
+    if (!grid) return;
+
+    let filtered = [...itemsCache];
+
+    if (currentMainFilter === 'wishlist') {
+      if (isAdminUser) {
+        filtered = filtered.filter(item => item.owner_wishlist === true);
+      } else if (isAllowedUser && currentUser) {
+        const userWishlistIds = allWishlistItems
+          .filter(w => w.user_id === currentUser.id)
+          .map(w => String(w.japan_item_id));
+        filtered = filtered.filter(item => userWishlistIds.includes(String(item.id)));
+      } else {
+        filtered = [];
+      }
+
+      if (currentSubFilter !== 'all') {
+        filtered = filtered.filter(item => String(item.category_id) === String(currentSubFilter));
+      }
+    } else if (currentMainFilter === 'recommend') {
+      filtered = filtered.filter(item => item.note === '網友推薦');
+    } else if (currentMainFilter !== 'all') {
+      // 獲取該主分類下的所有子分類 ID
+      const subIds = categoriesCache
+        .filter(c => String(c.parent_id) === String(currentMainFilter))
+        .map(c => String(c.id));
+      
+      if (currentSubFilter === 'all') {
+        // 顯示主分類品項 + 所有子分類品項
+        filtered = filtered.filter(item => 
+          String(item.category_id) === String(currentMainFilter) || 
+          subIds.includes(String(item.category_id))
+        );
+      } else {
+        // 僅顯示特定子分類品項
+        filtered = filtered.filter(item => String(item.category_id) === String(currentSubFilter));
+      }
+    }
+
+    // 關鍵字即時模糊搜尋 (模糊比對 name 與 note)
+    if (currentSearchQuery.trim()) {
+      const q = currentSearchQuery.trim().toLowerCase();
+      filtered = filtered.filter(item => {
+        const nameMatch = item.name ? item.name.toLowerCase().includes(q) : false;
+        const noteMatch = item.note ? item.note.toLowerCase().includes(q) : false;
+        return nameMatch || noteMatch;
+      });
+    }
+    
+    // 朋友清單過濾 (僅管理員)
+    if (isAdminUser && currentFriendFilter === '__everyone__') {
+      const itemsWithWishlist = new Set(allWishlistItems.map(w => String(w.japan_item_id)));
+      filtered = filtered.filter(item => itemsWithWishlist.has(String(item.id)) || item.owner_wishlist);
+    } else if (isAdminUser && currentFriendFilter !== 'all') {
+      const userWishlistIds = allWishlistItems
+        .filter(w => w.user_email === currentFriendFilter)
+        .map(w => String(w.japan_item_id));
+      filtered = filtered.filter(item => userWishlistIds.includes(String(item.id)));
+    }
+
+    if (filtered.length === 0) {
+      grid.innerHTML = `
+        <div class="empty-state" id="empty-state-msg">
+          此分類下目前沒有任何品項！
+        </div>
+      `;
+      return;
+    }
+
+    let html = '';
+    filtered.forEach(item => {
+      const cat = categoriesCache.find(c => String(c.id) === String(item.category_id));
+      const catName = cat ? cat.name : '未分類';
+      const imgTag = item.image_url 
+        ? `<img src="${item.image_url}" alt="${item.name}" class="item-image" loading="lazy" />` 
+        : `
+          <div class="card-img-placeholder">
+            <i class="ti ti-photo-off"></i>
+            <span>NO IMAGE</span>
+          </div>
+        `;
+
+      const noteTag = item.note ? `<p class="card-note">${item.note}</p>` : '';
+
+      const isOwnerWishlisted = item.owner_wishlist === true;
+      let adminCheckboxHtml = '';
+      if (isAdminUser) {
+        adminCheckboxHtml = `
+          <div class="wishlist-checkbox-admin ${isOwnerWishlisted ? 'active' : ''}" data-id="${item.id}" title="管理者願望清單">
+            ${isOwnerWishlisted ? '❤️' : '🤍'}
+          </div>
+        `;
+        if (isOwnerWishlisted) {
+          adminCheckboxHtml += `
+            <div class="quantity-adjuster admin" data-id="${item.id}" data-role="admin">
+              <button class="btn-qty-minus" data-action="qty-minus" data-item-id="${item.id}" data-role="admin">-</button>
+              <span>${item.owner_quantity || 1}</span>
+              <button class="btn-qty-plus" data-action="qty-plus" data-item-id="${item.id}" data-role="admin">+</button>
+            </div>
+          `;
+        }
+      }
+
+      let userCheckboxHtml = '';
+      if (isAllowedUser && currentUser && !isAdminUser) {
+        const userWishlistItem = allWishlistItems.find(w => String(w.japan_item_id) === String(item.id) && w.user_id === currentUser.id);
+        const isUserWishlisted = !!userWishlistItem;
+        userCheckboxHtml = `
+          <div class="wishlist-checkbox-user ${isUserWishlisted ? 'active' : ''}" data-id="${item.id}" title="加入我的清單">
+            📌
+          </div>
+        `;
+        if (isUserWishlisted) {
+          userCheckboxHtml += `
+            <div class="quantity-adjuster user" data-id="${item.id}" data-role="user">
+              <button class="btn-qty-minus" data-action="qty-minus" data-item-id="${item.id}" data-role="user">-</button>
+              <span>${userWishlistItem.quantity || 1}</span>
+              <button class="btn-qty-plus" data-action="qty-plus" data-item-id="${item.id}" data-role="user">+</button>
+            </div>
+          `;
+        }
+      }
+
+      const wItemsForFooter = allWishlistItems.filter(w => String(w.japan_item_id) === String(item.id));
+      const peopleCount = wItemsForFooter.length + (isOwnerWishlisted ? 1 : 0);
+      let countHtml = '';
+      if (isAdminUser || isAllowedUser) {
+        if (peopleCount > 0) {
+          countHtml = `<div class="wishlist-footer" data-id="${item.id}">❤️ ${peopleCount} 人想買</div>`;
+        }
+      }
+
+      html += `
+        <div 
+          class="japan-card" 
+          data-id="${item.id}" 
+          data-category-id="${item.category_id}"
+          data-name="${item.name}"
+          data-note="${item.note || ''}"
+          data-image-url="${item.image_url || ''}"
+        >
+          ${adminCheckboxHtml}
+          ${userCheckboxHtml}
+          <div class="card-admin-actions admin-only" style="display: ${isAdminUser ? 'flex' : 'none'};">
+            <button class="btn-card-icon btn-edit" title="編輯">
+              <i class="ti ti-pencil"></i>
+            </button>
+            <button class="btn-card-icon btn-delete" title="刪除">
+              <i class="ti ti-trash"></i>
+            </button>
+          </div>
+          <div class="card-img-wrap">
+            ${imgTag}
+          </div>
+          <div class="card-info">
+            <div class="card-title-row">
+              <h4 class="card-title">${item.name}</h4>
+              <span class="card-tag">${catName}</span>
+            </div>
+            ${noteTag}
+            ${countHtml}
+          </div>
+        </div>
+      `;
+    });
+
+    grid.innerHTML = html;
+  }
+
+  // --- 管理分類面板渲染 ---
+  function renderManageCategoryRows() {
+    const container = document.getElementById('manage-category-rows');
+    if (!container) return;
+
+    const mainCats = categoriesCache.filter(c => c.parent_id === null);
+    let html = '';
+
+    mainCats.forEach(main => {
+      const subs = categoriesCache.filter(c => String(c.parent_id) === String(main.id));
+      let subTags = '';
+      
+      subs.forEach(sub => {
+        subTags += `
+          <span class="sub-manage-tag">
+            ${sub.name}
+            <button class="btn-remove-sub" data-sub-id="${sub.id}">&times;</button>
+          </span>
+        `;
+      });
+
+      html += `
+        <div class="category-row" data-main-id="${main.id}">
+          <div class="main-cat-title">
+            <span>${main.name}</span>
+            <button class="btn-delete-main" data-main-id="${main.id}" title="刪除此主分類及其子分類">
+              <i class="ti ti-trash"></i>
+            </button>
+          </div>
+          <div class="sub-tags-wrap">
+            ${subTags}
+            <button class="btn-dashed-add btn-add-sub-cat" data-parent-id="${main.id}">
+              <i class="ti ti-plus"></i> 子分類
+            </button>
+          </div>
+        </div>
+      `;
+    });
+
+    container.innerHTML = html;
+
+    // 綁定刪除主分類事件
+    container.querySelectorAll('.btn-delete-main').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).dataset.mainId;
+        if (!id) return;
+        if (confirm('確定要刪除此主分類嗎？這會連同其下的所有子分類一併刪除，且無法復原！')) {
+          const { error } = await supabase.from('japan_categories').delete().eq('id', id);
+          if (!error) {
+            showToast('主分類已刪除');
+            categoriesCache = categoriesCache.filter(c => String(c.id) !== String(id) && String(c.parent_id) !== String(id));
+            renderManageCategoryRows();
+            renderFilterBar();
+            populateMainCategoryDropdown();
+            filterAndRenderItems();
+            triggerBuildWebhook();
+          } else {
+            alert('刪除失敗：' + error.message);
+          }
+        }
+      });
+    });
+
+    // 綁定刪除子分類事件
+    container.querySelectorAll('.btn-remove-sub').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const id = (e.currentTarget as HTMLElement).dataset.subId;
+        if (!id) return;
+        if (confirm('確定要刪除此子分類嗎？')) {
+          const { error } = await supabase.from('japan_categories').delete().eq('id', id);
+          if (!error) {
+            showToast('子分類已刪除');
+            categoriesCache = categoriesCache.filter(c => String(c.id) !== String(id));
+            renderManageCategoryRows();
+            renderFilterBar();
+            populateMainCategoryDropdown();
+            filterAndRenderItems();
+            triggerBuildWebhook();
+          } else {
+            alert('刪除失敗：' + error.message);
+          }
+        }
+      });
+    });
+
+    // 綁定新增子分類事件
+    container.querySelectorAll('.btn-add-sub-cat').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        const parentId = (e.currentTarget as HTMLElement).dataset.parentId;
+        if (!parentId) return;
+        const name = prompt('請輸入子分類名稱：');
+        if (!name || name.trim() === '') return;
+
+        const { data, error } = await supabase
+          .from('japan_categories')
+          .insert([{ name: name.trim(), parent_id: parseInt(parentId), sort_order: 10 }])
+          .select()
+          .single();
+
+        if (!error && data) {
+          showToast('已新增子分類');
+          categoriesCache.push(data);
+          renderManageCategoryRows();
+          renderFilterBar();
+          populateMainCategoryDropdown();
+          triggerBuildWebhook();
+        } else {
+          alert('新增失敗：' + (error?.message || '未知錯誤'));
+        }
+      });
+    });
+  }
+
+  // --- 新增主分類 ---
+  const btnAddMainCat = document.getElementById('btn-add-main-cat');
+  btnAddMainCat?.addEventListener('click', async () => {
+    const name = prompt('請輸入主分類名稱：');
+    if (!name || name.trim() === '') return;
+
+    // 計算 sort_order
+    const mainCats = categoriesCache.filter(c => c.parent_id === null);
+    const maxSort = mainCats.reduce((max, c) => Math.max(max, c.sort_order || 0), 0);
+
+    const { data, error } = await supabase
+      .from('japan_categories')
+      .insert([{ name: name.trim(), parent_id: null, sort_order: maxSort + 1 }])
+      .select()
+      .single();
+
+    if (!error && data) {
+      showToast('已新增主分類');
+      categoriesCache.push(data);
+      renderManageCategoryRows();
+      renderFilterBar();
+      populateMainCategoryDropdown();
+      triggerBuildWebhook();
+    } else {
+      alert('新增失敗：' + (error?.message || '未知錯誤'));
+    }
+  });
+
+  // --- Modal 表單連動與欄位處理 ---
+  const mainCatSelect = document.getElementById('form-main-cat') as HTMLSelectElement;
+  const subCatGroup = document.getElementById('form-sub-cat-group');
+  const subCatSelect = document.getElementById('form-sub-cat') as HTMLSelectElement;
+
+  function populateMainCategoryDropdown() {
+    if (!mainCatSelect) return;
+    const mainCats = categoriesCache.filter(c => c.parent_id === null);
+    
+    let html = '<option value="">請選擇主分類</option>';
+    mainCats.forEach(cat => {
+      html += `<option value="${cat.id}">${cat.name}</option>`;
+    });
+    mainCatSelect.innerHTML = html;
+  }
+
+  mainCatSelect?.addEventListener('change', () => {
+    const mainId = mainCatSelect.value;
+    updateSubCategoryDropdown(mainId);
+  });
+
+  function updateSubCategoryDropdown(mainId: string, selectedSubId: string = '') {
+    if (!subCatSelect || !subCatGroup) return;
+
+    if (!mainId) {
+      subCatGroup.style.display = 'none';
+      subCatSelect.innerHTML = '<option value="">請選擇子分類</option>';
+      return;
+    }
+
+    const subs = categoriesCache.filter(c => String(c.parent_id) === String(mainId));
+    if (subs.length === 0) {
+      subCatGroup.style.display = 'none';
+      subCatSelect.innerHTML = '<option value="">請選擇子分類</option>';
+      return;
+    }
+
+    subCatGroup.style.display = 'block';
+    let html = '<option value="">請選擇子分類</option>';
+    subs.forEach(sub => {
+      html += `<option value="${sub.id}" ${String(sub.id) === String(selectedSubId) ? 'selected' : ''}>${sub.name}</option>`;
+    });
+    subCatSelect.innerHTML = html;
+  }
+
+  // --- 照片上傳控制 ---
+  const fileInput = document.getElementById('form-item-image-file') as HTMLInputElement;
+  const imageUrlInput = document.getElementById('form-item-image-url') as HTMLInputElement;
+  const previewDiv = document.getElementById('image-upload-preview');
+  const previewImg = document.getElementById('image-preview-img') as HTMLImageElement;
+  const btnRemoveImage = document.getElementById('btn-remove-image');
+
+  fileInput?.addEventListener('change', async (e) => {
+    const target = e.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (!file) return;
+
+    const uploadText = document.querySelector('.file-upload-wrap .upload-text');
+    const uploadIcon = document.querySelector('.file-upload-wrap .upload-icon');
+    
+    if (uploadText) uploadText.textContent = '上傳中...';
+    if (uploadIcon) uploadIcon.className = 'ti ti-loader-2 upload-icon animate-spin';
+
+    try {
+      // 檔名加上時間戳記防重複
+      const ext = file.name.split('.').pop();
+      const fileName = `item_${Date.now()}.${ext}`;
+      
+      const { data, error } = await supabase.storage
+        .from('japan_images')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+
+      if (error) throw error;
+
+      // 獲取公開連結
+      const { data: { publicUrl } } = supabase.storage
+        .from('japan_images')
+        .getPublicUrl(fileName);
+
+      imageUrlInput.value = publicUrl;
+      if (previewImg) previewImg.src = publicUrl;
+      if (previewDiv) previewDiv.style.display = 'block';
+      showToast('照片上傳成功');
+    } catch (err: any) {
+      alert('照片上傳失敗：' + (err.message || err));
+    } finally {
+      if (uploadText) uploadText.textContent = '點擊或拖曳照片至此上傳';
+      if (uploadIcon) uploadIcon.className = 'ti ti-cloud-upload upload-icon';
+    }
+  });
+
+  btnRemoveImage?.addEventListener('click', () => {
+    imageUrlInput.value = '';
+    fileInput.value = '';
+    if (previewDiv) previewDiv.style.display = 'none';
+    if (previewImg) previewImg.src = '';
+  });
+
+  // --- Modal 控制開關 ---
+  const modal = document.getElementById('item-modal');
+  const modalTitle = document.getElementById('modal-title');
+  const form = document.getElementById('item-form') as HTMLFormElement;
+  const itemIdInput = document.getElementById('form-item-id') as HTMLInputElement;
+  const itemNameInput = document.getElementById('form-item-name') as HTMLInputElement;
+  const itemNoteInput = document.getElementById('form-item-note') as HTMLTextAreaElement;
+
+  function openModal(isEdit = false, item: any = null) {
+    if (!modal) return;
+    
+    form.reset();
+    itemIdInput.value = '';
+    imageUrlInput.value = '';
+    if (previewDiv) previewDiv.style.display = 'none';
+    if (previewImg) previewImg.src = '';
+    if (subCatGroup) subCatGroup.style.display = 'none';
+
+    if (isEdit && item) {
+      if (modalTitle) modalTitle.textContent = '編輯品項';
+      itemIdInput.value = item.id;
+      itemNameInput.value = item.name;
+      itemNoteInput.value = item.note || '';
+      imageUrlInput.value = item.image_url || '';
+
+      if (item.image_url) {
+        if (previewImg) previewImg.src = item.image_url;
+        if (previewDiv) previewDiv.style.display = 'block';
+      }
+
+      // 計算所屬的父/子分類
+      const currentCat = categoriesCache.find(c => String(c.id) === String(item.category_id));
+      if (currentCat) {
+        if (currentCat.parent_id === null) {
+          // 主分類
+          mainCatSelect.value = String(currentCat.id);
+          updateSubCategoryDropdown(String(currentCat.id));
+        } else {
+          // 子分類
+          mainCatSelect.value = String(currentCat.parent_id);
+          updateSubCategoryDropdown(String(currentCat.parent_id), String(currentCat.id));
+        }
+      }
+    } else {
+      if (modalTitle) modalTitle.textContent = '新增品項';
+    }
+
+    modal.style.display = 'flex';
+    document.body.classList.add('modal-open');
+  }
+
+  function closeModal() {
+    if (modal) {
+      modal.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
+  }
+
+  document.getElementById('btn-open-add-modal')?.addEventListener('click', () => openModal(false));
+  document.getElementById('btn-modal-close')?.addEventListener('click', closeModal);
+  document.getElementById('btn-modal-cancel')?.addEventListener('click', closeModal);
+
+  // --- 管理面板顯隱 ---
+  const managePanel = document.getElementById('manage-category-panel');
+  document.getElementById('btn-toggle-manage')?.addEventListener('click', () => {
+    if (!managePanel) return;
+    const isShowing = managePanel.style.display === 'block';
+    managePanel.style.display = isShowing ? 'none' : 'block';
+    if (!isShowing) {
+      managePanel.scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  document.getElementById('btn-close-manage')?.addEventListener('click', () => {
+    if (managePanel) managePanel.style.display = 'none';
+  });
+
+  // --- 表單提交儲存 ---
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const saveBtn = document.getElementById('btn-modal-save') as HTMLButtonElement;
+    if (saveBtn) saveBtn.disabled = true;
+
+    const id = itemIdInput.value;
+    const name = itemNameInput.value.trim();
+    const note = itemNoteInput.value.trim();
+    const image_url = imageUrlInput.value;
+
+    // 分類判定：若有選子分類，則用子分類 ID，否則用主分類 ID
+    const mainId = mainCatSelect.value;
+    const subId = subCatSelect.value;
+    const category_id = subId ? parseInt(subId) : (mainId ? parseInt(mainId) : null);
+
+    const itemData = {
+      name,
+      note: note || null,
+      image_url: image_url || null,
+      category_id
+    };
+
+    try {
+      let error;
+      let returnedData: any = null;
+
+      if (id) {
+        // 編輯更新
+        const { error: err } = await supabase.from('japan_items').update(itemData).eq('id', id);
+        error = err;
+      } else {
+        // 新增品項
+        const { data, error: err } = await supabase.from('japan_items').insert([itemData]).select().single();
+        error = err;
+        returnedData = data;
+      }
+
+      if (error) throw error;
+
+      showToast(id ? '品項已成功更新' : '已成功新增收藏品項');
+      closeModal();
+      init(); // 重新讀取資料，重置快取並渲染
+      triggerBuildWebhook();
+    } catch (err: any) {
+      alert('儲存失敗：' + (err.message || err));
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  });
+
+  // --- 磚牆卡片點擊事件委派 (編輯 & 刪除) ---
+  const itemsGrid = document.getElementById('japan-items-grid');
+  itemsGrid?.addEventListener('click', async (e) => {
+    const target = e.target as HTMLElement;
+    const btnEdit = target.closest('.btn-edit');
+    const btnDelete = target.closest('.btn-delete');
+    const btnWishlistAdmin = target.closest('.wishlist-checkbox-admin');
+    const btnWishlistUser = target.closest('.wishlist-checkbox-user');
+    const footerCount = target.closest('.wishlist-footer');
+    const btnQtyMinus = target.closest('.btn-qty-minus') || target.closest('[data-action="qty-minus"]');
+    const btnQtyPlus = target.closest('.btn-qty-plus') || target.closest('[data-action="qty-plus"]');
+
+    if (btnQtyMinus || btnQtyPlus) {
+      const btn = (btnQtyMinus || btnQtyPlus) as HTMLElement;
+      const adjuster = target.closest('.quantity-adjuster') as HTMLElement;
+      if (!adjuster && !btn) return;
+      
+      const id = btn.dataset.itemId || adjuster?.dataset.id;
+      const role = btn.dataset.role || adjuster?.dataset.role;
+      const span = adjuster ? adjuster.querySelector('span') : target.closest('.quantity-adjuster')?.querySelector('span');
+      if (!id || !span) return;
+      
+      let currentQty = parseInt(span.textContent || '1');
+      const newVal = btnQtyMinus ? Math.max(1, currentQty - 1) : currentQty + 1;
+      
+      if (currentQty === newVal) return;
+      
+      // 即時更新 UI
+      span.textContent = String(newVal);
+      
+      // 背景更新資料庫與快取
+      if (role === 'admin' && isAdminUser) {
+        const cItem = itemsCache.find(i => String(i.id) === String(id));
+        if (cItem) cItem.owner_quantity = newVal;
+        supabase.from('japan_items').update({ owner_quantity: newVal }).eq('id', id).then(({error}) => {
+          if (error) console.error('Admin quantity update failed', error);
+        });
+      } else if (role === 'user' && currentUser) {
+        const wItem = allWishlistItems.find(w => String(w.japan_item_id) === String(id) && w.user_id === currentUser.id);
+        if (wItem) wItem.quantity = newVal;
+        
+        supabase
+          .from('wishlist_items')
+          .update({ quantity: newVal })
+          .eq('japan_item_id', parseInt(id))
+          .eq('user_id', currentUser.id)
+          .then(({ error }) => {
+            if (error) {
+              console.error('wishlist update error:', error.message, error.details, error.hint);
+            }
+          });
+      }
+      return;
+    }
+
+    // Admin toggles owner_wishlist
+    if (btnWishlistAdmin) {
+      const id = (btnWishlistAdmin as HTMLElement).dataset.id;
+      const isActive = btnWishlistAdmin.classList.contains('active');
+      const newVal = !isActive;
+      
+      const { error } = await supabase.from('japan_items').update({ owner_wishlist: newVal, owner_quantity: 1 }).eq('id', id);
+      if (!error) {
+        btnWishlistAdmin.classList.toggle('active');
+        btnWishlistAdmin.innerHTML = newVal ? '❤️' : '🤍';
+        const cItem = itemsCache.find(i => String(i.id) === String(id));
+        if (cItem) {
+          cItem.owner_wishlist = newVal;
+          cItem.owner_quantity = 1;
+        }
+        const card = btnWishlistAdmin.closest('.japan-card') as HTMLElement;
+        if (card) {
+          if (newVal) {
+            if (!card.querySelector(`.quantity-adjuster.admin[data-id="${id}"]`)) {
+              const adj = document.createElement('div');
+              adj.className = 'quantity-adjuster admin';
+              adj.dataset.id = String(id);
+              adj.dataset.role = 'admin';
+              adj.innerHTML = `
+                <button class="btn-qty-minus" data-action="qty-minus" data-item-id="${id}" data-role="admin">-</button>
+                <span>1</span>
+                <button class="btn-qty-plus" data-action="qty-plus" data-item-id="${id}" data-role="admin">+</button>
+              `;
+              btnWishlistAdmin.insertAdjacentElement('afterend', adj);
+            }
+          } else {
+            const adj = card.querySelector(`.quantity-adjuster.admin[data-id="${id}"]`);
+            if (adj) adj.remove();
+          }
+          updateCardFooter(card, String(id));
+        }
+        showToast(newVal ? '已加入您的願望清單' : '已從願望清單移除');
+      } else {
+        alert('操作失敗：' + error.message);
+      }
+      return;
+    }
+
+    // User toggles wishlist_items
+    if (btnWishlistUser) {
+      if (!currentUser) return;
+      const id = (btnWishlistUser as HTMLElement).dataset.id;
+      const isActive = btnWishlistUser.classList.contains('active');
+      
+      if (isActive) {
+        // Delete
+        const { error } = await supabase.from('wishlist_items')
+          .delete()
+          .eq('japan_item_id', id)
+          .eq('user_id', currentUser.id);
+          
+        if (!error) {
+          allWishlistItems = allWishlistItems.filter(w => !(String(w.japan_item_id) === String(id) && w.user_id === currentUser.id));
+          btnWishlistUser.classList.remove('active');
+          const card = btnWishlistUser.closest('.japan-card') as HTMLElement;
+          if (card) {
+            const adj = card.querySelector(`.quantity-adjuster.user[data-id="${id}"]`);
+            if (adj) adj.remove();
+            updateCardFooter(card, String(id));
+          }
+          showToast('已從我的清單移除');
+        }
+      } else {
+        // Insert
+        const newW = {
+          japan_item_id: id,
+          user_id: currentUser.id,
+          user_email: currentUser.email,
+          user_name: currentUser.user_metadata?.name || currentUser.email,
+          quantity: 1
+        };
+        const { error } = await supabase.from('wishlist_items').insert([newW]);
+        if (!error) {
+          allWishlistItems.push(newW);
+          btnWishlistUser.classList.add('active');
+          const card = btnWishlistUser.closest('.japan-card') as HTMLElement;
+          if (card) {
+            if (!card.querySelector(`.quantity-adjuster.user[data-id="${id}"]`)) {
+              const adj = document.createElement('div');
+              adj.className = 'quantity-adjuster user';
+              adj.dataset.id = String(id);
+              adj.dataset.role = 'user';
+              adj.innerHTML = `
+                <button class="btn-qty-minus" data-action="qty-minus" data-item-id="${id}" data-role="user">-</button>
+                <span>1</span>
+                <button class="btn-qty-plus" data-action="qty-plus" data-item-id="${id}" data-role="user">+</button>
+              `;
+              btnWishlistUser.insertAdjacentElement('afterend', adj);
+            }
+            updateCardFooter(card, String(id));
+          }
+          showToast('已加入我的清單');
+        } else {
+          alert('操作失敗：' + error.message);
+        }
+      }
+      return;
+    }
+
+    // Click footer count -> Show names (Admin only)
+    if (footerCount) {
+      if (isAdminUser) {
+        const id = (footerCount as HTMLElement).dataset.id;
+        const wItems = allWishlistItems.filter(w => String(w.japan_item_id) === String(id));
+        const cItem = itemsCache.find(i => String(i.id) === String(id));
+        const container = document.getElementById('wishlist-names-container');
+        if (container) {
+          let total = 0;
+          let listHtml = '';
+          
+          if (cItem && cItem.owner_wishlist) {
+            const q = cItem.owner_quantity || 1;
+            total += q;
+            listHtml += `<div class="wishlist-name-item">👤 你：${q} 個</div>`;
+          }
+          
+          wItems.forEach(w => {
+            const allowedUser = allowedUsersCache.find(u => u.email.toLowerCase() === w.user_email?.toLowerCase());
+            const name = allowedUser?.display_name || w.user_name || w.user_email;
+            const q = w.quantity || 1;
+            total += q;
+            listHtml += `<div class="wishlist-name-item">👤 ${name}：${q} 個</div>`;
+          });
+          
+          listHtml += `
+            <div style="border-top: 1px solid rgba(112, 144, 184, 0.2); margin: 8px 0; padding-top: 12px; font-weight: 600; color: var(--japan-primary); text-align: right;">
+              合計：${total} 個
+            </div>
+          `;
+          container.innerHTML = `<div class="wishlist-names-list">${listHtml}</div>`;
+        }
+        const m = document.getElementById('wishlist-names-modal');
+        if (m) {
+          m.style.display = 'flex';
+          document.body.classList.add('modal-open');
+        }
+      }
+      return;
+    }
+
+    if (btnEdit) {
+      const card = btnEdit.closest('.japan-card') as HTMLElement;
+      if (!card) return;
+      const item = {
+        id: card.dataset.id,
+        name: card.dataset.name,
+        category_id: card.dataset.categoryId,
+        note: card.dataset.note,
+        image_url: card.dataset.imageUrl
+      };
+      openModal(true, item);
+    }
+
+    if (btnDelete) {
+      const card = btnDelete.closest('.japan-card') as HTMLElement;
+      if (!card) return;
+      const id = card.dataset.id;
+      if (confirm('確定要刪除這個收藏品項嗎？此操作將無法復原。')) {
+        const { error } = await supabase.from('japan_items').delete().eq('id', id);
+        if (!error) {
+          showToast('品項已成功刪除');
+          card.remove();
+          // 更新快取
+          itemsCache = itemsCache.filter(item => String(item.id) !== String(id));
+          if (itemsCache.length === 0) {
+            init(); // 觸發 empty-state
+          }
+          triggerBuildWebhook();
+        } else {
+          alert('刪除失敗：' + error.message);
+        }
+      }
+    }
+  });
+
+  // --- Auth UI 控制 ---
+  document.getElementById('btn-login-modal')?.addEventListener('click', () => {
+    const m = document.getElementById('auth-modal');
+    if (m) {
+      m.style.display = 'flex';
+      document.body.classList.add('modal-open');
+    }
+  });
+
+  document.getElementById('btn-auth-close')?.addEventListener('click', () => {
+    const m = document.getElementById('auth-modal');
+    if (m) {
+      m.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
+  });
+  
+  document.getElementById('btn-wishlist-names-close')?.addEventListener('click', () => {
+    const m = document.getElementById('wishlist-names-modal');
+    if (m) {
+      m.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
+  });
+
+  document.getElementById('btn-logout')?.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    window.location.reload();
+  });
+
+  document.getElementById('btn-google-login')?.addEventListener('click', async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.href }
+    });
+  });
+
+  document.getElementById('btn-email-login')?.addEventListener('click', async () => {
+    const email = (document.getElementById('auth-email') as HTMLInputElement).value;
+    const password = (document.getElementById('auth-password') as HTMLInputElement).value;
+    if (!email || !password) return;
+    
+    const btn = document.getElementById('btn-email-login') as HTMLButtonElement;
+    btn.disabled = true;
+    btn.textContent = '登入中...';
+    
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      alert('登入失敗：' + error.message);
+      btn.disabled = false;
+      btn.textContent = '登入';
+    } else {
+      window.location.reload();
+    }
+  });
+
+  // --- 背景靜默重新編譯 Webhook 觸發 ---
+  function triggerBuildWebhook() {
+    if (!deployWebhookUrl) return;
+    fetch(deployWebhookUrl, { method: 'POST' })
+      .then(() => {
+      })
+      .catch(err => {
+        console.warn('Webhook trigger failed:', err);
+      });
+  }
+
+  // --- 點擊照片放大檢視 (Lightbox) ---
+  const lightbox = document.getElementById('japan-lightbox');
+  const lightboxImg = document.getElementById('japan-lightbox-img') as HTMLImageElement;
+
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    if (target.classList.contains('item-image')) {
+      if (lightboxImg && lightbox) {
+        lightboxImg.src = (target as HTMLImageElement).src;
+        lightbox.style.display = 'flex';
+        document.body.classList.add('modal-open');
+      }
+    }
+  });
+
+  document.getElementById('japan-lightbox-overlay')?.addEventListener('click', () => {
+    if (lightbox) {
+      lightbox.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
+  });
+  document.getElementById('japan-lightbox-close')?.addEventListener('click', () => {
+    if (lightbox) {
+      lightbox.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && lightbox) {
+      lightbox.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
+  });
+
+  // --- 收藏品即時搜尋事件監聽 (Collection Real-time Search) ---
+  const collectionSearchInput = document.getElementById('collection-search-input') as HTMLInputElement;
+  const btnCollectionSearchClear = document.getElementById('btn-collection-search-clear') as HTMLButtonElement;
+
+  collectionSearchInput?.addEventListener('input', (e) => {
+    const val = (e.target as HTMLInputElement).value;
+    currentSearchQuery = val;
+    
+    // 控制清除按鈕的顯示/隱藏
+    if (btnCollectionSearchClear) {
+      btnCollectionSearchClear.style.display = val ? 'block' : 'none';
+    }
+    
+    filterAndRenderItems();
+  });
+
+  btnCollectionSearchClear?.addEventListener('click', () => {
+    if (collectionSearchInput) {
+      collectionSearchInput.value = '';
+    }
+    currentSearchQuery = '';
+    if (btnCollectionSearchClear) {
+      btnCollectionSearchClear.style.display = 'none';
+    }
+    filterAndRenderItems();
+    collectionSearchInput?.focus();
+  });
+
+  // ==========================================================
+  // 探索日本搜尋與直接收藏邏輯 (Explore Japan Search & Direct Collect)
+  // ==========================================================
+  
+  let pendingCollectItem: { name: string; link: string; description: string } | null = null;
+  
+  const exploreInput = document.getElementById('explore-input') as HTMLInputElement;
+  const exploreBtn = document.getElementById('explore-btn') as HTMLButtonElement;
+  const exploreResults = document.getElementById('explore-results');
+  const collectModal = document.getElementById('collect-modal');
+  const collectSelect = document.getElementById('collect-category-select') as HTMLSelectElement;
+  const collectItemPreview = document.getElementById('collect-item-name-preview');
+  const btnCollectConfirm = document.getElementById('btn-collect-confirm') as HTMLButtonElement;
+
+  // 1. 執行搜尋主邏輯
+  async function executeExploreSearch(query: string) {
+    if (!query.trim()) return;
+    
+    // UI Loading 狀態
+    if (exploreBtn) exploreBtn.disabled = true;
+    if (exploreInput) exploreInput.disabled = true;
+    if (exploreResults) {
+      exploreResults.style.display = 'block';
+      exploreResults.innerHTML = `
+        <div class="explore-loading">
+          <div class="explore-spinner"></div>
+          <span>🔍 正在為您搜尋日本熱門資訊與推薦...</span>
+        </div>
+      `;
+    }
+
+    try {
+      const res = await fetch('/api/explore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: query.trim() })
+      });
+      const data = await res.json();
+      
+      if (exploreResults) {
+        if (data.items && data.items.length > 0) {
+          let html = `
+            <div class="explore-results-title">🔍 網路搜尋日本「${query}」推薦結果：</div>
+            <div class="explore-results-list">
+          `;
+          data.items.forEach((item: any) => {
+            html += `
+              <div class="explore-card" data-name="${item.name.replace(/"/g, '&quot;')}" data-link="${item.link}" data-desc="${item.description.replace(/"/g, '&quot;')}">
+                <div class="explore-card-content">
+                  ${item.thumbnail ? `<img src="${item.thumbnail}" alt="${item.name}" class="explore-thumb">` : ''}
+                  <h4 class="explore-card-title">${item.name}</h4>
+                  <p class="explore-card-desc">${item.description}</p>
+                  <div class="explore-card-meta">
+                    🌐 來源網站：<a href="${item.link}" target="_blank" rel="noopener noreferrer">${item.source}</a>
+                  </div>
+                </div>
+                <button type="button" class="btn-explore-add">
+                  <i class="ti ti-pin"></i> 收藏
+                </button>
+              </div>
+            `;
+          });
+          html += `</div>`;
+          exploreResults.innerHTML = html;
+        } else {
+          exploreResults.innerHTML = `
+            <div class="explore-loading" style="color: var(--japan-text-muted);">
+              <span>📭 沒有找到相關資訊，更換其他關鍵字試試看吧！</span>
+            </div>
+          `;
+        }
+      }
+    } catch (err) {
+      console.error('Search failed:', err);
+      if (exploreResults) {
+        exploreResults.innerHTML = `
+          <div class="explore-loading" style="color: var(--japan-danger);">
+            <span>⚠️ 搜尋發生錯誤，請稍後再試。</span>
+          </div>
+        `;
+      }
+    } finally {
+      if (exploreBtn) exploreBtn.disabled = false;
+      if (exploreInput) exploreInput.disabled = false;
+    }
+  }
+
+  // 搜尋按鈕與 Enter 事件
+  exploreBtn?.addEventListener('click', () => {
+    executeExploreSearch(exploreInput.value);
+  });
+  exploreInput?.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      executeExploreSearch(exploreInput.value);
+    }
+  });
+
+  // 快速標籤點擊事件
+  document.querySelectorAll('.explore-tag').forEach(tag => {
+    tag.addEventListener('click', (e) => {
+      const text = (e.currentTarget as HTMLElement).textContent || '';
+      if (exploreInput) {
+        exploreInput.value = text;
+        executeExploreSearch(text);
+      }
+    });
+  });
+
+  // 2. 結果卡片點擊「收藏」事件 (委派)
+  exploreResults?.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const btnAdd = target.closest('.btn-explore-add');
+    if (!btnAdd) return;
+
+    const card = btnAdd.closest('.explore-card') as HTMLElement;
+    if (!card) return;
+
+    // 檢查權限：只有登入的 admin 才能新增收藏
+    if (!isAdminUser) {
+      showToast('⚠️ 請先登入管理員帳號以加入收藏！');
+      return;
+    }
+
+    const name = card.dataset.name || '';
+    const link = card.dataset.link || '';
+    const description = card.dataset.desc || '';
+
+    pendingCollectItem = { name, link, description };
+
+    // 顯示 Modal
+    if (collectItemPreview) {
+      collectItemPreview.textContent = name;
+    }
+    populateCollectCategoryDropdown();
+    if (collectModal) {
+      collectModal.style.display = 'flex';
+      document.body.classList.add('modal-open');
+    }
+  });
+
+  // 3. 填充收藏分類下拉選單
+  function populateCollectCategoryDropdown() {
+    if (!collectSelect) return;
+    
+    // 清空，保留第一個預設選項
+    collectSelect.innerHTML = '<option value="">-- 請選擇分類 --</option>';
+
+    const mainCats = categoriesCache.filter(c => c.parent_id === null);
+    mainCats.forEach(mainCat => {
+      // 插入主分類作為標籤
+      const mainOpt = document.createElement('option');
+      mainOpt.value = String(mainCat.id);
+      mainOpt.innerHTML = `🌟 主分類：${mainCat.name}`;
+      collectSelect.appendChild(mainOpt);
+
+      // 插入該主分類下的子分類
+      const subCats = categoriesCache.filter(c => String(c.parent_id) === String(mainCat.id));
+      subCats.forEach(subCat => {
+        const subOpt = document.createElement('option');
+        subOpt.value = String(subCat.id);
+        subOpt.innerHTML = `    └─ 子分類：${subCat.name}`;
+        collectSelect.appendChild(subOpt);
+      });
+    });
+  }
+
+  // 4. Modal 控制按鈕
+  function closeCollectModal() {
+    if (collectModal) {
+      collectModal.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
+    pendingCollectItem = null;
+    if (collectSelect) collectSelect.value = '';
+  }
+
+  document.getElementById('btn-collect-modal-close')?.addEventListener('click', closeCollectModal);
+  document.getElementById('btn-collect-cancel')?.addEventListener('click', closeCollectModal);
+
+  // 5. 確認收藏寫入 Supabase
+  btnCollectConfirm?.addEventListener('click', async () => {
+    if (!pendingCollectItem) return;
+    
+    const categoryId = collectSelect.value;
+    if (!categoryId) {
+      alert('請選擇要收藏的分類！');
+      return;
+    }
+
+    if (btnCollectConfirm) btnCollectConfirm.disabled = true;
+
+    try {
+      const { error } = await supabase.from('japan_items').insert({
+        category_id: parseInt(categoryId),
+        name: pendingCollectItem.name,
+        note: '網友推薦',
+        image_url: '' // 網友推薦不帶實體圖片
+      });
+
+      if (!error) {
+        showToast('🎉 成功加入日本收藏！');
+        closeCollectModal();
+        init(); // 靜默刷新列表與快取
+        triggerBuildWebhook(); // 觸發 Vercel 生產端重建
+      } else {
+        alert('收藏失敗：' + error.message);
+      }
+    } catch (err: any) {
+      alert('收藏發生異常：' + (err.message || err));
+    } finally {
+      if (btnCollectConfirm) btnCollectConfirm.disabled = false;
+    }
+  });
+
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      // OAuth 回調後 token 寫入完成，重新初始化
+      await init();
+      // 清除 URL hash（避免 token 殘留在網址列）
+      if (window.location.hash.includes('access_token')) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+    }
+    if (event === 'SIGNED_OUT') {
+      await init();
+    }
+  });
+
+  // 頁面加載完成後啟動初始化
+  init();
+</script>

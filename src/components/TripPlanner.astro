@@ -1,6 +1,5 @@
 ---
 export const prerender = true;
-import Layout from '../layouts/Layout.astro';
 import { supabase } from '../lib/supabase-client';
 import '../styles/travel.css';
 
@@ -65,15 +64,6 @@ const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 ---
 
-<Layout title="旅行地圖 | The Corner Table">
-  <div class="top-right-auth-container">
-    <div id="top-auth-guest" style="display: none;">
-      <a href="/login?from=/travel" class="btn-top-auth">🔑 登入</a>
-    </div>
-    <div id="top-auth-user" style="display: none;">
-      <button id="btn-top-logout" class="btn-top-auth">登出</button>
-    </div>
-  </div>
   <!-- 全域背景覆蓋：確保 Layout 的深色背景被清新白底暖木色覆蓋 -->
   <style is:global>
     html, body {
@@ -99,14 +89,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   <div class="travel-body">
     <div class="travel-container">
       
-      <!-- 1. Header 區 -->
-      <header class="travel-header">
-        <a href="/" class="nav-back">
-          <i class="ti ti-chevron-left"></i> 返回首頁
-        </a>
-        <h1 class="page-title">旅行</h1>
-        <p class="page-subtitle">走過的地方・還想去的地方</p>
-      </header>
+
 
       <!-- 2. 行程切換列 (橫向滾動) -->
       <section class="trips-scroll-container">
@@ -131,13 +114,32 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       </section>
 
       <!-- 2.5 行程模式切換列 -->
-      <section class="mode-toggle-container">
-        <button id="btn-mode-map" class="mode-btn active">
-          <i class="ti ti-map-2"></i> 地圖模式
-        </button>
-        <button id="btn-mode-itinerary" class="mode-btn">
-          <i class="ti ti-calendar"></i> 行程模式
-        </button>
+      <section class="mode-toggle-container" style="justify-content: space-between; align-items: center;">
+        <div style="display: flex; gap: 12px;">
+          <button id="btn-mode-map" class="mode-btn active">
+            <i class="ti ti-map-2"></i> 地圖模式
+          </button>
+          <button id="btn-mode-itinerary" class="mode-btn">
+            <i class="ti ti-calendar"></i> 行程模式
+          </button>
+        </div>
+        <div class="top-right-auth-container" style="position: static; margin-left: auto;">
+          <div id="top-auth-guest" style="display: none;">
+            <button 
+              type="button" 
+              id="btn-top-login" 
+              class="btn-top-auth"
+              onclick="
+                const m = document.getElementById('auth-modal');
+                if (m) { m.style.display='flex'; document.body.classList.add('modal-open'); }
+                else { window.location.href='/login'; }
+              "
+            >🔑 登入</button>
+          </div>
+          <div id="top-auth-user" style="display: none;">
+            <button id="btn-top-logout" class="btn-top-auth">登出</button>
+          </div>
+        </div>
       </section>
 
       <!-- 2.5 搜尋列 -->
@@ -254,7 +256,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   <!-- ==========================================
        彈出視窗：從想去清單選擇景點
        ========================================== -->
-  <div id="wishlist-modal" class="modal-overlay">
+  <div id="wishlist-modal" class="travel-modal-overlay modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
         <h3>＋ 新增景點至行程</h3>
@@ -278,7 +280,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   <!-- ==========================================
        彈出視窗：景點詳情
        ========================================== -->
-  <div id="spot-detail-modal" class="modal-overlay">
+  <div id="spot-detail-modal" class="travel-modal-overlay modal-overlay">
     <div class="modal-box" style="max-width: 400px;">
       <div class="modal-header">
         <h3 id="spot-detail-title">景點名稱</h3>
@@ -293,7 +295,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   <!-- ==========================================
        彈出視窗 1：新增行程 Modal
        ========================================== -->
-  <div id="trip-modal" class="modal-overlay">
+  <div id="trip-modal" class="travel-modal-overlay modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
         <h3 id="trip-modal-title">＋ 新增旅行行程</h3>
@@ -343,7 +345,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   <!-- ==========================================
        彈出視窗 2：新增/編輯景點 Modal
        ========================================== -->
-  <div id="spot-modal" class="modal-overlay">
+  <div id="spot-modal" class="travel-modal-overlay modal-overlay">
     <div class="modal-box">
       <div class="modal-header">
         <h3 id="spot-modal-title">＋ 新增景點</h3>
@@ -447,7 +449,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   <!-- ==========================================
        彈出視窗 3：管理景點類型 Modal
        ========================================== -->
-  <div id="type-management-modal" class="modal-overlay">
+  <div id="type-management-modal" class="travel-modal-overlay modal-overlay">
     <div class="modal-box" style="max-width: 400px;">
       <div class="modal-header">
         <h3>⚙️ 管理景點類型</h3>
@@ -478,7 +480,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     <img id="lightbox-img" src="" alt="" />
     <button id="lightbox-close">✕</button>
   </div>
-</Layout>
 
 <!-- IIFE 客戶端互動與 Supabase 連線邏輯 -->
 <script define:vars={{ webhookUrl, mapsKey, supabaseUrl, supabaseAnonKey }}>
@@ -692,6 +693,17 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         mapTypeControl: false,
         streetViewControl: false
       });
+
+      // 暴露給外部 (trip.astro) 使用，用於 tab 切換時重新計算大小
+      window.travelMap = googleMap;
+      window.resizeTravelMap = () => {
+        if (googleMap) {
+          window.google.maps.event.trigger(googleMap, 'resize');
+          if (typeof filterAndRenderSpots === 'function') {
+            filterAndRenderSpots(true);
+          }
+        }
+      };
 
       // 點擊地圖事件：關閉氣泡 ＋ 管理員點擊新增
       googleMap.addListener('click', async (e) => {
@@ -1449,6 +1461,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     // --- 切換行程行程標籤 ---
     function selectTrip(tripId) {
       currentTripId = tripId;
+      window.currentTripId = tripId;
+      window.dispatchEvent(new CustomEvent('trip-changed', { detail: { tripId } }));
 
       // 1. 更新行程標籤 UI
       const tabsList = document.getElementById('trips-tab-list');
@@ -1515,19 +1529,40 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         window.location.reload();
       });
 
-      if (session) {
-        isAdminUser = true;
-        document.querySelectorAll('.admin-only').forEach(el => {
-          el.style.display = 'inline-flex';
-        });
-        if (topAuthGuest) topAuthGuest.style.display = 'none';
-        if (topAuthUser) topAuthUser.style.display = 'block';
+      function updateAuthUI(currentSession) {
+        if (currentSession) {
+          isAdminUser = true;
+          document.querySelectorAll('.admin-only').forEach(el => {
+            el.style.display = 'inline-flex';
+          });
+          if (topAuthGuest) topAuthGuest.style.display = 'none';
+          if (topAuthUser) topAuthUser.style.display = 'block';
 
-        console.log('🔑 管理員已登入，啟用前台管理介面。');
-      } else {
-        if (topAuthGuest) topAuthGuest.style.display = 'block';
-        if (topAuthUser) topAuthUser.style.display = 'none';
+          console.log('🔑 管理員已登入，啟用前台管理介面。');
+        } else {
+          isAdminUser = false;
+          document.querySelectorAll('.admin-only').forEach(el => {
+            el.style.display = 'none';
+          });
+          if (topAuthGuest) topAuthGuest.style.display = 'block';
+          if (topAuthUser) topAuthUser.style.display = 'none';
+        }
       }
+
+      supabase.auth.onAuthStateChange((event, currentSession) => {
+        if (event === 'SIGNED_IN' && currentSession) {
+          updateAuthUI(currentSession);
+          if (window.location.hash.includes('access_token')) {
+            window.history.replaceState(null, '', window.location.pathname);
+          }
+        }
+        if (event === 'SIGNED_OUT') {
+          updateAuthUI(null);
+        }
+      });
+
+      // 初次載入更新狀態
+      updateAuthUI(session);
 
       // 5. 初次繪製
       if (currentTripId) {
@@ -2910,7 +2945,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
               <label style="display: flex; align-items: center; gap: 4px; font-size: 0.75rem; cursor: pointer; color: #666; margin: 0; white-space: nowrap;">
                 <input type="checkbox" class="subtype-chain-input" /> 連鎖店
               </label>
-              <button type="submit" style="background: var(--color-primary); color: white; border: none; border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 0.85rem; white-space: nowrap;">新增</button>
+              <button type="submit" style="background: var(--travel-primary); color: white; border: none; border-radius: 6px; padding: 4px 12px; cursor: pointer; font-size: 0.85rem; white-space: nowrap;">新增</button>
             </form>
           `;
 
