@@ -532,6 +532,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     let selectedStatusFilter = 'want'; // 預設篩選「想去」
     let showChainStores = false;
     let isAdminUser = false;
+    const adminEmail = window.__ADMIN_EMAIL__ || '';
 
     // 上傳圖片的暫存陣列 (以 URL 字串儲存)
     let uploadedImagesCache = [];
@@ -1530,7 +1531,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       });
 
       function updateAuthUI(currentSession) {
-        if (currentSession) {
+        if (currentSession && currentSession.user.email === adminEmail) {
           isAdminUser = true;
           document.querySelectorAll('.admin-only').forEach(el => {
             el.style.display = 'inline-flex';
