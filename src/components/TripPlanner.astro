@@ -1549,7 +1549,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         }
       }
 
-      window.addEventListener('auth-state-changed', async (e: any) => {
+      window.addEventListener('auth-state-changed', async (e) => {
         const { event, session: currentSession } = e.detail;
         if (event === 'SIGNED_IN') {
           updateAuthUI(currentSession);

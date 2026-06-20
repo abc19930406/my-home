@@ -391,20 +391,20 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   const toast = document.getElementById('japan-toast');
 
   // 本地快取狀態
-  let categoriesCache: any[] = [];
-  let itemsCache: any[] = [];
-  let allWishlistItems: any[] = [];
-  let allowedUsersCache: any[] = [];
-  let currentMainFilter: string = 'all';
-  let currentSubFilter: string = 'all';
+  let categoriesCache = [];
+  let itemsCache = [];
+  let allWishlistItems = [];
+  let allowedUsersCache = [];
+  let currentMainFilter = 'all';
+  let currentSubFilter = 'all';
   let currentSearchQuery = '';
   let currentFriendFilter = 'all';
   let isAdminUser = false;
   let isAllowedUser = false;
-  let currentUser: any = null;
+  let currentUser = null;
 
   // --- Utility Functions ---
-  function showToast(message: string) {
+  function showToast(message) {
     if (!toast) return;
     toast.textContent = message;
     toast.classList.add('show');
@@ -457,12 +457,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     updateHeaderAuthUI();
 
     const exploreSection = document.getElementById('explore-japan-section');
-    const toggleCheckbox = document.getElementById('explore-toggle-checkbox') as HTMLInputElement;
+    const toggleCheckbox = document.getElementById('explore-toggle-checkbox');
     const toggleLabel = document.getElementById('explore-toggle-label');
 
     if (isAdminUser) {
       document.querySelectorAll('.admin-only').forEach(el => {
-        (el as HTMLElement).style.display = 'flex';
+        el.style.display = 'flex';
       });
       const loginHint = document.getElementById('login-hint');
       if (loginHint) loginHint.style.display = 'none';
@@ -489,7 +489,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
       // 監聽管理開關狀態變更
       toggleCheckbox?.addEventListener('change', async (e) => {
-        const checked = (e.target as HTMLInputElement).checked;
+        const checked = e.target.checked;
         try {
           const { error } = await supabase
             .from('status')
@@ -582,7 +582,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     // 綁定主分類點擊事件
     mainContainer.querySelectorAll('.tag-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const id = (e.currentTarget as HTMLElement).dataset.catId || 'all';
+        const id = e.currentTarget.dataset.catId || 'all';
         selectMainCategory(id);
       });
     });
@@ -590,7 +590,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     const friendSelect = document.getElementById('friend-filter-select');
     if (friendSelect) {
       friendSelect.addEventListener('change', (e) => {
-        currentFriendFilter = (e.target as HTMLSelectElement).value;
+        currentFriendFilter = e.target.value;
         filterAndRenderItems();
       });
     }
@@ -609,10 +609,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       return;
     }
 
-    let subs: any[] = [];
+    let subs = [];
 
     if (currentMainFilter === 'wishlist') {
-      let wishlistItems: any[] = [];
+      let wishlistItems = [];
       if (isAdminUser) {
         wishlistItems = itemsCache.filter(item => item.owner_wishlist === true);
       } else if (isAllowedUser && currentUser) {
@@ -643,23 +643,23 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     // 綁定子分類點擊事件
     subContainer.querySelectorAll('.tag-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
-        const subId = (e.currentTarget as HTMLElement).dataset.subId || 'all';
+        const subId = e.currentTarget.dataset.subId || 'all';
         currentSubFilter = subId;
         subContainer.querySelectorAll('.tag-btn').forEach(b => b.classList.remove('active'));
-        (e.currentTarget as HTMLElement).classList.add('active');
+        e.currentTarget.classList.add('active');
         filterAndRenderItems();
       });
     });
   }
 
-  function selectMainCategory(id: string) {
+  function selectMainCategory(id) {
     currentMainFilter = id;
     currentSubFilter = 'all'; // 重設子分類
     
     // 更新主分類樣式
     const mainContainer = document.getElementById('main-categories-filter');
     mainContainer?.querySelectorAll('.tag-btn').forEach(btn => {
-      if ((btn as HTMLElement).dataset.catId === id) {
+      if (btn.dataset.catId === id) {
         btn.classList.add('active');
       } else {
         btn.classList.remove('active');
@@ -670,7 +670,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     filterAndRenderItems();
   }
 
-  function updateCardFooter(card: HTMLElement, itemId: string) {
+  function updateCardFooter(card, itemId) {
     if (!card) return;
     const cItem = itemsCache.find(i => String(i.id) === String(itemId));
     const isOwnerWishlisted = cItem ? cItem.owner_wishlist : false;
@@ -685,7 +685,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       if (!footer) {
         footer = document.createElement('div');
         footer.className = 'wishlist-footer';
-        (footer as HTMLElement).dataset.id = itemId;
+        footer.dataset.id = itemId;
         infoDiv.appendChild(footer);
       }
       footer.innerHTML = `❤️ ${peopleCount} 人想買`;
@@ -910,7 +910,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     // 綁定刪除主分類事件
     container.querySelectorAll('.btn-delete-main').forEach(btn => {
       btn.addEventListener('click', async (e) => {
-        const id = (e.currentTarget as HTMLElement).dataset.mainId;
+        const id = e.currentTarget.dataset.mainId;
         if (!id) return;
         if (confirm('確定要刪除此主分類嗎？這會連同其下的所有子分類一併刪除，且無法復原！')) {
           const { error } = await supabase.from('japan_categories').delete().eq('id', id);
@@ -932,7 +932,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     // 綁定刪除子分類事件
     container.querySelectorAll('.btn-remove-sub').forEach(btn => {
       btn.addEventListener('click', async (e) => {
-        const id = (e.currentTarget as HTMLElement).dataset.subId;
+        const id = e.currentTarget.dataset.subId;
         if (!id) return;
         if (confirm('確定要刪除此子分類嗎？')) {
           const { error } = await supabase.from('japan_categories').delete().eq('id', id);
@@ -954,7 +954,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     // 綁定新增子分類事件
     container.querySelectorAll('.btn-add-sub-cat').forEach(btn => {
       btn.addEventListener('click', async (e) => {
-        const parentId = (e.currentTarget as HTMLElement).dataset.parentId;
+        const parentId = e.currentTarget.dataset.parentId;
         if (!parentId) return;
         const name = prompt('請輸入子分類名稱：');
         if (!name || name.trim() === '') return;
@@ -1008,9 +1008,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   });
 
   // --- Modal 表單連動與欄位處理 ---
-  const mainCatSelect = document.getElementById('form-main-cat') as HTMLSelectElement;
+  const mainCatSelect = document.getElementById('form-main-cat');
   const subCatGroup = document.getElementById('form-sub-cat-group');
-  const subCatSelect = document.getElementById('form-sub-cat') as HTMLSelectElement;
+  const subCatSelect = document.getElementById('form-sub-cat');
 
   function populateMainCategoryDropdown() {
     if (!mainCatSelect) return;
@@ -1028,7 +1028,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     updateSubCategoryDropdown(mainId);
   });
 
-  function updateSubCategoryDropdown(mainId: string, selectedSubId: string = '') {
+  function updateSubCategoryDropdown(mainId, selectedSubId = '') {
     if (!subCatSelect || !subCatGroup) return;
 
     if (!mainId) {
@@ -1053,14 +1053,14 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   }
 
   // --- 照片上傳控制 ---
-  const fileInput = document.getElementById('form-item-image-file') as HTMLInputElement;
-  const imageUrlInput = document.getElementById('form-item-image-url') as HTMLInputElement;
+  const fileInput = document.getElementById('form-item-image-file');
+  const imageUrlInput = document.getElementById('form-item-image-url');
   const previewDiv = document.getElementById('image-upload-preview');
-  const previewImg = document.getElementById('image-preview-img') as HTMLImageElement;
+  const previewImg = document.getElementById('image-preview-img');
   const btnRemoveImage = document.getElementById('btn-remove-image');
 
   fileInput?.addEventListener('change', async (e) => {
-    const target = e.target as HTMLInputElement;
+    const target = e.target;
     const file = target.files?.[0];
     if (!file) return;
 
@@ -1093,7 +1093,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       if (previewImg) previewImg.src = publicUrl;
       if (previewDiv) previewDiv.style.display = 'block';
       showToast('照片上傳成功');
-    } catch (err: any) {
+    } catch (err) {
       alert('照片上傳失敗：' + (err.message || err));
     } finally {
       if (uploadText) uploadText.textContent = '點擊或拖曳照片至此上傳';
@@ -1111,12 +1111,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   // --- Modal 控制開關 ---
   const modal = document.getElementById('item-modal');
   const modalTitle = document.getElementById('modal-title');
-  const form = document.getElementById('item-form') as HTMLFormElement;
-  const itemIdInput = document.getElementById('form-item-id') as HTMLInputElement;
-  const itemNameInput = document.getElementById('form-item-name') as HTMLInputElement;
-  const itemNoteInput = document.getElementById('form-item-note') as HTMLTextAreaElement;
+  const form = document.getElementById('item-form');
+  const itemIdInput = document.getElementById('form-item-id');
+  const itemNameInput = document.getElementById('form-item-name');
+  const itemNoteInput = document.getElementById('form-item-note');
 
-  function openModal(isEdit = false, item: any = null) {
+  function openModal(isEdit = false, item = null) {
     if (!modal) return;
     
     form.reset();
@@ -1188,7 +1188,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   // --- 表單提交儲存 ---
   form?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const saveBtn = document.getElementById('btn-modal-save') as HTMLButtonElement;
+    const saveBtn = document.getElementById('btn-modal-save');
     if (saveBtn) saveBtn.disabled = true;
 
     const id = itemIdInput.value;
@@ -1210,7 +1210,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
     try {
       let error;
-      let returnedData: any = null;
+      let returnedData = null;
 
       if (id) {
         // 編輯更新
@@ -1229,7 +1229,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       closeModal();
       init(); // 重新讀取資料，重置快取並渲染
       triggerBuildWebhook();
-    } catch (err: any) {
+    } catch (err) {
       alert('儲存失敗：' + (err.message || err));
     } finally {
       if (saveBtn) saveBtn.disabled = false;
@@ -1239,7 +1239,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   // --- 磚牆卡片點擊事件委派 (編輯 & 刪除) ---
   const itemsGrid = document.getElementById('japan-items-grid');
   itemsGrid?.addEventListener('click', async (e) => {
-    const target = e.target as HTMLElement;
+    const target = e.target;
     const btnEdit = target.closest('.btn-edit');
     const btnDelete = target.closest('.btn-delete');
     const btnWishlistAdmin = target.closest('.wishlist-checkbox-admin');
@@ -1249,8 +1249,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     const btnQtyPlus = target.closest('.btn-qty-plus') || target.closest('[data-action="qty-plus"]');
 
     if (btnQtyMinus || btnQtyPlus) {
-      const btn = (btnQtyMinus || btnQtyPlus) as HTMLElement;
-      const adjuster = target.closest('.quantity-adjuster') as HTMLElement;
+      const btn = (btnQtyMinus || btnQtyPlus);
+      const adjuster = target.closest('.quantity-adjuster');
       if (!adjuster && !btn) return;
       
       const id = btn.dataset.itemId || adjuster?.dataset.id;
@@ -1293,7 +1293,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
     // Admin toggles owner_wishlist
     if (btnWishlistAdmin) {
-      const id = (btnWishlistAdmin as HTMLElement).dataset.id;
+      const id = btnWishlistAdmin.dataset.id;
       const isActive = btnWishlistAdmin.classList.contains('active');
       const newVal = !isActive;
       
@@ -1306,7 +1306,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           cItem.owner_wishlist = newVal;
           cItem.owner_quantity = 1;
         }
-        const card = btnWishlistAdmin.closest('.japan-card') as HTMLElement;
+        const card = btnWishlistAdmin.closest('.japan-card');
         if (card) {
           if (newVal) {
             if (!card.querySelector(`.quantity-adjuster.admin[data-id="${id}"]`)) {
@@ -1337,7 +1337,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     // User toggles wishlist_items
     if (btnWishlistUser) {
       if (!currentUser) return;
-      const id = (btnWishlistUser as HTMLElement).dataset.id;
+      const id = btnWishlistUser.dataset.id;
       const isActive = btnWishlistUser.classList.contains('active');
       
       if (isActive) {
@@ -1350,7 +1350,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         if (!error) {
           allWishlistItems = allWishlistItems.filter(w => !(String(w.japan_item_id) === String(id) && w.user_id === currentUser.id));
           btnWishlistUser.classList.remove('active');
-          const card = btnWishlistUser.closest('.japan-card') as HTMLElement;
+          const card = btnWishlistUser.closest('.japan-card');
           if (card) {
             const adj = card.querySelector(`.quantity-adjuster.user[data-id="${id}"]`);
             if (adj) adj.remove();
@@ -1371,7 +1371,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         if (!error) {
           allWishlistItems.push(newW);
           btnWishlistUser.classList.add('active');
-          const card = btnWishlistUser.closest('.japan-card') as HTMLElement;
+          const card = btnWishlistUser.closest('.japan-card');
           if (card) {
             if (!card.querySelector(`.quantity-adjuster.user[data-id="${id}"]`)) {
               const adj = document.createElement('div');
@@ -1398,7 +1398,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     // Click footer count -> Show names (Admin only)
     if (footerCount) {
       if (isAdminUser) {
-        const id = (footerCount as HTMLElement).dataset.id;
+        const id = footerCount.dataset.id;
         const wItems = allWishlistItems.filter(w => String(w.japan_item_id) === String(id));
         const cItem = itemsCache.find(i => String(i.id) === String(id));
         const container = document.getElementById('wishlist-names-container');
@@ -1437,7 +1437,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     }
 
     if (btnEdit) {
-      const card = btnEdit.closest('.japan-card') as HTMLElement;
+      const card = btnEdit.closest('.japan-card');
       if (!card) return;
       const item = {
         id: card.dataset.id,
@@ -1450,7 +1450,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     }
 
     if (btnDelete) {
-      const card = btnDelete.closest('.japan-card') as HTMLElement;
+      const card = btnDelete.closest('.japan-card');
       if (!card) return;
       const id = card.dataset.id;
       if (confirm('確定要刪除這個收藏品項嗎？此操作將無法復原。')) {
@@ -1509,11 +1509,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   });
 
   document.getElementById('btn-email-login')?.addEventListener('click', async () => {
-    const email = (document.getElementById('auth-email') as HTMLInputElement).value;
-    const password = (document.getElementById('auth-password') as HTMLInputElement).value;
+    const email = document.getElementById('auth-email').value;
+    const password = document.getElementById('auth-password').value;
     if (!email || !password) return;
     
-    const btn = document.getElementById('btn-email-login') as HTMLButtonElement;
+    const btn = document.getElementById('btn-email-login');
     btn.disabled = true;
     btn.textContent = '登入中...';
     
@@ -1540,13 +1540,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
   // --- 點擊照片放大檢視 (Lightbox) ---
   const lightbox = document.getElementById('japan-lightbox');
-  const lightboxImg = document.getElementById('japan-lightbox-img') as HTMLImageElement;
+  const lightboxImg = document.getElementById('japan-lightbox-img');
 
   document.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
+    const target = e.target;
     if (target.classList.contains('item-image')) {
       if (lightboxImg && lightbox) {
-        lightboxImg.src = (target as HTMLImageElement).src;
+        lightboxImg.src = target.src;
         lightbox.style.display = 'flex';
         document.body.classList.add('modal-open');
       }
@@ -1573,11 +1573,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   });
 
   // --- 收藏品即時搜尋事件監聽 (Collection Real-time Search) ---
-  const collectionSearchInput = document.getElementById('collection-search-input') as HTMLInputElement;
-  const btnCollectionSearchClear = document.getElementById('btn-collection-search-clear') as HTMLButtonElement;
+  const collectionSearchInput = document.getElementById('collection-search-input');
+  const btnCollectionSearchClear = document.getElementById('btn-collection-search-clear');
 
   collectionSearchInput?.addEventListener('input', (e) => {
-    const val = (e.target as HTMLInputElement).value;
+    const val = e.target.value;
     currentSearchQuery = val;
     
     // 控制清除按鈕的顯示/隱藏
@@ -1604,18 +1604,18 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   // 探索日本搜尋與直接收藏邏輯 (Explore Japan Search & Direct Collect)
   // ==========================================================
   
-  let pendingCollectItem: { name: string; link: string; description: string } | null = null;
+  let pendingCollectItem = null;
   
-  const exploreInput = document.getElementById('explore-input') as HTMLInputElement;
-  const exploreBtn = document.getElementById('explore-btn') as HTMLButtonElement;
+  const exploreInput = document.getElementById('explore-input');
+  const exploreBtn = document.getElementById('explore-btn');
   const exploreResults = document.getElementById('explore-results');
   const collectModal = document.getElementById('collect-modal');
-  const collectSelect = document.getElementById('collect-category-select') as HTMLSelectElement;
+  const collectSelect = document.getElementById('collect-category-select');
   const collectItemPreview = document.getElementById('collect-item-name-preview');
-  const btnCollectConfirm = document.getElementById('btn-collect-confirm') as HTMLButtonElement;
+  const btnCollectConfirm = document.getElementById('btn-collect-confirm');
 
   // 1. 執行搜尋主邏輯
-  async function executeExploreSearch(query: string) {
+  async function executeExploreSearch(query) {
     if (!query.trim()) return;
     
     // UI Loading 狀態
@@ -1645,7 +1645,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
             <div class="explore-results-title">🔍 網路搜尋日本「${query}」推薦結果：</div>
             <div class="explore-results-list">
           `;
-          data.items.forEach((item: any) => {
+          data.items.forEach((item) => {
             html += `
               <div class="explore-card" data-name="${item.name.replace(/"/g, '&quot;')}" data-link="${item.link}" data-desc="${item.description.replace(/"/g, '&quot;')}">
                 <div class="explore-card-content">
@@ -1700,7 +1700,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   // 快速標籤點擊事件
   document.querySelectorAll('.explore-tag').forEach(tag => {
     tag.addEventListener('click', (e) => {
-      const text = (e.currentTarget as HTMLElement).textContent || '';
+      const text = e.currentTarget.textContent || '';
       if (exploreInput) {
         exploreInput.value = text;
         executeExploreSearch(text);
@@ -1710,11 +1710,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
   // 2. 結果卡片點擊「收藏」事件 (委派)
   exploreResults?.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
+    const target = e.target;
     const btnAdd = target.closest('.btn-explore-add');
     if (!btnAdd) return;
 
-    const card = btnAdd.closest('.explore-card') as HTMLElement;
+    const card = btnAdd.closest('.explore-card');
     if (!card) return;
 
     // 檢查權限：只有登入的 admin 才能新增收藏
@@ -1807,14 +1807,14 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       } else {
         alert('收藏失敗：' + error.message);
       }
-    } catch (err: any) {
+    } catch (err) {
       alert('收藏發生異常：' + (err.message || err));
     } finally {
       if (btnCollectConfirm) btnCollectConfirm.disabled = false;
     }
   });
 
-  window.addEventListener('auth-state-changed', async (e: any) => {
+  window.addEventListener('auth-state-changed', async (e) => {
     const { event, session } = e.detail;
     if (event === 'SIGNED_IN' && session) {
       // OAuth 回調後 token 寫入完成，重新初始化
