@@ -1,26 +1,29 @@
 ---
 export const prerender = true;
-import Layout from '../layouts/Layout.astro';
-import TripPlanner from '../components/TripPlanner.astro';
-import JapanCollection from '../components/JapanCollection.astro';
-import '../styles/trip.css';
+import Layout from "../layouts/Layout.astro";
+import TripPlanner from "../components/TripPlanner.astro";
+import JapanCollection from "../components/JapanCollection.astro";
+import "../styles/trip.css";
 
 // Admin email from env for client-side comparison
-const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
-const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL ?? '';
-const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
+const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? "";
+const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL ?? "";
+const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? "";
 ---
 
 <Layout title="行程與收藏 | The Corner Table">
   <div class="trip-layout">
-    
     <!-- 1. Desktop 側邊欄 (min-width: 768px) -->
     <aside class="trip-sidebar">
-      <a href="/" class="desktop-home-link admin-home-link" style="display: none;">
+      <a
+        href="/"
+        class="desktop-home-link admin-home-link"
+        style="display: none;"
+      >
         <i class="ti ti-home"></i>
         首頁
       </a>
-      
+
       <div class="trip-nav-items">
         <button class="nav-btn active" data-target="trip">
           <i class="ti ti-calendar"></i>
@@ -43,10 +46,14 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         <i class="ti ti-menu-2"></i>
       </button>
     </header>
-      
+
     <!-- Mobile 選單與點擊外部關閉選單的遮罩 -->
     <div class="mobile-dropdown" id="mobile-dropdown">
-      <a href="/" class="mobile-home-link admin-home-link" style="display: none;">
+      <a
+        href="/"
+        class="mobile-home-link admin-home-link"
+        style="display: none;"
+      >
         <i class="ti ti-home"></i> 返回首頁
       </a>
       <button class="mobile-nav-btn active" data-target="trip">
@@ -59,7 +66,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         <i class="ti ti-sparkles"></i> AI助手
       </button>
     </div>
-    
+
     <div class="mobile-overlay" id="mobile-overlay"></div>
 
     <!-- 3. 主內容區 -->
@@ -67,16 +74,15 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       <div id="tab-trip" class="tab-pane active" style="padding: 0;">
         <TripPlanner />
       </div>
-      
+
       <div id="tab-japan" class="tab-pane" style="padding: 0;">
         <JapanCollection />
       </div>
-      
+
       <div id="tab-ai" class="tab-pane">
         <h1>AI 助手（開發中）</h1>
       </div>
     </main>
-    
   </div>
 </Layout>
 
@@ -88,13 +94,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 </script>
 
 <script>
-  const adminEmail = window.__ADMIN_EMAIL__ || '';
-  const supabaseUrl = window.__SUPABASE_URL__ || '';
-  const supabaseAnonKey = window.__SUPABASE_ANON_KEY__ || '';
+  const adminEmail = window.__ADMIN_EMAIL__ || "";
+  const supabaseUrl = window.__SUPABASE_URL__ || "";
+  const supabaseAnonKey = window.__SUPABASE_ANON_KEY__ || "";
 
   // 提升 auth-modal 到 document.body，避免受 tab 容器 display: none 影響
-  document.addEventListener('DOMContentLoaded', () => {
-    const authModal = document.getElementById('auth-modal');
+  document.addEventListener("DOMContentLoaded", () => {
+    const authModal = document.getElementById("auth-modal");
     if (authModal) {
       document.body.appendChild(authModal);
     }
@@ -106,91 +112,90 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   (async () => {
     try {
       // 依據架構要求：等待 Supabase CDN 準備就緒
-      const waitForSupabase = () => new Promise(resolve => {
-        if (window._supabaseCreateClient) return resolve(true);
-        window.addEventListener('supabase-ready', resolve, { once: true });
-      });
+      const waitForSupabase = () =>
+        new Promise((resolve) => {
+          if (window._supabaseCreateClient) return resolve(true);
+          window.addEventListener("supabase-ready", resolve, { once: true });
+        });
       await waitForSupabase();
       const createClient = window._supabaseCreateClient;
       window.sharedSupabase = createClient(supabaseUrl, supabaseAnonKey);
       const supabase = window.sharedSupabase;
 
       supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          if (window.location.hash.includes('access_token')) {
-            window.history.replaceState(null, '', window.location.pathname);
+        if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+          if (window.location.hash.includes("access_token")) {
+            window.history.replaceState(null, "", window.location.pathname);
           }
+          window.dispatchEvent(
+            new CustomEvent("auth-state-changed", {
+              detail: { event, session },
+            }),
+          );
         }
-        if (event === 'SIGNED_IN') {
-          window.__latestAuthState = { event, session };
-          window.dispatchEvent(new CustomEvent('auth-state-changed', { 
-            detail: { event, session } 
-          }));
-        }
-        if (event === 'SIGNED_OUT') {
-          window.__latestAuthState = { event, session: null };
-          window.dispatchEvent(new CustomEvent('auth-state-changed', { 
-            detail: { event, session: null } 
-          }));
+        if (event === "SIGNED_OUT") {
+          window.dispatchEvent(
+            new CustomEvent("auth-state-changed", {
+              detail: { event, session: null },
+            }),
+          );
         }
       });
 
-      const { data: { session: initialSession } } = await supabase.auth.getSession();
-      
-      if (initialSession && initialSession.user.email === adminEmail) {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session && session.user.email === adminEmail) {
         isAdminUser = true;
         // 顯示所有 "返回首頁" 連結
-        document.querySelectorAll('.admin-home-link').forEach(el => {
-          el.style.display = 'flex'; 
+        document.querySelectorAll(".admin-home-link").forEach((el) => {
+          el.style.display = "flex";
         });
       }
-
-      // 廣播初始 session 狀態給子元件（讓它們不用自己呼叫 getSession）
-      window.__latestAuthState = { event: 'INITIAL_SESSION', session: initialSession };
-      window.dispatchEvent(new CustomEvent('auth-state-changed', { 
-        detail: { event: 'INITIAL_SESSION', session: initialSession } 
-      }));
     } catch (err) {
-      console.warn('Auth init failed:', err);
+      console.warn("Auth init failed:", err);
     }
   })();
 
   // --- 2. 分頁切換邏輯 (Desktop & Mobile 共用) ---
   function switchTab(tabName) {
     // 隱藏所有 tab-pane
-    document.querySelectorAll('.tab-pane').forEach(pane => {
-      pane.classList.remove('active');
+    document.querySelectorAll(".tab-pane").forEach((pane) => {
+      pane.classList.remove("active");
     });
-    
+
     // 顯示目標 tab-pane
     const targetPane = document.getElementById(`tab-${tabName}`);
     if (targetPane) {
-      targetPane.classList.add('active');
+      targetPane.classList.add("active");
     }
 
     // 更新 Desktop 側邊欄 active 樣式
-    document.querySelectorAll('.trip-sidebar .nav-btn').forEach(btn => {
+    document.querySelectorAll(".trip-sidebar .nav-btn").forEach((btn) => {
       if (btn.dataset.target === tabName) {
-        btn.classList.add('active');
+        btn.classList.add("active");
       } else {
-        btn.classList.remove('active');
+        btn.classList.remove("active");
       }
     });
 
     // 更新 Mobile 選單 active 樣式
-    document.querySelectorAll('.mobile-dropdown .mobile-nav-btn').forEach(btn => {
-      if (btn.dataset.target === tabName) {
-        btn.classList.add('active');
-      } else {
-        btn.classList.remove('active');
-      }
-    });
+    document
+      .querySelectorAll(".mobile-dropdown .mobile-nav-btn")
+      .forEach((btn) => {
+        if (btn.dataset.target === tabName) {
+          btn.classList.add("active");
+        } else {
+          btn.classList.remove("active");
+        }
+      });
 
     // 如果是 Mobile 模式，切換分頁後自動關閉選單
     closeMobileMenu();
 
     // 當切換到行程分頁時，重新觸發地圖 resize 確保顯示正常
-    if (tabName === 'trip' && window.resizeTravelMap) {
+    if (tabName === "trip" && window.resizeTravelMap) {
       setTimeout(() => {
         window.resizeTravelMap();
       }, 50);
@@ -198,8 +203,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   }
 
   // 綁定所有導覽按鈕的點擊事件
-  document.querySelectorAll('.nav-btn, .mobile-nav-btn').forEach(btn => {
-    btn.addEventListener('click', (e) => {
+  document.querySelectorAll(".nav-btn, .mobile-nav-btn").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
       const target = e.currentTarget.dataset.target;
       if (target) {
         switchTab(target);
@@ -208,38 +213,37 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   });
 
   // --- 3. Mobile 選單開關邏輯 ---
-  const mobileMenuBtn = document.getElementById('mobile-menu-btn');
-  const mobileOverlay = document.getElementById('mobile-overlay');
+  const mobileMenuBtn = document.getElementById("mobile-menu-btn");
+  const mobileOverlay = document.getElementById("mobile-overlay");
 
   function openMobileMenu() {
-    const dropdown = document.getElementById('mobile-dropdown');
-    const overlay = document.getElementById('mobile-overlay');
+    const dropdown = document.getElementById("mobile-dropdown");
+    const overlay = document.getElementById("mobile-overlay");
     if (dropdown && overlay) {
-      dropdown.classList.add('show');
-      overlay.classList.add('show');
+      dropdown.classList.add("show");
+      overlay.classList.add("show");
     }
   }
 
   function closeMobileMenu() {
-    const dropdown = document.getElementById('mobile-dropdown');
-    const overlay = document.getElementById('mobile-overlay');
+    const dropdown = document.getElementById("mobile-dropdown");
+    const overlay = document.getElementById("mobile-overlay");
     if (dropdown && overlay) {
-      dropdown.classList.remove('show');
-      overlay.classList.remove('show');
+      dropdown.classList.remove("show");
+      overlay.classList.remove("show");
     }
   }
 
-  mobileMenuBtn?.addEventListener('click', () => {
-    const dropdown = document.getElementById('mobile-dropdown');
-    if (dropdown?.classList.contains('show')) {
+  mobileMenuBtn?.addEventListener("click", () => {
+    const dropdown = document.getElementById("mobile-dropdown");
+    if (dropdown?.classList.contains("show")) {
       closeMobileMenu();
     } else {
       openMobileMenu();
     }
   });
 
-  mobileOverlay?.addEventListener('click', () => {
+  mobileOverlay?.addEventListener("click", () => {
     closeMobileMenu();
   });
-
 </script>

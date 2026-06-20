@@ -50,7 +50,7 @@ import '../styles/global.css';
 		    const s = document.createElement('script');
 		    s.type = 'module';
 		    s.textContent = `
-		      import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+		      import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 		      window._supabaseCreateClient = createClient;
 		      window.dispatchEvent(new Event('supabase-ready'));
 		    `;
