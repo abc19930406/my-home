@@ -132,6 +132,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? "";
               detail: { event, session },
             }),
           );
+          window.__latestAuthState = { event, session };
         }
         if (event === "SIGNED_OUT") {
           window.dispatchEvent(
@@ -139,20 +140,28 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? "";
               detail: { event, session: null },
             }),
           );
+          window.__latestAuthState = { event, session: null };
         }
       });
 
       const {
-        data: { session },
+        data: { session: initialSession },
       } = await supabase.auth.getSession();
 
-      if (session && session.user.email === adminEmail) {
+      if (initialSession && initialSession.user.email === adminEmail) {
         isAdminUser = true;
         // 顯示所有 "返回首頁" 連結
         document.querySelectorAll(".admin-home-link").forEach((el) => {
           el.style.display = "flex";
         });
       }
+
+      window.dispatchEvent(
+        new CustomEvent("auth-state-changed", {
+          detail: { event: "INITIAL_SESSION", session: initialSession },
+        }),
+      );
+      window.__latestAuthState = { event: "INITIAL_SESSION", session: initialSession };
     } catch (err) {
       console.warn("Auth init failed:", err);
     }
