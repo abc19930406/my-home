@@ -116,10 +116,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       const supabase = window.sharedSupabase;
 
       supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'SIGNED_IN') {
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
           if (window.location.hash.includes('access_token')) {
             window.history.replaceState(null, '', window.location.pathname);
           }
+        }
+        if (event === 'SIGNED_IN') {
           window.dispatchEvent(new CustomEvent('auth-state-changed', { 
             detail: { event, session } 
           }));
@@ -131,15 +133,20 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         }
       });
 
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session: initialSession } } = await supabase.auth.getSession();
       
-      if (session && session.user.email === adminEmail) {
+      if (initialSession && initialSession.user.email === adminEmail) {
         isAdminUser = true;
         // 顯示所有 "返回首頁" 連結
         document.querySelectorAll('.admin-home-link').forEach(el => {
           el.style.display = 'flex'; 
         });
       }
+
+      // 廣播初始 session 狀態給子元件（讓它們不用自己呼叫 getSession）
+      window.dispatchEvent(new CustomEvent('auth-state-changed', { 
+        detail: { event: 'INITIAL_SESSION', session: initialSession } 
+      }));
     } catch (err) {
       console.warn('Auth init failed:', err);
     }

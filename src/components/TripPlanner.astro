@@ -485,13 +485,16 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 <script define:vars={{ webhookUrl, mapsKey, supabaseUrl, supabaseAnonKey }}>
   (async () => {
     // 1. 動態從 CDN 匯入 Supabase 核心並初始化
-    const waitForSupabase = () => new Promise(resolve => {
-      if (window._supabaseCreateClient) return resolve();
-      window.addEventListener('supabase-ready', resolve, { once: true });
+    const waitForSharedSupabase = () => new Promise(resolve => {
+      if (window.sharedSupabase) return resolve(window.sharedSupabase);
+      const check = setInterval(() => {
+        if (window.sharedSupabase) {
+          clearInterval(check);
+          resolve(window.sharedSupabase);
+        }
+      }, 50);
     });
-    await waitForSupabase();
-    const createClient = window._supabaseCreateClient;
-    const supabase = window.sharedSupabase || createClient(supabaseUrl, supabaseAnonKey);
+    const supabase = await waitForSharedSupabase();
 
     // 2. 動態載入 Google Maps Script
     const googleMapsPromise = new Promise((resolve, reject) => {
@@ -1520,7 +1523,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       await initGoogleMap();
 
       // 4. 偵測管理員登入狀態
-      const { data: { session } } = await supabase.auth.getSession();
       
       const topAuthGuest = document.getElementById('top-auth-guest');
       const topAuthUser = document.getElementById('top-auth-user');
@@ -1552,16 +1554,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
       window.addEventListener('auth-state-changed', async (e) => {
         const { event, session: currentSession } = e.detail;
-        if (event === 'SIGNED_IN') {
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
           updateAuthUI(currentSession);
         }
         if (event === 'SIGNED_OUT') {
           updateAuthUI(null);
         }
       });
-
-      // 初次載入更新狀態
-      updateAuthUI(session);
 
       // 5. 初次繪製
       if (currentTripId) {

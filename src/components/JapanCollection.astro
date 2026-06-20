@@ -380,13 +380,16 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   const supabaseUrl = window.__SUPABASE_URL__ || '';
   const supabaseAnonKey = window.__SUPABASE_ANON_KEY__ || '';
 
-  const waitForSupabase = () => new Promise(resolve => {
-    if (window._supabaseCreateClient) return resolve(true);
-    window.addEventListener('supabase-ready', resolve, { once: true });
+  const waitForSharedSupabase = () => new Promise(resolve => {
+    if (window.sharedSupabase) return resolve(window.sharedSupabase);
+    const check = setInterval(() => {
+      if (window.sharedSupabase) {
+        clearInterval(check);
+        resolve(window.sharedSupabase);
+      }
+    }, 50);
   });
-  await waitForSupabase();
-  const createClient = window._supabaseCreateClient;
-  const supabase = window.sharedSupabase || createClient(supabaseUrl, supabaseAnonKey);
+  const supabase = await waitForSharedSupabase();
   
   const toast = document.getElementById('japan-toast');
 
@@ -414,7 +417,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   }
 
   // --- 讀取資料庫快取與驗證 ---
-  async function init() {
+  async function init(session = null) {
     // 1. 抓取資料以維持最新狀態
     const { data: cats } = await supabase.from('japan_categories').select('*').order('sort_order', { ascending: true });
     const { data: items } = await supabase.from('japan_items').select('*').order('created_at', { ascending: false });
@@ -425,7 +428,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     allWishlistItems = wishlists || [];
 
     // 2. 身分驗證與即時探索隱私狀態檢查
-    const { data: { session } } = await supabase.auth.getSession();
     const { data: statusObj } = await supabase.from('status').select('japan_explore_public').eq('id', 1).single();
     const isPublic = statusObj ? !!statusObj.japan_explore_public : false;
 
@@ -1816,15 +1818,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
   window.addEventListener('auth-state-changed', async (e) => {
     const { event, session } = e.detail;
-    if (event === 'SIGNED_IN' && session) {
+    if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
       // OAuth 回調後 token 寫入完成，重新初始化
-      await init();
+      await init(session);
     }
     if (event === 'SIGNED_OUT') {
-      await init();
+      await init(null);
     }
   });
-
-  // 頁面加載完成後啟動初始化
-  init();
 </script>
