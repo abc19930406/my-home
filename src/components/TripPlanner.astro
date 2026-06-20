@@ -537,6 +537,50 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     let isAdminUser = false;
     const adminEmail = window.__ADMIN_EMAIL__ || '';
 
+    // --- 認證 UI 更新邏輯 (提前綁定以避免 Race Condition) ---
+    const topAuthGuest = document.getElementById('top-auth-guest');
+    const topAuthUser = document.getElementById('top-auth-user');
+    
+    document.getElementById('btn-top-logout')?.addEventListener('click', async () => {
+      await supabase.auth.signOut();
+      window.location.reload();
+    });
+
+    function updateAuthUI(currentSession) {
+      if (currentSession && currentSession.user.email === adminEmail) {
+        isAdminUser = true;
+        document.querySelectorAll('.admin-only').forEach(el => {
+          el.style.display = 'inline-flex';
+        });
+        if (topAuthGuest) topAuthGuest.style.display = 'none';
+        if (topAuthUser) topAuthUser.style.display = 'block';
+
+        console.log('🔑 管理員已登入，啟用前台管理介面。');
+      } else {
+        isAdminUser = false;
+        document.querySelectorAll('.admin-only').forEach(el => {
+          el.style.display = 'none';
+        });
+        if (topAuthGuest) topAuthGuest.style.display = 'block';
+        if (topAuthUser) topAuthUser.style.display = 'none';
+      }
+    }
+
+    window.addEventListener('auth-state-changed', async (e) => {
+      const { event, session: currentSession } = e.detail;
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        updateAuthUI(currentSession);
+      }
+      if (event === 'SIGNED_OUT') {
+        updateAuthUI(null);
+      }
+    });
+
+    if (window.__latestAuthState) {
+      const { event, session } = window.__latestAuthState;
+      updateAuthUI(session);
+    }
+
     // 上傳圖片的暫存陣列 (以 URL 字串儲存)
     let uploadedImagesCache = [];
 
@@ -1522,45 +1566,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       await googleMapsPromise;
       await initGoogleMap();
 
-      // 4. 偵測管理員登入狀態
-      
-      const topAuthGuest = document.getElementById('top-auth-guest');
-      const topAuthUser = document.getElementById('top-auth-user');
-      
-      document.getElementById('btn-top-logout')?.addEventListener('click', async () => {
-        await supabase.auth.signOut();
-        window.location.reload();
-      });
-
-      function updateAuthUI(currentSession) {
-        if (currentSession && currentSession.user.email === adminEmail) {
-          isAdminUser = true;
-          document.querySelectorAll('.admin-only').forEach(el => {
-            el.style.display = 'inline-flex';
-          });
-          if (topAuthGuest) topAuthGuest.style.display = 'none';
-          if (topAuthUser) topAuthUser.style.display = 'block';
-
-          console.log('🔑 管理員已登入，啟用前台管理介面。');
-        } else {
-          isAdminUser = false;
-          document.querySelectorAll('.admin-only').forEach(el => {
-            el.style.display = 'none';
-          });
-          if (topAuthGuest) topAuthGuest.style.display = 'block';
-          if (topAuthUser) topAuthUser.style.display = 'none';
-        }
-      }
-
-      window.addEventListener('auth-state-changed', async (e) => {
-        const { event, session: currentSession } = e.detail;
-        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          updateAuthUI(currentSession);
-        }
-        if (event === 'SIGNED_OUT') {
-          updateAuthUI(null);
-        }
-      });
+      // 4. 偵測管理員登入狀態 (移至頂部)
 
       // 5. 初次繪製
       if (currentTripId) {

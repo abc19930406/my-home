@@ -122,11 +122,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           }
         }
         if (event === 'SIGNED_IN') {
+          window.__latestAuthState = { event, session };
           window.dispatchEvent(new CustomEvent('auth-state-changed', { 
             detail: { event, session } 
           }));
         }
         if (event === 'SIGNED_OUT') {
+          window.__latestAuthState = { event, session: null };
           window.dispatchEvent(new CustomEvent('auth-state-changed', { 
             detail: { event, session: null } 
           }));
@@ -144,6 +146,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       }
 
       // 廣播初始 session 狀態給子元件（讓它們不用自己呼叫 getSession）
+      window.__latestAuthState = { event: 'INITIAL_SESSION', session: initialSession };
       window.dispatchEvent(new CustomEvent('auth-state-changed', { 
         detail: { event: 'INITIAL_SESSION', session: initialSession } 
       }));

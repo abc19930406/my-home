@@ -1826,4 +1826,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       await init(null);
     }
   });
+
+  if (window.__latestAuthState) {
+    const { event, session } = window.__latestAuthState;
+    if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+      init(session);
+    } else if (event === 'SIGNED_OUT') {
+      init(null);
+    }
+  }
 </script>
