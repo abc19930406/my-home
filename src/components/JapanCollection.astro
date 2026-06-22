@@ -436,9 +436,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       if (currentUser.email === adminEmail) {
         isAdminUser = true;
         isAllowedUser = true;
+        console.trace('[DIAG] allowed_users 查詢來源：JapanCollection.astro:439');
         const { data: users } = await supabase.from('allowed_users').select('*');
         allowedUsersCache = users || [];
       } else {
+        console.trace('[DIAG] allowed_users 查詢來源：JapanCollection.astro:443');
         const { data: allowedUser, error: allowedError } = await supabase
           .from('allowed_users')
           .select('id')

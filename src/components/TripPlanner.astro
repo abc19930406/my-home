@@ -484,7 +484,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 <!-- IIFE 客戶端互動與 Supabase 連線邏輯 -->
 <script define:vars={{ webhookUrl, mapsKey, supabaseUrl, supabaseAnonKey }}>
   (async () => {
-    // 1. 動態從 CDN 匯入 Supabase 核心並初始化
+    // 1. 等待 trip.astro 建立的共用 Supabase client
     const waitForSharedSupabase = () => new Promise(resolve => {
       if (window.sharedSupabase) return resolve(window.sharedSupabase);
       const check = setInterval(() => {
@@ -546,8 +546,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       window.location.reload();
     });
 
-    function updateAuthUI(currentSession) {
+    let authUIUpdateSeq = 0;
+    async function updateAuthUI(currentSession) {
+      const currentSeq = ++authUIUpdateSeq;
+
       if (currentSession && currentSession.user.email === adminEmail) {
+        if (currentSeq !== authUIUpdateSeq) return;
         isAdminUser = true;
         document.querySelectorAll('.admin-only').forEach(el => {
           el.style.display = 'inline-flex';
@@ -556,7 +560,40 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         if (topAuthUser) topAuthUser.style.display = 'block';
 
         console.log('🔑 管理員已登入，啟用前台管理介面。');
+      } else if (currentSession) {
+        try {
+          console.trace('[DIAG] allowed_users 查詢來源：TripPlanner.astro:566');
+          const { data: allowedUser, error } = await supabase
+            .from('allowed_users')
+            .select('id')
+            .ilike('email', currentSession.user.email)
+            .single();
+
+          if (currentSeq !== authUIUpdateSeq) return;
+
+          if (allowedUser) {
+            isAdminUser = false;
+            document.querySelectorAll('.admin-only').forEach(el => {
+              el.style.display = 'none';
+            });
+            if (topAuthGuest) topAuthGuest.style.display = 'none';
+            if (topAuthUser) topAuthUser.style.display = 'block';
+            console.log('🔑 朋友已登入。');
+          } else {
+            throw new Error('Not in allowed users list');
+          }
+        } catch (err) {
+          if (currentSeq !== authUIUpdateSeq) return;
+          console.warn('⚠️ allowed_users 查詢失敗或使用者不在白名單：', err);
+          isAdminUser = false;
+          document.querySelectorAll('.admin-only').forEach(el => {
+            el.style.display = 'none';
+          });
+          if (topAuthGuest) topAuthGuest.style.display = 'block';
+          if (topAuthUser) topAuthUser.style.display = 'none';
+        }
       } else {
+        if (currentSeq !== authUIUpdateSeq) return;
         isAdminUser = false;
         document.querySelectorAll('.admin-only').forEach(el => {
           el.style.display = 'none';
