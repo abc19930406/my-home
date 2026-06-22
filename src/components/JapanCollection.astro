@@ -1553,6 +1553,14 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         document.body.classList.add('modal-open');
       }
     }
+    
+    // 背景點擊關閉邏輯
+    if (target.classList.contains('modal-overlay')) {
+      if (target.id === 'auth-modal' || target.id === 'wishlist-names-modal' || target.id === 'item-modal' || target.id === 'collect-modal') {
+        target.style.display = 'none';
+        document.body.classList.remove('modal-open');
+      }
+    }
   });
 
   document.getElementById('japan-lightbox-overlay')?.addEventListener('click', () => {

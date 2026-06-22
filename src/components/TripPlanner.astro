@@ -75,6 +75,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     body.modal-open {
       overflow: hidden !important;
     }
+    .map-wrapper {
+      isolation: isolate;
+      position: relative;
+      z-index: 0;
+    }
     .custom-map-marker.is-chain-store {
       opacity: 0.6;
     }
@@ -2024,6 +2029,14 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       }
     }
 
+    function closeSpotDetailModal() {
+      const modal = document.getElementById('spot-detail-modal');
+      if(modal && modal.classList.contains('show')) {
+        modal.classList.remove('show');
+        document.body.classList.remove('modal-open');
+      }
+    }
+
     function openSpotDetailModal(spot) {
       const modal = document.getElementById('spot-detail-modal');
       const titleEl = document.getElementById('spot-detail-title');
@@ -3202,6 +3215,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           closeSpotModal();
           closeLightbox();
           closeTypeModal();
+          closeWishlistModal();
+          closeSpotDetailModal();
         }
       });
     };
