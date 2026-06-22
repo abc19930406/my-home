@@ -562,7 +562,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         console.log('🔑 管理員已登入，啟用前台管理介面。');
       } else if (currentSession) {
         try {
-          console.trace('[DIAG] allowed_users 查詢來源：TripPlanner.astro:566');
           const { data: allowedUser, error } = await supabase
             .from('allowed_users')
             .select('id')
