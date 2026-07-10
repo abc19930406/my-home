@@ -34,7 +34,7 @@
 ## 硬性技術規則(完整細節與原因見 PROJECT_ARCHITECTURE.md)
 
 - Astro `<script>`(非 frontmatter)**禁用 TypeScript 語法**:型別標註、`as` 斷言會導致 esbuild 編譯失敗
-- Supabase 走 CDN 動態注入(Layout.astro),版本鎖定 `@supabase/supabase-js@2/+esm`;**不可**改為直接 import CDN URL
+- Supabase 走 CDN 動態注入(Layout.astro),版本鎖定**確切版號** `@supabase/supabase-js@2.110.2/+esm`(2026-07-11 凍結,禁止浮動 `@2`;升版屬依賴變更,須先問);**不可**改為直接 import CDN URL
 - `/trip` 頁面採 Supabase 單一入口:只有 trip.astro 可呼叫 `createClient` / `getSession` / `onAuthStateChange`;TripPlanner.astro 與 JapanCollection.astro **絕不**自行呼叫,只透過 `auth-state-changed` 事件 + `window.__latestAuthState` 快照接收狀態
 - `window.__latestAuthState` 快照機制周邊的任何修改,必須完整貼出修改後程式碼供使用者肉眼確認(曾被格式化工具誤刪)
 - 多元件共存頁面:Modal/Toast 的 ID 與 CSS class 必須加 `japan-` / `travel-` 前綴隔離

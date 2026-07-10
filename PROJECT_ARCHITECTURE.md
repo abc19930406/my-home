@@ -1,7 +1,8 @@
 # PROJECT_ARCHITECTURE.md
 # The Corner Table — 專案架構說明
 
-> 每次開始新任務前，請先完整閱讀本文件與 PROJECT_PROGRESS.md。
+> 每次開始新任務前，請先完整閱讀本文件、PROJECT_ARCHITECTURE_V2.md 與 PROJECT_PROGRESS.md。
+> PROJECT_ARCHITECTURE_V2.md 為 /trip 整合頁面的詳細功能規劃，本文件為全站通用架構規則。
 
 ---
 
@@ -46,19 +47,23 @@ my-home/
 │   │   │   └── index.astro      # 語錄收藏（prerender = true）
 │   │   ├── polaroid.astro       # 底片日記（prerender = true）
 │   │   ├── ledger.astro         # 記帳系統（prerender = true）
-│   │   ├── japan.astro          # 日本收藏（prerender = true）
-│   │   ├── travel.astro         # 旅行地圖（prerender = true）
+│   │   ├── japan.astro          # 日本收藏（舊頁面，核心邏輯已搬移至 JapanCollection.astro）
+│   │   ├── travel.astro         # 旅行地圖（舊頁面，核心邏輯已搬移至 TripPlanner.astro）
+│   │   ├── trip.astro           # 🆕 整合頁面（行程+收藏+AI），Supabase 單一入口
 │   │   └── api/
 │   │       ├── explore.ts       # 探索日本 Serverless（prerender = false）
 │   │       └── exchange-rate.ts # 匯率 API（prerender = false）
+│   ├── components/
+│   │   ├── TripPlanner.astro    # 🆕 行程地圖/每日行程元件（從 travel.astro 搬移，被 trip.astro 引用）
+│   │   └── JapanCollection.astro # 🆕 日本收藏元件（從 japan.astro 搬移，被 trip.astro 引用）
 │   ├── layouts/
 │   │   └── Layout.astro         # 共用 Layout（含 Supabase CDN 注入）
 │   ├── styles/
-│   │   ├── japan.css
-│   │   └── travel.css
+│   │   ├── japan.css            # .japan-modal-overlay 等 japan- 前綴 class
+│   │   └── travel.css           # .travel-modal-overlay 等 travel- 前綴 class
 │   └── data/
 │       └── links.ts             # 首頁卡片資料
-├── astro.config.mjs             # 含 Vite plugin 移除 modulepreload
+├── astro.config.mjs             # 含 Vite plugin 移除 modulepreload + optimizeDeps exclude
 ├── .env                         # 本地環境變數（git ignore）
 └── package.json
 ```
@@ -73,7 +78,7 @@ my-home/
 - API 路由必須加上 `export const prerender = false`
 - 單篇短文 `/posts/[id].astro` 為 SSR（無 prerender）
 
-### Supabase CDN 載入方式（重要）
+### Supabase CDN 載入方式（重要，已更新版本鎖定）
 - **不能**在 `<script>` 裡直接 `import` CDN URL，Vite 會掃描並產生錯誤的 modulepreload
 - **正確做法**：Layout.astro 用 `<script is:inline>` 動態注入：
   ```html
@@ -82,7 +87,7 @@ my-home/
       const s = document.createElement('script');
       s.type = 'module';
       s.textContent = `
-        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/+esm';
         window._supabaseCreateClient = createClient;
         window.dispatchEvent(new Event('supabase-ready'));
       `;
@@ -90,6 +95,10 @@ my-home/
     })();
   </script>
   ```
+  - ⚠️ **務必鎖定確切版號（如 `@2.110.2`），禁止浮動版號**：
+    - 曾因完全未鎖版號，jsdelivr 抓取最新版時，OAuth 流程觸發 SDK 內部延遲載入子模組（`@supabase/auth-js`、`functions-js`、`realtime-js` 等），子模組路徑在某些情況下被錯誤解析成本站路徑，導致大量 404 → 當時改鎖主版號 `@2`
+    - 2026-07-11 進一步凍結為確切版號 `@2.110.2`：主版號 `@2` 仍會隨 jsdelivr 自動升 minor/patch，SDK 版本自行變動是「6/22 登入 Heisenbug 故障、7/11 無法重現」的最可能解釋，鎖定確切版號以消除此不受控變數
+    - 升版視同依賴變更（安全紅線），須經使用者同意並於升版後實測登入流程
 - 各頁面等待 Supabase 就緒：
   ```js
   const waitForSupabase = () => new Promise(resolve => {
@@ -99,11 +108,13 @@ my-home/
   await waitForSupabase();
   const createClient = window._supabaseCreateClient;
   ```
+- 在 `/trip` 頁面（多元件共存），**不適用上述各自 createClient 的寫法**，請見下方「/trip 頁面 Supabase 單一入口架構」專章
 
 ### Script 寫法規則
 - `<script define:vars={{ var1, var2 }}>` 用來把 frontmatter 變數傳入客戶端
 - `define:vars` 內**不能**用 import 語法
 - 必須用 `(async () => { ... })()` IIFE 包住所有非同步邏輯
+- ⚠️ **重要**：Astro `<script>` 標籤（非 frontmatter）預設會被當 TypeScript 處理，但**不應寫 TS 語法**。型別標註（`:Type`）、`as Type` 斷言都會在 esbuild parse 階段導致編譯失敗。必須全部使用純 JS 寫法（可選鏈 `?.` 合法，但 `xxx?: Type` 型別標註不合法）
 
 ### Google Maps 載入方式（重要）
 靜態頁面（prerender = true）必須在 IIFE 裡動態建立 script 標籤：
@@ -132,6 +143,8 @@ await new Promise((resolve, reject) => {
 
 ### Vite 設定
 - `astro.config.mjs` 有 Vite plugin 移除所有 `<link rel="modulepreload">` 標籤
+- 已強化為 `transformIndexHtml: { order: 'post', handler }` 確保在最終輸出階段移除
+- 新增 `optimizeDeps: { exclude: ['@supabase/supabase-js'] } `，避免 Vite 預先打包 CDN 載入的套件造成衝突
 - 避免 CDN 路徑被錯誤解析成相對路徑
 
 ### 日期處理
@@ -141,6 +154,12 @@ await new Promise((resolve, reject) => {
 - 開啟：`document.body.classList.add('modal-open')`
 - 關閉：`document.body.classList.remove('modal-open')`
 - CSS：`body.modal-open { overflow: hidden; }`（不加 position: fixed）
+- ⚠️ **每個 Modal 通常有多種關閉路徑**（關閉按鈕、背景點擊、ESC 鍵），新增 Modal 時務必確認**每一種**路徑都有執行 `classList.remove('modal-open')`。曾發生背景點擊監聽與 ESC 鍵監聽各自獨立維護一份 Modal 清單，新增 Modal 時只更新了其中一處，導致漏網的關閉路徑無法清除 `modal-open`，頁面卡死無法捲動（詳見 PROJECT_PROGRESS.md「衝突熱點稽核」記錄）
+
+### 多元件共存的 CSS/ID 隔離規則（重要，/trip 頁面適用）
+- 當兩個元件（如 TripPlanner.astro 與 JapanCollection.astro）共存於同一頁面時，**務必為各自的 Modal/Toast 等 UI 元素加上獨立前綴**（如 `japan-`、`travel-`），避免 `getElementById` 或 CSS class 選擇器互相干擾
+- 案例：`japan.css` 與 `travel.css` 都定義了 `.modal-overlay`，但 display 屬性設定不同（一個用 `none`、一個用 `flex` 預設+opacity 切換），同時載入時互相覆蓋導致 Modal 顯示異常。已拆分為 `.japan-modal-overlay` 與 `.travel-modal-overlay` 兩個獨立 class
+- z-index 衝突：Google Maps 內部元件 z-index 可能高達百萬，若與其他 Modal 共存，建議用 `.map-wrapper { isolation: isolate; position: relative; z-index: 0 }` 隔離其 stacking context，而非搬移 DOM 結構（搬移容易產生新的截斷/定位問題）
 
 ### 私密頁面保護
 ```js
@@ -150,6 +169,67 @@ if (!session) {
   return;
 }
 ```
+
+---
+
+## /trip 頁面 Supabase 單一入口架構（重要）
+
+`/trip` 頁面由 `trip.astro`（容器）+ `TripPlanner.astro`（行程元件）+ `JapanCollection.astro`（收藏元件）組成，三者共存於同一頁面。**Supabase 的初始化、登入狀態管理採單一入口模式**，避免重複初始化造成的各種問題（multiple instances 警告、OAuth 流程 404、Session 解析錯誤、Race Condition 導致 UI 狀態錯誤）。
+
+### 架構原則
+
+1. **trip.astro 是唯一的初始化入口**：
+   - 唯一執行 `waitForSupabase()` 等待 CDN 載入
+   - 唯一呼叫 `createClient()`，建立的 client 存於 `window.sharedSupabase`
+   - 唯一呼叫 `supabase.auth.getSession()` 取得初始 session
+   - 唯一綁定 `supabase.auth.onAuthStateChange()`
+
+2. **狀態廣播機制**：
+   - trip.astro 在每次取得/變更 session 狀態時，透過 `window.dispatchEvent(new CustomEvent('auth-state-changed', { detail: { event, session } }))` 廣播給子元件
+   - 同時將最新狀態寫入 `window.__latestAuthState = { event, session }`（全域快照），供子元件在綁定監聽器時補跑檢查，避免 Race Condition（見下方）
+
+3. **子元件（TripPlanner.astro / JapanCollection.astro）規則**：
+   - **絕不**自行呼叫 `createClient()` 或 `supabase.auth.getSession()`
+   - 若需要 supabase client 做資料讀寫（非 auth 相關），使用 `waitForSharedSupabase()` 輪詢取得：
+     ```js
+     const waitForSharedSupabase = () => new Promise(resolve => {
+       if (window.sharedSupabase) return resolve(window.sharedSupabase);
+       const check = setInterval(() => {
+         if (window.sharedSupabase) {
+           clearInterval(check);
+           resolve(window.sharedSupabase);
+         }
+       }, 50);
+     });
+     const supabase = await waitForSharedSupabase();
+     ```
+   - UI 狀態（登入/登出按鈕等）一律透過監聽 `auth-state-changed` 事件更新，呼叫各自的 `updateAuthUI(session)` 函式
+
+### Race Condition 防護（重要教訓）
+
+**問題**：子元件中若有耗時的非同步操作（例如 TripPlanner.astro 需要 `await googleMapsPromise` 等待 Google Maps 腳本載入，約 300-800ms），而事件監聽器綁定寫在這段 await 之後，就會發生：
+- trip.astro 的 `getSession()` 通常 50ms 內完成並廣播 `INITIAL_SESSION` 事件
+- 子元件還卡在 `await googleMapsPromise`，根本還沒執行到 `addEventListener`
+- 等子元件終於綁定監聽器時，廣播早已發生過，永久錯過 → UI 卡在預設的未初始化狀態（例如登入按鈕永遠是 `display: none`）
+
+**解法（雙保險）**：
+1. 事件監聽器綁定**必須提前到 `<script>` 最開頭**，在任何 `await`（包含 Google Maps 載入）之前
+2. 綁定完成後，立即檢查 `window.__latestAuthState` 快照，若已存在（代表已經錯過廣播），手動補跑一次 UI 更新：
+   ```js
+   window.addEventListener('auth-state-changed', async (e) => {
+     const { event, session } = e.detail;
+     updateAuthUI(session);
+   });
+   // 補跑快照檢查
+   if (window.__latestAuthState) {
+     const { session } = window.__latestAuthState;
+     updateAuthUI(session);
+   }
+   ```
+
+### 已知陷阱
+
+- **自動格式化工具誤刪風險**：曾發生 Antigravity 在移除 debug console.log 時，因 Prettier 格式化（單引號→雙引號）導致字串模糊比對誤判，意外把鄰近的 `window.__latestAuthState = ...` 賦值邏輯整段刪除。**任何牽涉這個快照機制的修改後，務必明確要求 Antigravity 完整顯示修改後的程式碼以供肉眼確認**，不能只信任「build 通過」的回報
 
 ---
 
@@ -166,15 +246,22 @@ if (!session) {
 | income_categories | 收入來源（動態管理） |
 | expense_categories | 支出分類（動態管理） |
 | japan_categories | 日本收藏分類（兩層） |
-| japan_items | 日本收藏品項（含 owner_wishlist、owner_quantity） |
+| japan_items | 日本收藏品項（含 owner_wishlist、owner_quantity；📋 規劃新增 trip_id） |
 | allowed_users | 日本收藏白名單（email + display_name） |
 | wishlist_items | 朋友/家人願望清單（含 quantity） |
 | trips | 旅行行程 |
 | spots | 旅行景點（含 spot_type_id、spot_subtype_id、place_id） |
-| spot_types | 景點主類型 |
-| spot_subtypes | 景點子類型（關聯 spot_types） |
+| spot_types | 景點主類型（含 is_chain_store） |
+| spot_subtypes | 景點子類型（關聯 spot_types，含 is_chain_store） |
 | trip_days | 每日行程（關聯 trips） |
 | day_spots | 每天景點安排（關聯 trip_days + spots） |
+| travel_coupons | 優惠券，全站共用 |
+| travel_subway_maps | 地鐵圖（📋 規劃調整為全域分類庫） |
+| trip_subway_categories | 📋 規劃中，行程關聯地鐵圖分類 |
+| spot_transport_routes | 📋 規劃中，景點間交通方式 |
+| trip_collaborators | 📋 規劃中，行程協作者權限 |
+
+> 完整的 /trip 整合頁面資料庫異動細節，請見 PROJECT_ARCHITECTURE_V2.md 第七節。
 
 ### status 資料表欄位
 - id（固定為 1）
@@ -191,6 +278,8 @@ if (!session) {
 - post_images（PUBLIC）
 - japan_images（PUBLIC）
 - travel_images（PUBLIC）
+- travel_coupons（PUBLIC）
+- travel_subway_maps（PUBLIC）
 
 ---
 
@@ -236,13 +325,14 @@ if (!session) {
 | 身份 | 登入方式 | 可使用功能 |
 |------|---------|-----------|
 | 管理者 | 現有帳號（email/password） | 全部 |
-| 朋友 | Google OAuth | /japan 願望清單 |
-| 家人 | Email/Password（管理者建立）| /japan 願望清單 |
+| 朋友 | Google OAuth | /japan（及未來 /trip）願望清單 |
+| 家人 | Email/Password（管理者建立）| /japan（及未來 /trip）願望清單 |
 
 - 白名單：Supabase Table Editor → allowed_users → Insert row
 - 新增家人帳號：Supabase Authentication → Users → Add user
 - 白名單 email 比對用 `ilike`（大小寫不敏感）
 - 朋友需用 Safari 或 Chrome，不能用 App 內建瀏覽器
+- OAuth `redirectTo` 一律使用 `window.location.href`（不寫死特定路徑，確保在哪個頁面登入就跳回哪個頁面）
 - Google OAuth Callback URL：https://ltmrkdldmgysczfnidra.supabase.co/auth/v1/callback
 - Supabase Site URL：https://my-home-blond-tau.vercel.app
 - Redirect URLs：https://my-home-blond-tau.vercel.app/** 和 http://localhost:4321/**
@@ -260,3 +350,20 @@ if (!session) {
 | 記帳（/ledger） | 白底 | white |
 | 日本收藏（/japan） | 晨霧富士淡藍灰 | #E8EEF5 |
 | 旅行地圖（/travel） | 日系清新暖木 | #FDFCF8 |
+| /trip（整合頁面） | 沿用 travel + japan 既有風格（依分頁切換） | — |
+
+---
+
+## 開發除錯方法論（經驗累積）
+
+1. **診斷 UI 顯示問題的標準流程**：先查 `getBoundingClientRect()` 是否為 0、`getComputedStyle().display`，再往上遍歷 parentElement 確認是否有祖先層 `display: none` 或造成 stacking context 的屬性（transform / filter / isolation 等）
+2. **不可只信任「測試通過」的自動化回報**：要求 Antigravity 在診斷階段先不修改程式碼、只回報資訊，由使用者本人在瀏覽器實際操作驗證
+3. **Vercel build 成功 ≠ 前端執行無誤**：build log 顯示 Ready/Success 不保證瀏覽器端無錯誤，務必用無痕視窗實測，必要時手動 redeploy 並清除 build cache
+4. **dev server 常見問題**：
+   - port 4321 殘留進程：`lsof -i :4321` + `kill -9`
+   - 快取問題：`rm -rf node_modules/.vite .astro dist` 後重啟
+   - 瀏覽器快取：Safari 無「清除快取硬式重新載入」選項，改用「進入響應式設計模式」（Cmd+Ctrl+R）測試手機版，或 Network 分頁勾選「停用快取」+ Cmd+R
+5. **重大架構改動後，要求完整貼出修改後程式碼**，而非只看 commit message 摘要，避免自動化工具的誤判（如模糊比對誤刪程式碼）被忽略
+6. **修改程式碼後必須在同一輪完成 git commit + push 並確認推送成功，才算真正部署**：曾發生 Antigravity 完成多輪程式碼修改但未執行 commit/push，Vercel 持續運行舊版本，導致後續多輪瀏覽器測試實際上都在測試舊程式碼，造成大量誤判、浪費大量排查時間。修改完成後應立即貼出 `git push` 的終端機輸出確認成功，且應在 Vercel Deployments 頁籤確認新版本狀態為 Ready（且 commit SHA 相符）後才進行驗證測試
+7. **頁面搬移/重構時，先前已修復的規則容易被靜默遺漏**：例如 `.map-wrapper { isolation: isolate }` 這類 CSS 隔離規則，原本已在舊版 /travel 頁面修復並記錄於本文件，但搬移為 TripPlanner.astro 時未被帶過去，直到後續稽核才發現相關檔案完全沒有任何 isolation 或明確 z-index 設定。重構或搬移程式碼時，應主動逐條比對本文件已記載的規則是否真的體現在新程式碼中，不能只憑「功能測試通過」就假設所有先前修復都還在
+8. **懷疑 race condition 或間歇性 bug 時，優先控制測試環境變數**：瀏覽器的無痕模式、DevTools 開啟/關閉等狀態可能改變 JavaScript 執行時序（例如 console 呼叫本身有效能開銷）或儲存行為（例如 Safari 無痕模式對 localStorage 的限制），進而讓 bug 時有時無、難以穩定重現。若懷疑是時序或環境相關問題，應優先在不同瀏覽器/模式間切換比對以縮小範圍，而非在同一環境下反覆重測

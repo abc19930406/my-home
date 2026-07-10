@@ -144,7 +144,8 @@
   - 已驗證：未登入狀態下，行程/收藏分頁的登入按鈕初次載入皆正確顯示
 
 - **CDN 版本鎖定**：
-  - Layout.astro 的 Supabase CDN import 原本未鎖定版本號（`@supabase/supabase-js/+esm`），改為鎖定主版號 `@supabase/supabase-js@2/+esm`，避免 jsdelivr 抓取最新版造成子模組路徑解析不穩定
+  - Layout.astro 的 Supabase CDN import 原本未鎖定版本號（`@supabase/supabase-js/+esm`），先改為鎖定主版號 `@2`，避免 jsdelivr 抓取最新版造成子模組路徑解析不穩定
+  - 2026-07-11 進一步凍結為確切版號 `@supabase/supabase-js@2.110.2/+esm`（Heisenbug 診斷後決策，消除「SDK 版本自行變動」變數，詳見下方進行中問題）
 
 - **權限漏洞修正**：
   - TripPlanner.astro 的 `updateAuthUI` 原本只要有 session 就無條件設 `isAdminUser = true`，未比對 email，導致任何登入者都取得管理員權限
@@ -195,6 +196,8 @@
 - **診斷設施（留存於線上）**：trip.astro 已插入 `[DEBUG-HEISENBUG]` 標記的 sessionStorage 時序記錄碼（commit `5724f31`，寫入 `sessionStorage.__auth_debug_log`，刻意不用 console 以免改變時序）。事後搜尋 `DEBUG-HEISENBUG` 可整批移除
 - **失敗取證 SOP**：日常使用中任何一次登入後顯示異常，**不關閉、不重整該分頁**，開 Console 執行 `copy(sessionStorage.__auth_debug_log)` 貼出剪貼簿內容，並截圖 Console（確認有無「🔑 朋友已登入」或 ⚠️ 警告）
 - **新觀察（修復階段一併評估）**：每次視窗焦點切換，Supabase 會重發 `SIGNED_IN`，TripPlanner 的 `updateAuthUI` 隨之重查一次 `allowed_users`。功能無害，但查詢次數隨使用時間持續累積，可評估白名單查詢結果快取
+- **2026-07-11 診斷結論（使用者已確認）**：本輪**未重現**，兩嫌犯排除，診斷碼保留在線上待真實失敗時取證
+- **環境凍結（2026-07-11）**：瀏覽器端 Supabase CDN 由浮動 `@2` 鎖定為確切版號 `@2.110.2`——jsdelivr 對 `@2` 會自動升 minor/patch，「SDK 版本自行變動」是 6/22 故障、7/11 無法重現的最可能解釋，凍結後此變數排除；若凍結後 bug 不再發生，亦可反向佐證此推論
 - **狀態**：等待真實失敗發生時依上述 SOP 取證，定案根因後才修復
 - **優先級**：⚠️ 維持高於進入階段 3
 
@@ -250,7 +253,7 @@
 
 1. 單篇頁為 SSR，即時可訪問
 2. `<script define:vars>` 不支援頂層 await，包在 `(async () => { ... })()` 內
-3. **Supabase CDN 載入**：Layout.astro 用 `<script is:inline>` 動態注入，**已鎖定版本號 `@supabase/supabase-js@2/+esm`**（避免子模組延遲載入路徑解析錯誤），各頁面用 `window.addEventListener('supabase-ready', ...)` 等待
+3. **Supabase CDN 載入**：Layout.astro 用 `<script is:inline>` 動態注入，**已鎖定確切版號 `@supabase/supabase-js@2.110.2/+esm`**（2026-07-11 凍結，禁止浮動版號；升版視同依賴變更須先問），各頁面用 `window.addEventListener('supabase-ready', ...)` 等待
 4. **astro.config.mjs** 有 Vite plugin 移除所有 modulepreload 標籤（已強化為 `transformIndexHtml: { order: 'post', handler }`），並新增 `optimizeDeps: { exclude: ['@supabase/supabase-js'] }`
 5. **PWA**：已移除 Service Worker，Layout.astro 有主動 unregister 舊 SW 的程式碼
 6. **Google Maps**：必須在 JS IIFE 裡動態建立 script 標籤載入
