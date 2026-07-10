@@ -60,7 +60,6 @@ const trips = initialTrips.length > 0 ? initialTrips : fallbackTrips;
 const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
 
 const mapsKey = import.meta.env.PUBLIC_GOOGLE_MAPS_KEY ?? '';
-const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 ---
@@ -481,7 +480,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 </Layout>
 
 <!-- IIFE 客戶端互動與 Supabase 連線邏輯 -->
-<script define:vars={{ webhookUrl, mapsKey, supabaseUrl, supabaseAnonKey }}>
+<script define:vars={{ mapsKey, supabaseUrl, supabaseAnonKey }}>
   (async () => {
     // 1. 動態從 CDN 匯入 Supabase 核心並初始化
     const waitForSupabase = () => new Promise(resolve => {
@@ -516,7 +515,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     });
 
     // 靜態資料 Fallback 控制
-    const deployWebhookUrl = webhookUrl;
     const googleMapsKey = mapsKey;
     const toast = document.getElementById('toast');
 
@@ -663,11 +661,15 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       }, 2000);
     }
 
-    // --- Trigger Build Webhook 觸發 Vercel 自動重構 ---
+    // --- 觸發 Vercel 自動重構(改經後端 API 驗證管理員身分) ---
     async function triggerBuildWebhook() {
-      if (!deployWebhookUrl) return;
       try {
-        await fetch(deployWebhookUrl, { method: 'POST' });
+        const { data: { session: s } } = await supabase.auth.getSession();
+        if (!s) return;
+        await fetch('/api/trigger-deploy', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + s.access_token },
+        });
         console.log('🚀 已成功發送重新編譯 Hook');
       } catch (err) {
         console.warn('⚠️ 無法發送編譯 Hook：', err);

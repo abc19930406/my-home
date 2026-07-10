@@ -45,9 +45,8 @@ const groupedCards = sectionOrder.map(section => ({
   cards: finalCards.filter(card => card.section === section)
 }));
 
-const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 ---
 
 <Layout>
-	<Welcome groupedCards={groupedCards} initialStatus={initialStatus} webhookUrl={webhookUrl} />
+	<Welcome groupedCards={groupedCards} initialStatus={initialStatus} />
 </Layout>

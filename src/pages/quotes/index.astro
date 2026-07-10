@@ -20,7 +20,6 @@ try {
   console.warn('⚠️ Build Warning: 語錄列表 Supabase 連線失敗。');
 }
 
-const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 ---
 
 <Layout title="語錄收藏 | The Corner Table">
@@ -171,14 +170,23 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
   <div id="toast" class="toast"></div>
 </Layout>
 
-<script define:vars={{ webhookUrl }}>
-  window.__WEBHOOK_URL__ = webhookUrl;
-</script>
-
 <script>
   import { supabase } from '../../lib/supabase-client';
 
-  const deployWebhookUrl = (window as any).__WEBHOOK_URL__ || '';
+  // 觸發重新部署:改經後端 API 驗證管理員身分,hook 網址不再暴露於前端
+  async function triggerDeploy() {
+    try {
+      const { data: { session: s } } = await supabase.auth.getSession();
+      if (!s) return;
+      await fetch('/api/trigger-deploy', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + s.access_token },
+      });
+    } catch (err) {
+      console.warn('無法觸發重新部署：', err);
+    }
+  }
+
   const toast = document.getElementById('toast');
 
   function showToast(message: string) {
@@ -286,7 +294,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       alert('儲存失敗');
       if (saveBtn) (saveBtn as HTMLButtonElement).disabled = false;
     } else {
-      fetch(deployWebhookUrl, { method: 'POST' }).catch(() => {});
+      triggerDeploy();
       if (id) {
         // 更新 UI
         const item = document.querySelector(`.quote-card[data-id="${id}"]`);
@@ -402,7 +410,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       if (!error) {
         showToast('已刪除');
         target.closest('.quote-card')?.remove();
-        fetch(deployWebhookUrl, { method: 'POST' }).catch(() => {});
+        triggerDeploy();
       }
     }
   });

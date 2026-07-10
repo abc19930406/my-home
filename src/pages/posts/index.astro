@@ -22,7 +22,6 @@ try {
   console.warn('⚠️ Build Warning: 短文列表 Supabase 連線失敗，將顯示空列表。');
 }
 
-const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 ---
 
 <Layout title="短文列表 | The Corner Table">
@@ -138,14 +137,23 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
     <div id="toast" class="toast"></div>
   </Layout>
 
-<script define:vars={{ webhookUrl }}>
-  window.__WEBHOOK_URL__ = webhookUrl;
-</script>
-
 <script>
   import { supabase } from '../../lib/supabase-client';
 
-  const deployWebhookUrl = (window as any).__WEBHOOK_URL__ || '';
+  // 觸發重新部署:改經後端 API 驗證管理員身分,hook 網址不再暴露於前端
+  async function triggerDeploy() {
+    try {
+      const { data: { session: s } } = await supabase.auth.getSession();
+      if (!s) return;
+      await fetch('/api/trigger-deploy', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + s.access_token },
+      });
+    } catch (err) {
+      console.warn('無法觸發重新部署：', err);
+    }
+  }
+
   const toast = document.getElementById('toast');
 
   function showToast(message: string) {
@@ -315,8 +323,8 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       alert(`儲存失敗: ${error.message || '未知錯誤'}`);
       if (savePostBtn) (savePostBtn as HTMLButtonElement).disabled = false;
     } else {
-      // 靜默呼叫 Webhook
-      fetch(deployWebhookUrl, { method: 'POST' }).catch(() => {});
+      // 靜默觸發重新部署
+      triggerDeploy();
 
       if (id) {
         // 更新 UI
@@ -404,7 +412,7 @@ const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
       const { error } = await supabase.from('posts').delete().eq('id', id);
       if (!error) {
         showToast('已刪除');
-        fetch(deployWebhookUrl, { method: 'POST' }).catch(() => {});
+        triggerDeploy();
         const item = target.closest('.post-item');
         item?.remove();
       }

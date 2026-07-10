@@ -14,7 +14,7 @@
 - Supabase 資料庫連接（含 RLS 權限設定）
 - 管理員登入系統（/login 頁面，Supabase Auth）
 - 管理後台（/admin 頁面，需登入才能進入）
-- Vercel Deploy Webhook 正常運作
+- Vercel Deploy Webhook 正常運作（2026-07-11 安全重構：hook 網址收進後端 `/api/trigger-deploy`，前端不再暴露，詳見下方「安全修復」）
 - **架構升級**：Astro output 改為 `server` 模式 + `@astrojs/vercel` 適配器
 - **PWA**：manifest.json 設定，可從 Safari 加入主畫面（已移除 Service Worker）
 - **全站 Pull to Refresh**：手機下拉重新整理功能，捲到頁面頂部往下拉超過 80px 即觸發 location.reload()，含白色 spinner 視覺回饋，實作於 Layout.astro
@@ -229,6 +229,14 @@
 - ✅ 朋友帳號（allowed_users 白名單）：行程/收藏分頁皆正確顯示已登入樣式（登出按鈕），不顯示 admin-only 元素
 - ⚠️ **重要但書（2026-07-11 更新）**：2026-07-11 對照實驗已確認 DevTools 開關與登入行為無因果，上述結果可視為一般情境的有效參考；惟「OAuth 登入後 UI 間歇性未切換」問題尚待真實失敗取證（見上方進行中問題），階段 2.5 收尾仍以該問題定案為準
 
+### 🔶 安全修復：Deploy Hook 後端化（2026-07-11，隱私修復任務 A）
+
+- **問題**：`PUBLIC_VERCEL_DEPLOY_HOOK` 以 `define:vars` 暴露於 7 個頁面前端原始碼（index/Welcome、admin、posts、quotes、japan、travel、/trip 的 TripPlanner + JapanCollection），任何人取得網址可無限觸發部署。舊 hook 網址視為已洩漏
+- **修復**：新增 `/api/trigger-deploy`（後端驗證 access token + `ADMIN_EMAIL` 比對後代呼叫 `VERCEL_DEPLOY_HOOK`），13 個前端呼叫點全數改為帶 Bearer token 呼叫此 API，移除所有 `PUBLIC_VERCEL_DEPLOY_HOOK` 引用與 `window.__WEBHOOK_URL__` 橋接。/trip 子元件 token 取自 `__latestAuthState` 快照（唯讀，不違反單一入口規則）
+- **驗證**：build 產物已確認無任何 hook 網址/相關變數殘留
+- **待收尾（使用者操作）**：Vercel 後台建立新 hook + 設定 `VERCEL_DEPLOY_HOOK`、`ADMIN_EMAIL` 環境變數 → 實測管理員觸發部署成功 → 刪除舊 Deploy Hook（使洩漏網址失效）與 `PUBLIC_VERCEL_DEPLOY_HOOK` 變數
+- 隱私修復任務 B（短文外洩）、C（照片）另案處理，尚未開始
+
 ---
 
 ## 二、規劃中功能（尚未開始）
@@ -330,7 +338,8 @@
 |---------|------|------|
 | PUBLIC_SUPABASE_URL | Supabase 連線 | 前端可見 |
 | PUBLIC_SUPABASE_ANON_KEY | Supabase 驗證 | 前端可見 |
-| PUBLIC_VERCEL_DEPLOY_HOOK | 觸發重新部署 | 前端可見 |
+| VERCEL_DEPLOY_HOOK | 觸發重新部署（新 hook，2026-07-11 汰換） | 後端專用 |
+| ADMIN_EMAIL | /api/trigger-deploy 管理員比對 | 後端專用 |
 | SERPAPI_KEY | 探索日本搜尋 | 後端專用 |
 | PUBLIC_GOOGLE_MAPS_KEY | 旅行地圖 Google Maps | 前端可見 |
 | PUBLIC_ADMIN_EMAIL | 管理者 email 判斷 | 前端可見 |

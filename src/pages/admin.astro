@@ -37,7 +37,6 @@ const formatShortDate = (dateStr: string) => {
   return `${d.getMonth() + 1}.${d.getDate()} 更新`;
 };
 
-const deployWebhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK || '';
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 ---
@@ -148,7 +147,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   <div id="toast" class="toast"></div>
 </Layout>
 
-<script define:vars={{ deployWebhookUrl, supabaseUrl, supabaseAnonKey }}>
+<script define:vars={{ supabaseUrl, supabaseAnonKey }}>
 (async () => {
   const waitForSupabase = () => new Promise(resolve => {
     if (window._supabaseCreateClient) return resolve();
@@ -167,6 +166,20 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     return;
   }
   if (adminContent) adminContent.style.display = 'block';
+
+  // 觸發重新部署:改經後端 API 驗證管理員身分,hook 網址不再暴露於前端
+  async function triggerDeploy() {
+    try {
+      const { data: { session: s } } = await supabase.auth.getSession();
+      if (!s) return;
+      await fetch('/api/trigger-deploy', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + s.access_token },
+      });
+    } catch (err) {
+      console.warn('無法觸發重新部署：', err);
+    }
+  }
 
   // 日期邏輯
   const dateEl = document.getElementById('current-date');
@@ -241,7 +254,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
       if (error) throw error;
       
       // 2. 觸發 Vercel Webhook 重新編譯首頁
-      fetch(deployWebhookUrl, { method: 'POST' }).catch(console.error);
+      triggerDeploy();
       
       // 3. 立即更新本地畫面
       if (currentCardElement) {
@@ -324,7 +337,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     try {
       const { error } = await supabase.from('status').update(newData).eq('id', 1);
       if (error) throw error;
-      fetch(deployWebhookUrl, { method: 'POST', mode: 'no-cors' }).catch(() => {});
+      triggerDeploy();
       showToast('狀態已更新！');
     } catch (err) {
       console.error('Status update failed:', err);

@@ -52,7 +52,8 @@ my-home/
 │   │   ├── trip.astro           # 🆕 整合頁面（行程+收藏+AI），Supabase 單一入口
 │   │   └── api/
 │   │       ├── explore.ts       # 探索日本 Serverless（prerender = false）
-│   │       └── exchange-rate.ts # 匯率 API（prerender = false）
+│   │       ├── exchange-rate.ts # 匯率 API（prerender = false）
+│   │       └── trigger-deploy.ts # 觸發重新部署（prerender = false，驗證管理員後代呼叫 Deploy Hook）
 │   ├── components/
 │   │   ├── TripPlanner.astro    # 🆕 行程地圖/每日行程元件（從 travel.astro 搬移，被 trip.astro 引用）
 │   │   └── JapanCollection.astro # 🆕 日本收藏元件（從 japan.astro 搬移，被 trip.astro 引用）
@@ -302,6 +303,15 @@ if (!session) {
 - 後端 Serverless Function：src/pages/api/exchange-rate.ts
 - 多重備援 API，由伺服器端呼叫避免 CORS 問題
 
+### Vercel Deploy Hook（重新部署觸發，2026-07-11 安全重構）
+- **背景**：hook 網址原以 `PUBLIC_VERCEL_DEPLOY_HOOK` + `define:vars` 暴露於 7 個頁面的前端原始碼，任何人取得後可無限觸發部署，已視為洩漏並汰換
+- **現行架構**：前端一律呼叫 `/api/trigger-deploy`（src/pages/api/trigger-deploy.ts）：
+  1. 前端帶目前 session 的 access token（`Authorization: Bearer <token>`）
+  2. 後端以 `supabase.auth.getUser(token)` 驗證身分，email 比對後端環境變數 `ADMIN_EMAIL`（不信任前端任何身分宣告），非管理員回 401
+  3. 驗證通過才 POST 後端環境變數 `VERCEL_DEPLOY_HOOK` 的網址
+- **規則**：hook 網址**不得**再以任何形式進入前端（`PUBLIC_` 前綴環境變數、define:vars、window 全域皆禁止）
+- /trip 子元件（TripPlanner / JapanCollection）依單一入口規則不呼叫 `getSession`，token 改從 `window.__latestAuthState` 快照唯讀取得
+
 ### Google Custom Search JSON API
 - ⚠️ 已於 2025 年對新用戶永久關閉，請勿嘗試申請，改用 SerpApi
 
@@ -313,7 +323,8 @@ if (!session) {
 |---------|------|------|
 | PUBLIC_SUPABASE_URL | Supabase 連線 URL | 前端 |
 | PUBLIC_SUPABASE_ANON_KEY | Supabase 匿名 Key | 前端 |
-| PUBLIC_VERCEL_DEPLOY_HOOK | 觸發重新部署的 Webhook URL | 前端 |
+| VERCEL_DEPLOY_HOOK | 觸發重新部署的 Webhook URL（新 hook，2026-07-11 汰換） | 後端 |
+| ADMIN_EMAIL | /api/trigger-deploy 管理員身分比對 | 後端 |
 | SERPAPI_KEY | 探索日本搜尋 | 後端 |
 | PUBLIC_GOOGLE_MAPS_KEY | Google Maps API Key | 前端 |
 | PUBLIC_ADMIN_EMAIL | 管理者 email 判斷 | 前端 |

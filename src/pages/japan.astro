@@ -55,7 +55,6 @@ const fallbackCategories = [
 const categories = initialCategories.length > 0 ? initialCategories : fallbackCategories;
 const items = initialItems;
 
-const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
 ---
 
@@ -377,14 +376,12 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
 </Layout>
 
 <!-- 環境變數傳遞 -->
-<script define:vars={{ webhookUrl, adminEmail }} is:inline>
-  window.__WEBHOOK_URL__ = webhookUrl;
+<script define:vars={{ adminEmail }} is:inline>
   window.__ADMIN_EMAIL__ = adminEmail;
 </script>
 <script>
   import { supabase } from '../lib/supabase-client';
-  
-  const deployWebhookUrl = (window as any).__WEBHOOK_URL__ || '';
+
   const toast = document.getElementById('toast');
 
   // 本地快取狀態
@@ -1525,15 +1522,18 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
     }
   });
 
-  // --- 背景靜默重新編譯 Webhook 觸發 ---
-  function triggerBuildWebhook() {
-    if (!deployWebhookUrl) return;
-    fetch(deployWebhookUrl, { method: 'POST' })
-      .then(() => {
-      })
-      .catch(err => {
-        console.warn('Webhook trigger failed:', err);
+  // --- 背景靜默重新編譯觸發(改經後端 API 驗證管理員身分) ---
+  async function triggerBuildWebhook() {
+    try {
+      const { data: { session: s } } = await supabase.auth.getSession();
+      if (!s) return;
+      await fetch('/api/trigger-deploy', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + s.access_token },
       });
+    } catch (err) {
+      console.warn('Webhook trigger failed:', err);
+    }
   }
 
   // --- 點擊照片放大檢視 (Lightbox) ---

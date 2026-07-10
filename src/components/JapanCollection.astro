@@ -54,7 +54,6 @@ const fallbackCategories = [
 const categories = initialCategories.length > 0 ? initialCategories : fallbackCategories;
 const items = initialItems;
 
-const webhookUrl = import.meta.env.PUBLIC_VERCEL_DEPLOY_HOOK ?? '';
 const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL ?? '';
 const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
@@ -368,14 +367,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
 
 <!-- 環境變數傳遞 -->
-<script define:vars={{ webhookUrl, adminEmail, supabaseUrl, supabaseAnonKey }} is:inline>
-  window.__WEBHOOK_URL__ = webhookUrl;
+<script define:vars={{ adminEmail, supabaseUrl, supabaseAnonKey }} is:inline>
   window.__ADMIN_EMAIL__ = adminEmail;
   window.__SUPABASE_URL__ = supabaseUrl;
   window.__SUPABASE_ANON_KEY__ = supabaseAnonKey;
 </script>
 <script>
-  const deployWebhookUrl = window.__WEBHOOK_URL__ || '';
   const adminEmail = window.__ADMIN_EMAIL__ || '';
   const supabaseUrl = window.__SUPABASE_URL__ || '';
   const supabaseAnonKey = window.__SUPABASE_ANON_KEY__ || '';
@@ -1529,15 +1526,19 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     }
   });
 
-  // --- 背景靜默重新編譯 Webhook 觸發 ---
-  function triggerBuildWebhook() {
-    if (!deployWebhookUrl) return;
-    fetch(deployWebhookUrl, { method: 'POST' })
-      .then(() => {
-      })
-      .catch(err => {
-        console.warn('Webhook trigger failed:', err);
+  // --- 背景靜默重新編譯觸發(改經後端 API 驗證管理員身分) ---
+  // 依單一入口規則不得呼叫 getSession,token 取自 window.__latestAuthState 快照(只讀)
+  async function triggerBuildWebhook() {
+    try {
+      const token = window.__latestAuthState?.session?.access_token;
+      if (!token) return;
+      await fetch('/api/trigger-deploy', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token },
       });
+    } catch (err) {
+      console.warn('Webhook trigger failed:', err);
+    }
   }
 
   // --- 點擊照片放大檢視 (Lightbox) ---

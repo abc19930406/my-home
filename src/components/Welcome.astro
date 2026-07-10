@@ -18,10 +18,9 @@ interface Props {
     doing: string;
     updated_at: string;
   };
-  webhookUrl?: string;
 }
 
-const { groupedCards, initialStatus, webhookUrl = '' } = Astro.props;
+const { groupedCards, initialStatus } = Astro.props;
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 
@@ -100,7 +99,7 @@ const formatShortDate = (dateStr: string) => {
 </div>
 
 <!-- 現在狀態管理邏輯 -->
-<script define:vars={{ webhookUrl, supabaseUrl, supabaseAnonKey }}>
+<script define:vars={{ supabaseUrl, supabaseAnonKey }}>
 (async () => {
   // 動態匯入 Supabase SDK
   const waitForSupabase = () => new Promise(resolve => {
@@ -182,9 +181,13 @@ const formatShortDate = (dateStr: string) => {
 
         if (error) throw error;
 
-        // 背景觸發部署
-        if (webhookUrl) {
-          fetch(webhookUrl, { method: 'POST', mode: 'no-cors' }).catch(() => {});
+        // 背景觸發部署(改經後端 API 驗證管理員身分,hook 網址不再暴露於前端)
+        const { data: { session: deploySession } } = await supabase.auth.getSession();
+        if (deploySession) {
+          fetch('/api/trigger-deploy', {
+            method: 'POST',
+            headers: { Authorization: 'Bearer ' + deploySession.access_token },
+          }).catch(() => {});
         }
       } catch (err) {
         console.error('儲存失敗:', err);
