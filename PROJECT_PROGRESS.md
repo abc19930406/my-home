@@ -370,6 +370,25 @@
 - **驗證結果（2026-07-12，使用者實測）**：管理員新增協作者、切換兩個開關、移除再重新加入，清單皆正確反映 ✅；朋友帳號登入看不到協作者管理入口，Console 直查 `trip_collaborators` 只回傳自己那一列，寫入被拒且提示正確 ✅；Modal 三種關閉方式後頁面捲動正常 ✅；`/japan`、`/travel` 凍結頁面完全未修改，diff 為零
 - **明確排除（留待階段 4 後續兩個子任務）**：`can_edit_wishlist`/`can_edit_itinerary` 兩個欄位目前只是被記錄，`spots`/`trip_days`/`day_spots`/`japan_items` 等表的 RLS 完全沒有讀取這兩個欄位，協作者此時仍無法編輯任何東西；Sandbox 模式未開發
 
+### ✅ V2 階段 4 任務二：落實 can_edit_itinerary（2026-07-13，已結案）
+
+- **背景**：任務一（見上方）建好 `trip_collaborators` 地基後，`can_edit_itinerary` 欄位只是被記錄，未在任何表的 RLS 中生效。本任務讓協作者可依授權實際編輯行程；同時關閉任務一盤點發現的 `day_spots` 跨行程資料完整性漏洞
+- **資料庫**：
+  - 新函式 `public.can_edit_trip(p_trip_id uuid)`（`SECURITY DEFINER`）：`is_admin() OR EXISTS(該行程 trip_collaborators 中 can_edit_itinerary=true 的自己那一列)`
+  - `trips`：INSERT/UPDATE/DELETE 收斂為僅 `is_admin()`——協作者不能建立/改名/刪除行程本身
+  - `trip_days`（原為一條 `Authenticated users can manage trip_days` 的 ALL 政策）、`spots`（原 `spots_insert`/`spots_update`/`spots_delete`）：拆分/替換為用 `can_edit_trip(trip_id)` 判斷；`spots.trip_id` 為 NULL 的遺留景點（任務一盤點發現的邊界情況）因 `EXISTS` 子查詢比對 NULL 恆為 false，`can_edit_trip(NULL)` 只剩 `is_admin()` 會過，只有管理員能動，符合預期
+  - `day_spots`（原為一條 `Authenticated users can manage day_spots` 的 ALL 政策）：改用 `can_edit_trip((SELECT trip_id FROM trip_days WHERE id = day_id))`；INSERT/UPDATE 的 `WITH CHECK` 額外檢查 `(SELECT trip_id FROM spots WHERE id = spot_id) = (SELECT trip_id FROM trip_days WHERE id = day_id)`——關閉任務一盤點 Q2 發現的「可把 A 行程景點塞進 B 行程某一天」漏洞，只擋新寫入不影響既有資料
+  - 四張表的 SELECT 政策完全不動（公開展示為刻意設計）
+- **前端（`TripPlanner.astro`）**：
+  - 新增 `canEditItinerary(tripId)` 判斷（管理員恆真，或協作者在該行程 `can_edit_itinerary=true`）；登入後（`updateAuthUI` 的非管理員分支）查詢 `trip_collaborators` 取得自己在各行程的授權並快取為 `collaboratorTripPermissions`
+  - 四個編輯進入點（新增景點按鈕、地圖點擊新增提示、新增一天按鈕、從想去清單選擇按鈕）從 `admin-only` 改為新的 `itinerary-edit-only` class，由 `updateItineraryEditUI()` 依目前選中行程動態切換顯示
+  - 天數上下移/刪除、景點卡片編輯/刪除、每日行程項目移動/移除、地圖 InfoWindow 編輯鈕等原本內嵌 `isAdminUser` 判斷的渲染邏輯，一併改用 `canEditItinerary(currentTripId)`
+  - 監聽 `trip-changed` 事件，切換行程時重新評估並刷新 `itinerary-edit-only` 元素顯示
+  - 行程本身建立/改名/刪除、協作者管理、管理類型維持 `admin-only` 不變，未受影響
+  - 授權撤銷生效時機：資料庫層即時（下一次寫入就被拒），前端 UI 允許在重新整理或切換行程時更新，未做即時推播
+- **驗證結果（2026-07-13，使用者實測）**：管理員所有行程的所有編輯功能一切照舊 ✅；協作者（對行程 A 開啟 `can_edit_itinerary`）選中行程 A 可見編輯功能，新增景點、加入天數、調整順序、刪除皆成功 ✅；同一協作者切到未授權的行程 B，編輯功能消失，Console 直接寫入 `trip_days`/`spots`/`day_spots` 皆 0 筆生效且前端提示正確 ✅；關閉該協作者的 `can_edit_itinerary` 後續寫入被拒 ✅；非協作者的白名單朋友與未登入訪客頁面瀏覽與既有功能行為不變 ✅；Console 嘗試把行程 A 的景點塞進行程 B 的某一天，被完整性檢查擋下 ✅；`/japan`、`/travel` 凍結頁面完全未修改，diff 為零
+- **明確排除（留待階段 4 任務三）**：`can_edit_wishlist` 未落實，`japan_items` 的 RLS 未讀取此欄位，協作者尚無法調整願望清單；Sandbox 模式未開發；願望清單機制未變動；任務一盤點發現的 `spots.category`/`icon` 遺留欄位問題未修（見待辦清單）
+
 ---
 
 ## 二、規劃中功能（尚未開始）
@@ -485,12 +504,12 @@
 1. 🔴 **最優先**：「OAuth 登入後 UI 間歇性未切換」Heisenbug（見上方「進行中問題」）。第一輪時序診斷已完成（2026-07-11）：嫌犯一、二均排除，trip.astro auth 管線健康，與 DevTools 開關無因果；診斷碼留在線上，等待真實失敗發生時依取證 SOP 抓 log，定案根因後修復,方能確認階段 2.5 真正收尾。2026-07-11 驗證任務 D 時新增一筆疑似同根因家族的觀察（朋友帳號登入 `/trip` 一度被誤判成管理員，方向與原記錄相反），未確認是否同一問題，下次排查時一併納入
 2. 補做「衝突熱點稽核」修復（commit `2317d2d`）的手動驗證：ESC 鍵、Modal 背景點擊是否都能正確關閉並清除 `modal-open`（原定驗證因發現上述問題而中斷）
 3. ~~階段 3：japan_items 加入 trip_id 篩選邏輯（收藏依行程篩選）~~ **✅ 2026-07-12 已完成**，詳見上方「V2 階段 3：收藏依行程篩選」
-4. **階段 4**：協作者權限系統，任務一（trip_collaborators 資料表+管理員管理 UI）**✅ 2026-07-12 已完成**，詳見上方「V2 階段 4 任務一」；剩餘：任務二（在 spots/trip_days/day_spots/japan_items 等表的 RLS 中實際執行 can_edit_wishlist/can_edit_itinerary 權限）、任務三（Sandbox 模式）
+4. **階段 4**：協作者權限系統。任務一（trip_collaborators 資料表+管理員管理 UI）**✅ 2026-07-12 已完成**；任務二（can_edit_itinerary 落實：trips/trip_days/spots/day_spots 的 RLS + 前端編輯 UI 切換）**✅ 2026-07-13 已完成**，詳見上方「V2 階段 4 任務二」；剩餘：**任務三**（japan_items 的 RLS 落實 can_edit_wishlist + Sandbox 模式）
 5. **階段 5**：旅行資源頁面（優惠券 + 地鐵圖分類）
 6. **階段 6**：交通查詢系統（spot_transport_routes + AI 整理）
 7. **階段 7-8**：AI 助手分頁與 Serverless API 串接
 8. /trip 穩定後評估是否移除舊的 /travel 與 /japan 頁面
-9. **階段 9**（全部功能穩定後）：程式碼清理與重構，含 CSS/ID 前綴隔離補齊（衝突熱點稽核中發現、決議延後的項目）
+9. **階段 9**（全部功能穩定後）：程式碼清理與重構，含 CSS/ID 前綴隔離補齊（衝突熱點稽核中發現、決議延後的項目）；一併處理 V2 階段 4 任務一盤點發現的 `spots.category`/`spots.icon` 遺留欄位（`NOT NULL` 但前端從未寫入，一律吃預設值，已被 `spot_type_id`/`spot_subtype_id` 取代）
 
 ---
 

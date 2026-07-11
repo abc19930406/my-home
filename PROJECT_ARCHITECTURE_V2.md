@@ -176,7 +176,7 @@
 - 所有行程、所有收藏品、AI 助手 — 完整存取權限
 - ⚠️ 曾發生權限漏洞：`updateAuthUI` 一度未比對 email，只要有 session 即無條件設為管理員，已修正為嚴格比對 `currentSession.user.email === adminEmail`
 
-### 6.2 協作者（trip_collaborators）🔶 地基完成，權限執行未做（2026-07-12，V2 階段 4 任務一）
+### 6.2 協作者（trip_collaborators）🔶 can_edit_itinerary 已落實，can_edit_wishlist 未做（2026-07-13，V2 階段 4 任務一、二）
 
 表 `trip_collaborators`（已建立）：
 
@@ -194,7 +194,15 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 - 兩個權限**獨立開關**，可任意組合（例如：某人只能調整願望清單，不能改行程）
 - 每個行程可指定不同協作者與權限組合
 - **管理員 UI 已上線**（`TripPlanner.astro`）：行程標題旁 👥 圖示（`admin-only`）開啟 Modal（`travel-collaborators-modal`），可對目前選中行程新增/移除協作者、切換兩個開關；三種關閉路徑（按鈕/背景/ESC）皆會清除 `body.modal-open`；寫入操作皆檢查受影響筆數，RLS 擋下時明確提示而非誤報成功
-- ⚠️ **本階段僅完成地基，尚未落實任何實際權限效果**：`can_edit_wishlist`/`can_edit_itinerary` 這兩個欄位目前只是被記錄下來，`spots`/`trip_days`/`day_spots`/`japan_items` 等表的 RLS **完全沒有讀取這兩個欄位**，新增協作者此時不會讓對方獲得任何額外的實際寫入權限。權限執行（讓協作者依開關狀態真的能編輯對應資料）與 Sandbox 模式為後續任務（本規劃編號的另外兩個子任務）
+- ✅ **can_edit_itinerary 已落實生效（2026-07-13，V2 階段 4 任務二）**：
+  - 新函式 `public.can_edit_trip(p_trip_id uuid)`（`SECURITY DEFINER`）：`is_admin() OR EXISTS(該行程 trip_collaborators 中 can_edit_itinerary=true 的自己那一列)`
+  - `trips`：INSERT/UPDATE/DELETE 一律僅 `is_admin()`——協作者不能建立/改名/刪除行程本身
+  - `trip_days`/`spots`：INSERT/UPDATE/DELETE 改用 `can_edit_trip(trip_id)`；`spots.trip_id` 為 NULL 的遺留景點（見任務一盤點）因 `EXISTS` 子查詢比對 NULL 恆為 false，`can_edit_trip(NULL)` 只剩 `is_admin()` 會過，符合預期只有管理員能動
+  - `day_spots`：寫入用 `can_edit_trip((SELECT trip_id FROM trip_days WHERE id = day_id))`；INSERT/UPDATE 的 `WITH CHECK` 額外檢查 `(SELECT trip_id FROM spots WHERE id = spot_id) = (SELECT trip_id FROM trip_days WHERE id = day_id)`——關閉任務一盤點 Q2 發現的「可把 A 行程景點塞進 B 行程某一天」漏洞，此檢查只擋新寫入，不影響既有資料
+  - 四張表的 SELECT 政策完全不動（公開展示為刻意設計）
+  - **前端（`TripPlanner.astro`）**：新增 `canEditItinerary(tripId)` 判斷（管理員恆真，或協作者在該行程 `can_edit_itinerary=true`）；登入後查詢 `trip_collaborators` 取得自己在各行程的授權並快取；四個編輯進入點（新增景點、地圖點擊新增提示、新增一天、從想去清單選擇）從 `admin-only` 改為新的 `itinerary-edit-only`，由 `updateItineraryEditUI()` 依目前選中行程動態切換；天數排序/刪除、景點卡片編輯/刪除、每日行程項目移動/移除、地圖 InfoWindow 編輯鈕等原本內嵌 `isAdminUser` 的渲染邏輯，一併改用 `canEditItinerary(currentTripId)`；監聽 `trip-changed` 事件在切換行程時重新評估；行程本身建立/改名/刪除、協作者管理、管理類型維持 `admin-only` 不變
+  - 授權撤銷生效時機：資料庫層即時（下一次寫入就被拒），前端 UI 允許在重新整理或切換行程時更新，不做即時推播
+- ⚠️ **can_edit_wishlist 尚未落實**：欄位目前只是被記錄，`japan_items` 的 RLS 未讀取此欄位，協作者尚無法透過此機制調整願望清單。Sandbox 模式亦尚未開發。皆為後續任務（本規劃編號的第三個子任務）
 - 協作者登入後屆時將僅看到「行程」「收藏」分頁（依權限決定可否編輯），無「AI」分頁，Sandbox 模式生效（規劃中，未實作）
 
 ### 6.3 一般收藏（trip_id IS NULL）
@@ -242,14 +250,14 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | 2 | 行程子分頁遷移：地圖、行程模式、連鎖店功能遷移至 TripPlanner.astro | ✅ 已完成 |
 | 2.5 | Supabase 單一入口架構重構 + Race Condition 修正（原規劃外，因應實作過程發現的問題而新增） | 🔶 大致完成，有未解決問題待釐清 |
 | 3 | 收藏分頁整合：japan_items.trip_id、收藏分頁顯示邏輯、一般收藏 vs 行程收藏 | ✅ 已完成（2026-07-12） |
-| 4 | 協作者權限系統：trip_collaborators、雙開關權限、Sandbox 模式（共三個子任務，任務一已完成） | 🔶 進行中（任務一：地基與管理員 UI ✅ 2026-07-12；任務二：權限落實、任務三：Sandbox 模式 📋 待開始） |
+| 4 | 協作者權限系統：trip_collaborators、雙開關權限、Sandbox 模式（共三個子任務） | 🔶 進行中（任務一：地基與管理員 UI ✅ 2026-07-12；任務二：can_edit_itinerary 落實 ✅ 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 📋 待開始） |
 | 5 | 資源子分頁：優惠券、地鐵圖分類化、trip_subway_categories | 📋 待開始 |
 | 6 | 交通查詢子分頁：spot_transport_routes、行程內嵌交通方式 UI | 📋 待開始 |
 | 7 | AI 助手（只讀）：/api/ai-assistant，讀取行程/收藏資料並回答問題 | 📋 待開始 |
 | 8 | AI 工具逐個開放：add_spot、toggle_wishlist 等寫入工具 | 📋 待開始 |
 | 9 | 程式碼清理與重構：統一 Modal/CSS 命名規則、評估舊頁面下線 | 📋 待開始（待功能全部穩定後執行） |
 
-> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 任務一的實作記錄與盤點回報，見 PROJECT_PROGRESS.md「V2 階段 4 任務一」章節。
+> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 任務一、任務二的實作記錄與盤點回報，見 PROJECT_PROGRESS.md「V2 階段 4」對應章節。
 
 ---
 
