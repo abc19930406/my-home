@@ -550,6 +550,9 @@ try {
           ? post.image_urls
           : (post.image_url ? [post.image_url] : []);
         const { coverUrl, photoCount } = await getCoverInfo(paths);
+        // 再次確認：上面 await 期間，onAuthStateChange 可能已連續觸發另一次 fetchPrivatePosts()
+        // 並搶先插入了同一篇，這裡是插入前的最後把關，避免同一篇重複顯示
+        if (document.querySelector(`[data-id="${post.id}"]`)) continue;
         const postHtml = createPostHtml(post, isAdmin, coverUrl, photoCount);
         container?.insertAdjacentHTML('afterbegin', postHtml);
       }

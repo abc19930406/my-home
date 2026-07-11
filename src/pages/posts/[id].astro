@@ -202,6 +202,26 @@ const visibilityMap = {
       e.stopPropagation();
       showNext();
     });
+
+    // 手機手指滑動切換：水平位移超過門檻且大於垂直位移才視為切換手勢
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    lightbox.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      touchStartX = t.clientX;
+      touchStartY = t.clientY;
+    }, { passive: true });
+
+    lightbox.addEventListener('touchend', (e) => {
+      const t = e.changedTouches[0];
+      const dx = t.clientX - touchStartX;
+      const dy = t.clientY - touchStartY;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+        if (dx < 0) showNext();
+        else showPrev();
+      }
+    }, { passive: true });
   }
 
   // 動態載入 marked(CDN,鎖定確切版本,與 npm 端一致),只有需要前端渲染 Markdown 時才載入
