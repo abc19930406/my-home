@@ -16,7 +16,20 @@ try {
     .order('created_at', { ascending: false });
     
   if (!error && data) {
-    publicPosts = data;
+    // 封面縮圖：資料庫存的是 post_media 路徑，取第一張換成簽名網址；photoCount 供徽章顯示張數
+    publicPosts = await Promise.all(
+      data.map(async (post) => {
+        const paths = post.image_urls && post.image_urls.length > 0
+          ? post.image_urls
+          : (post.image_url ? [post.image_url] : []);
+        let coverUrl = null;
+        if (paths.length > 0) {
+          const { data: signedData } = await supabase.storage.from('post_media').createSignedUrl(paths[0], 3600);
+          coverUrl = signedData?.signedUrl || null;
+        }
+        return { ...post, coverUrl, photoCount: paths.length };
+      })
+    );
   }
 } catch (err) {
   console.warn('⚠️ Build Warning: 短文列表 Supabase 連線失敗，將顯示空列表。');
@@ -107,6 +120,12 @@ try {
           <div id="posts-container" class="post-list">
             {publicPosts.map((post) => (
               <div class="post-item" data-id={post.id}>
+                {post.coverUrl && (
+                  <div class="post-cover">
+                    <img src={post.coverUrl} alt={post.title} width="400" height="300" loading="lazy" />
+                    {post.photoCount > 1 && <span class="post-cover-badge">{post.photoCount} 張</span>}
+                  </div>
+                )}
                 <div class="post-header">
                   <div class={`visibility-dot dot-${post.visibility}`} title="公開"></div>
                   <a href={`/posts/${post.id}`} class="post-title-link">{post.title}</a>
@@ -241,6 +260,13 @@ try {
   let currentImageUrls: string[] = [];
   let currentImagePaths: string[] = [];
 
+  // 輔助函數：由儲存路徑陣列算出封面簽名網址與張數，供列表卡片使用
+  async function getCoverInfo(paths: string[]) {
+    if (!paths || paths.length === 0) return { coverUrl: null, photoCount: 0 };
+    const { data } = await supabase.storage.from('post_media').createSignedUrl(paths[0], 3600);
+    return { coverUrl: data?.signedUrl || null, photoCount: paths.length };
+  }
+
   function renderPreviews() {
     if (!imagePreviewContainer) return;
     if (currentImageUrls.length > 0) {
@@ -360,6 +386,21 @@ try {
           item.querySelector('.post-preview')!.textContent = content.replace(/[*_#\[\]()]/g, '').substring(0, 80) + '...';
           const editBtn = item.querySelector('.btn-inline-edit') as HTMLElement;
           editBtn.dataset.post = JSON.stringify(postToUpdate);
+
+          // 更新封面縮圖
+          const { coverUrl, photoCount } = await getCoverInfo(currentImagePaths);
+          let coverEl = item.querySelector('.post-cover');
+          if (coverUrl) {
+            if (!coverEl) {
+              coverEl = document.createElement('div');
+              coverEl.className = 'post-cover';
+              item.insertBefore(coverEl, item.firstChild);
+            }
+            coverEl.innerHTML = `<img src="${coverUrl}" alt="${title}" width="400" height="300" loading="lazy" />` +
+              (photoCount > 1 ? `<span class="post-cover-badge">${photoCount} 張</span>` : '');
+          } else if (coverEl) {
+            coverEl.remove();
+          }
         }
         showToast('已更新');
       } else if (newPost) {
@@ -390,7 +431,8 @@ try {
 
         // 新增 UI
         const { data: { session } } = await supabase.auth.getSession();
-        const html = createPostHtml(newPost, !!session);
+        const { coverUrl, photoCount } = await getCoverInfo(newPost.image_urls || []);
+        const html = createPostHtml(newPost, !!session, coverUrl, photoCount);
         const container = document.getElementById('posts-container');
         const emptyMsg = document.getElementById('empty-msg');
         if (emptyMsg) emptyMsg.style.display = 'none';
@@ -402,10 +444,16 @@ try {
     }
   });
 
-  // 輔助函數：生成文章 HTML
-  function createPostHtml(post: any, isAdmin: boolean) {
+  // 輔助函數：生成文章 HTML；coverUrl 為預先算好的簽名網址，photoCount 為照片張數
+  function createPostHtml(post: any, isAdmin: boolean, coverUrl: string | null = null, photoCount: number = 0) {
     return `
       <div class="post-item" data-id="${post.id}" data-created-at="${post.created_at}">
+        ${coverUrl ? `
+          <div class="post-cover">
+            <img src="${coverUrl}" alt="${post.title}" width="400" height="300" loading="lazy" />
+            ${photoCount > 1 ? `<span class="post-cover-badge">${photoCount} 張</span>` : ''}
+          </div>
+        ` : ''}
         <div class="post-header">
           <div class="visibility-dot dot-${post.visibility}" title="${post.visibility === 'public' ? '公開' : post.visibility === 'friends' ? '朋友' : '私人'}"></div>
           <a href="/posts/${post.id}" class="post-title-link">${post.title}</a>
@@ -496,11 +544,15 @@ try {
       const emptyMsg = document.getElementById('empty-msg');
       if (emptyMsg) emptyMsg.style.display = 'none';
 
-      data.forEach(post => {
-        if (document.querySelector(`[data-id="${post.id}"]`)) return;
-        const postHtml = createPostHtml(post, isAdmin);
+      for (const post of data) {
+        if (document.querySelector(`[data-id="${post.id}"]`)) continue;
+        const paths = post.image_urls && post.image_urls.length > 0
+          ? post.image_urls
+          : (post.image_url ? [post.image_url] : []);
+        const { coverUrl, photoCount } = await getCoverInfo(paths);
+        const postHtml = createPostHtml(post, isAdmin, coverUrl, photoCount);
         container?.insertAdjacentHTML('afterbegin', postHtml);
-      });
+      }
     }
     
     bindActions();
