@@ -5,6 +5,7 @@ import '../styles/ledger.css';
 
 const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
+const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
 ---
 
 <Layout title="記帳系統 | The Corner Table">
@@ -181,7 +182,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   <div id="toast" class="toast"></div>
 </Layout>
 
-<script define:vars={{ supabaseUrl, supabaseAnonKey }}>
+<script define:vars={{ supabaseUrl, supabaseAnonKey, adminEmail }}>
 (async () => {
   const waitForSupabase = () => new Promise(resolve => {
     if (window._supabaseCreateClient) return resolve();
@@ -206,10 +207,18 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
     if (topAuthGuest) topAuthGuest.style.display = 'block';
     window.location.href = '/login?from=/ledger';
     return;
-  } else {
-    if (topAuthUser) topAuthUser.style.display = 'block';
-    if (btnManageCategories) btnManageCategories.style.display = 'block';
   }
+
+  // 記帳系統僅管理員本人可用：已登入但非管理員（含白名單朋友/家人帳號）一律導回首頁，
+  // 不導去登入頁——問題不是沒登入，是沒有權限（比照 JapanCollection.astro 的 isAdminUser 判斷模式）
+  if (session.user.email !== adminEmail) {
+    alert('僅管理員可使用記帳系統');
+    window.location.href = '/';
+    return;
+  }
+
+  if (topAuthUser) topAuthUser.style.display = 'block';
+  if (btnManageCategories) btnManageCategories.style.display = 'block';
 
   // 2. 狀態管理
   let currentMonth = new Date(); // 目前選中的月份
