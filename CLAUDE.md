@@ -33,7 +33,7 @@
 
 ## 硬性技術規則(完整細節與原因見 PROJECT_ARCHITECTURE.md)
 
-- Astro `<script>`(非 frontmatter)**禁用 TypeScript 語法**:型別標註、`as` 斷言會導致 esbuild 編譯失敗
+- `is:inline` 與 `define:vars` 的 `<script>` **禁用 TypeScript 語法**:這類 script 不經過 Vite 打包器,型別標註、`as` 斷言會直接送進瀏覽器導致執行期語法錯誤。一般 `<script>`(非 `is:inline`、非 `define:vars`)會經 Vite/esbuild 打包,**可以**使用 TS 語法(型別標註、`as` 斷言皆可),專案內既有大量此類寫法且建置與執行皆正常,不要移除
 - Supabase 走 CDN 動態注入(Layout.astro),版本鎖定**確切版號** `@supabase/supabase-js@2.110.2/+esm`(2026-07-11 凍結,禁止浮動 `@2`;升版屬依賴變更,須先問);**不可**改為直接 import CDN URL
 - `/trip` 頁面採 Supabase 單一入口:只有 trip.astro 可呼叫 `createClient` / `getSession` / `onAuthStateChange`;TripPlanner.astro 與 JapanCollection.astro **絕不**自行呼叫,只透過 `auth-state-changed` 事件 + `window.__latestAuthState` 快照接收狀態
 - `window.__latestAuthState` 快照機制周邊的任何修改,必須完整貼出修改後程式碼供使用者肉眼確認(曾被格式化工具誤刪)

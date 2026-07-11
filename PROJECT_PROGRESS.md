@@ -249,7 +249,7 @@
   - 無痕視窗開 `/posts` 列表 → 只看到 public 文章，原始碼搜尋不到非公開文章 ✅
   - 管理員登入 → 三種 visibility 皆可讀寫 ✅
   - 臨時建立朋友測試帳號（`allowed_users` 白名單）→ 看得到 public+friends、看不到 private ✅；嘗試編輯/刪除文章，Table Editor 直接確認資料庫未變動，RLS 正確擋下寫入 ✅（前端當下誤顯示「已更新/已刪除」，重新整理即恢復，是既有 UI 提示不準確問題，非安全漏洞，見下方待辦）
-- **已知非安全性問題（待後續清理，非本次任務範圍）**：`posts/index.astro` 的編輯/刪除只檢查 `error` 是否為空，未檢查實際受影響筆數；RLS 擋下 UPDATE/DELETE 時不回傳錯誤、只是實際變更 0 筆，導致非管理員操作被擋下時前端仍誤報成功
+- ~~已知非安全性問題（待後續清理）：`posts/index.astro` 的編輯/刪除只檢查 `error` 是否為空，未檢查實際受影響筆數，非管理員操作被 RLS 擋下時前端仍誤報成功~~ **✅ 2026-07-11 收尾清理任務已修復**：update/insert/delete 三處呼叫比照 C3、任務 H 的做法補上 `.select()` 受影響筆數檢查，0 筆時提示「沒有權限或資料不存在」
 
 ### ✅ 安全修復：記帳（transactions）與白名單（allowed_users）鎖定管理員專用（2026-07-11，任務 D 稽核發現，已結案）
 
@@ -380,7 +380,7 @@
     - UPDATE policy：`auth.uid() = user_id`（朋友才能更新自己的數量）
 13. **日本收藏卡片更新**：點擊愛心/數量按鈕用局部 DOM 更新（updateCardFooter），避免全版重渲染造成跳動
 14. **Modal 滾動鎖定**：開啟 Modal 時加 `document.body.classList.add('modal-open')`，關閉時移除，CSS 需有 `body.modal-open { overflow: hidden; }`
-15. **Astro `<script>` 標籤禁用 TypeScript 語法**（重要）：非 frontmatter 的 `<script>` 預設會被當 TypeScript 處理，但**不應寫 TS 語法**。型別標註（`:Type`）與 `as Type` 斷言都會在 esbuild parse 階段導致編譯錯誤，必須全部使用純 JS 寫法（可選鏈 `?.` 合法，但 `xxx?: Type` 型別標註不合法）
+15. **`is:inline` 與 `define:vars` 的 `<script>` 禁用 TypeScript 語法**（2026-07-11 修正，原描述過寬）：這類 script 不經 Vite 打包器，型別標註（`:Type`）、`as Type` 斷言會直接送進瀏覽器造成執行期語法錯誤。一般 `<script>`（非 `is:inline`、非 `define:vars`）會經 Vite/esbuild 打包，**可以**使用 TS 語法，專案內既有大量此類寫法且建置與執行皆正常
 16. **多元件共存於同一頁面時的 CSS/ID 隔離**：務必為各自的 Modal/Toast 等 UI 元素加上獨立前綴（如 `japan-`、`travel-`），避免 `getElementById` 或 CSS class 選擇器互相干擾（曾發生 `.modal-overlay` 衝突案例，display 屬性互相覆蓋）
 17. **/trip 頁面 Supabase 單一入口架構**（重要，詳見 PROJECT_ARCHITECTURE.md「/trip 頁面 Supabase 架構」章節）：
     - trip.astro 是唯一執行 createClient + getSession + onAuthStateChange 的地方

@@ -115,7 +115,7 @@ my-home/
 - `<script define:vars={{ var1, var2 }}>` 用來把 frontmatter 變數傳入客戶端
 - `define:vars` 內**不能**用 import 語法
 - 必須用 `(async () => { ... })()` IIFE 包住所有非同步邏輯
-- ⚠️ **重要**：Astro `<script>` 標籤（非 frontmatter）預設會被當 TypeScript 處理，但**不應寫 TS 語法**。型別標註（`:Type`）、`as Type` 斷言都會在 esbuild parse 階段導致編譯失敗。必須全部使用純 JS 寫法（可選鏈 `?.` 合法，但 `xxx?: Type` 型別標註不合法）
+- ⚠️ **重要**：`is:inline` 與 `define:vars` 的 `<script>` **禁用 TypeScript 語法**——這類 script 不經過 Vite 打包器，型別標註（`:Type`）、`as Type` 斷言會直接送進瀏覽器，導致執行期語法錯誤（不是 build 階段就會擋下來，容易漏測）。一般 `<script>`（非 `is:inline`、非 `define:vars`）會經 Vite/esbuild 打包，**可以**使用 TS 語法，型別標註與 `as` 斷言皆合法，專案內既有大量此類寫法且建置與執行皆正常（2026-07-11 修正此條，原本的全面禁用描述與實際情況矛盾）
 
 ### Google Maps 載入方式（重要）
 靜態頁面（prerender = true）必須在 IIFE 裡動態建立 script 標籤：

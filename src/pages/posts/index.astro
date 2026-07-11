@@ -490,12 +490,20 @@ try {
 
     let error;
     let newPost: any = null;
+    let noPermission = false;
 
     console.log('發送的 Payload:', postData);
 
     if (id) {
-      const { error: err } = await supabase.from('posts').update(postData).eq('id', id);
+      // 加 .select() 是為了拿到實際受影響的列：RLS 擋下 UPDATE 時不會回傳錯誤，只會影響 0 筆，
+      // 若只看 error 會誤判成功（此專案已多次遇過同一個坑）
+      const { data: updateData, error: err } = await supabase
+        .from('posts')
+        .update(postData)
+        .eq('id', id)
+        .select();
       error = err;
+      if (!err && (!updateData || updateData.length === 0)) noPermission = true;
     } else {
       const { data, error: err } = await supabase.from('posts').insert([postData]).select().single();
       error = err;
@@ -505,6 +513,9 @@ try {
     if (error) {
       console.error('Supabase 儲存錯誤:', error);
       alert(`儲存失敗: ${error.message || '未知錯誤'}`);
+      if (savePostBtn) (savePostBtn as HTMLButtonElement).disabled = false;
+    } else if (noPermission) {
+      alert('沒有權限或資料不存在，未實際變更');
       if (savePostBtn) (savePostBtn as HTMLButtonElement).disabled = false;
     } else {
       // 靜默觸發重新部署
@@ -714,8 +725,13 @@ try {
     if (target.classList.contains('btn-inline-delete')) {
       if (!confirm('確定刪除？')) return;
       const id = target.dataset.id;
-      const { error } = await supabase.from('posts').delete().eq('id', id);
-      if (!error) {
+      // 加 .select() 是為了拿到實際受影響的列：RLS 擋下 DELETE 時不會回傳錯誤，只會影響 0 筆
+      const { data: deleteData, error } = await supabase.from('posts').delete().eq('id', id).select();
+      if (error) {
+        alert('刪除失敗：' + error.message);
+      } else if (!deleteData || deleteData.length === 0) {
+        alert('沒有權限或資料不存在，未實際刪除');
+      } else {
         showToast('已刪除');
         triggerDeploy();
         const item = target.closest('.post-item');
