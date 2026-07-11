@@ -182,6 +182,14 @@ if (!session) {
   - **禁止**再出現「先把全文渲染進 HTML、只用 `display:none` 隱藏、前端 JS 事後檢查」這種機制——資料一旦進了 HTTP 回應就等於外洩,前端顯示與否無法補救
 - **已知限制**：RLS 對 UPDATE/DELETE 若擋下操作,不會回傳錯誤,只會實際變更 0 筆資料;`posts/index.astro` 目前的編輯/刪除前端邏輯只檢查 `error` 是否為空,未檢查實際受影響筆數,非管理員操作被 RLS 正確擋下時,前端仍會誤顯示「已更新/已刪除」(重新整理後會恢復原狀,資料庫本身未受影響,不是安全漏洞,是前端提示不準確,留待後續清理)
 
+### 記帳(transactions)與白名單(allowed_users)權限架構(2026-07-11 安全修復)
+- **決策前提**：記帳系統確認為管理員個人專用,無家人/朋友共用需求(2026-07-11 與使用者確認)。若未來需要共用記帳,現行「僅 `is_admin()`」設計需重新評估,改為以 `user_id` 為單位的擁有權模型(schema 異動,不只是 RLS 調整)
+- **RLS 層**：
+  - `transactions`:SELECT/INSERT/UPDATE/DELETE 一律僅 `public.is_admin()`(重用任務 B 已建立的函式,未重新建立)
+  - `allowed_users`:SELECT 為 `is_admin() OR (auth.jwt()->>'email' ilike email)`——管理員可讀全表,非管理員只能讀到白名單中自己那一列;INSERT/UPDATE/DELETE 一律僅 `is_admin()`。此設計刻意配合既有前端查詢模式(管理員 `select('*')` 撈全表建快取,朋友分支 `.ilike('email', 自己信箱).single()` 只查自己),前端程式碼未變動
+- **頁面層**：`ledger.astro` 原本只檢查 `session` 是否存在(任何登入帳號皆可進入),已比照 `JapanCollection.astro` 的 `isAdminUser` 判斷模式,新增 `session.user.email !== adminEmail` 比對;非管理員(含白名單朋友/家人帳號)一律 `alert` 提示「僅管理員可使用記帳系統」後導回首頁(不是導去登入頁,因為問題不是沒登入)
+- **驗證方式**：頁面層保護可直接瀏覽 `/ledger` 測試;資料庫層保護需繞過頁面、以目標帳號的 session 直接呼叫 `supabase.from('transactions').select('*')` 確認回傳空陣列,才能排除「頁面擋得住但 API 仍開放」的情況
+
 ---
 
 ## /trip 頁面 Supabase 單一入口架構（重要）

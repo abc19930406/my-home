@@ -36,9 +36,9 @@
 | **day_spots / trip_days** | 無 frontmatter 查詢 | SELECT/INSERT/UPDATE/DELETE 在 TripPlanner.astro、travel.astro(每日行程) |
 | **status** | [index.astro:33](src/pages/index.astro:33)(首頁便條紙,設計上本就公開)、[admin.astro:26](src/pages/admin.astro:26)、[JapanCollection.astro:34](src/components/JapanCollection.astro:34)、[japan.astro:35](src/pages/japan.astro:35),皆 prerender=true | SELECT/UPDATE 在 Welcome.astro、JapanCollection.astro、japan.astro、admin.astro |
 | **cards** | [index.astro:12](src/pages/index.astro:12) `SELECT *`,prerender=true(首頁卡片,設計上本就公開) | UPDATE 在 [admin.astro:250](src/pages/admin.astro:250) |
-| **allowed_users** | 無 frontmatter 查詢 | SELECT(白名單比對)在 JapanCollection.astro、TripPlanner.astro、japan.astro |
+| **allowed_users** | ✅ 2026-07-11 已修復:無 frontmatter 查詢 | SELECT(白名單比對)在 JapanCollection.astro、TripPlanner.astro、japan.astro;RLS 已收緊為管理員全讀、非管理員僅讀自己那一列,寫入僅管理員 |
 | **wishlist_items** | 無 frontmatter 查詢 | SELECT/INSERT/UPDATE 在 JapanCollection.astro、japan.astro(朋友願望清單) |
-| **transactions** | 無 frontmatter 查詢(ledger.astro 無 build-time `.from()`) | SELECT/INSERT/UPDATE/DELETE 全在 [ledger.astro](src/pages/ledger.astro:334)(記帳明細,私人財務資料) |
+| **transactions** | ✅ 2026-07-11 已修復:無 frontmatter 查詢(ledger.astro 無 build-time `.from()`) | SELECT/INSERT/UPDATE/DELETE 全在 [ledger.astro](src/pages/ledger.astro:334)(記帳明細,私人財務資料);RLS 已收緊為僅管理員,`ledger.astro` 頁面本身也新增管理員身分檢查 |
 | **income_categories / expense_categories** | 無 | SELECT 在 ledger.astro |
 | **daily** | 無 frontmatter 查詢(polaroid.astro 無 build-time `.from()`) | SELECT/INSERT/UPDATE/DELETE 在 [polaroid.astro](src/pages/polaroid.astro:187) |
 | **japan_images** | 無 | INSERT 在 JapanCollection.astro、japan.astro(上傳圖片記錄) |
@@ -119,11 +119,11 @@ order by tablename, cmd;
 | 資料表 | anon(未登入)SELECT | anon 寫入 | authenticated(任何登入帳號,含朋友/家人)SELECT | authenticated 寫入 | 風險等級 |
 |---|---|---|---|---|---|
 | **posts**(✅ 2026-07-11 已修復,見上方說明) | ~~🔴 全表無條件可讀~~(`Anyone can read post metadata`,qual=true,與 visibility 無關) | 否 | ~~全表可讀~~ | ~~🔴 任何登入帳號可 INSERT/UPDATE/DELETE 任何人的貼文~~ | ~~CRITICAL~~ → 已收斂為 public/is_admin()/is_friend() 判斷,寫入僅 is_admin() |
-| **transactions** | 否 | 否 | 🔴 任何登入帳號可讀**全部**財務明細 | 🔴 任何登入帳號可 INSERT/UPDATE/DELETE | **CRITICAL** |
+| **transactions**(✅ 2026-07-11 已修復) | 否 | 否 | ~~🔴 任何登入帳號可讀全部財務明細~~ | ~~🔴 任何登入帳號可 INSERT/UPDATE/DELETE~~ | ~~CRITICAL~~ → 已收斂為僅 `is_admin()` 可讀寫 |
 | **japan_items** | 🟡 全表可讀(含 owner_wishlist/owner_quantity) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD **全部**品項(非僅自己的) | **HIGH** |
 | **japan_categories** | 🟡 全表可讀(taxonomy) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD | **HIGH** |
 | **quotes** | 🟢 僅 `visibility='public'` | 否 | 🟡 任何登入帳號可讀**全部**語錄(含私人) | 🔴 任何登入帳號可 INSERT/UPDATE/DELETE **任何人的**語錄 | **HIGH** |
-| **allowed_users**(白名單) | 否 | 否 | 🔴 任何登入帳號可讀/改/刪**整份白名單**(含所有朋友 email) | 同左(ALL) | **HIGH** |
+| **allowed_users**(白名單,✅ 2026-07-11 已修復) | 否 | 否 | ~~🔴 任何登入帳號可讀/改/刪整份白名單~~ | ~~同左(ALL)~~ | ~~HIGH~~ → 已收斂為管理員全讀/非管理員僅讀自己那一列,寫入僅 `is_admin()` |
 | **wishlist_items** | 否 | 否 | 🟡 任何登入帳號可讀**所有人的**願望清單(非僅自己) | 🟢 INSERT/UPDATE/DELETE 均鎖定 `auth.uid()=user_id`,只能動自己的 | **MEDIUM** |
 | **spots / trips / trip_days / day_spots** | 🟡 全表可讀(完整行程、地點、座標) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD 任何行程/景點 | **MEDIUM** |
 | **spot_types / spot_subtypes** | 🟡 全表可讀(僅分類名稱) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD | **LOW** |
@@ -140,17 +140,17 @@ order by tablename, cmd;
 
 **posts 現況(2026-07-11 起)**:匿名者只能讀到 `visibility='public'` 的文章;`friends`/`private` 一律讀不到。
 
-**讀不到**:`transactions`(財務明細)、`allowed_users`(白名單)、`wishlist_items`(願望清單)——這三張表的 SELECT 政策都要求 `authenticated`,匿名者完全無法查詢。
+**讀不到**:`transactions`(財務明細)、`allowed_users`(白名單)、`wishlist_items`(願望清單)——這三張表的 SELECT 政策都要求 `authenticated`,匿名者完全無法查詢。(2026-07-11 更新:`transactions`、`allowed_users` 現在連「登入但非管理員」也讀不到/讀不全,不只是擋匿名者)
 
 **寫入**:**沒有任何一張表允許匿名寫入**。所有 INSERT/UPDATE/DELETE 政策都至少要求 `auth.role() = 'authenticated'`、`auth.uid() = user_id`,或管理員 email 比對,匿名者無法新增/修改/刪除任何資料。
 
 ### 貫穿多張表的系統性問題:「authenticated」被當成「admin」使用
 
-你的登入設計本來就存在非管理員的登入帳號(Google OAuth 朋友、Email/Password 家人,用於日本收藏願望清單)。~~`posts`~~(✅ 2026-07-11 已改為僅 `is_admin()` 可寫入,不再受影響)、`quotes`、`japan_items`、`japan_categories`、`allowed_users`、`transactions`、`spots` 系列、`trip_days`、`cards`、`status`、`daily`、`spot_types/subtypes`、`expense/income_categories` 的寫入政策一律只檢查 `auth.role() = 'authenticated'`,**沒有任何一條額外比對是不是管理員本人**。也就是說,任何一個朋友或家人帳號,只要成功登入(哪怕登入目的只是想勾選日本收藏願望清單),理論上就能透過直接呼叫 Supabase API:
-- 讀取/刪除你的完整記帳明細
-- 新增、竄改或刪除你的短文(含私人文章)、語錄
-- 修改整份 `allowed_users` 白名單(等於能自行把任何 email 加入白名單)
-- 刪改你的旅行行程與日本收藏資料
+你的登入設計本來就存在非管理員的登入帳號(Google OAuth 朋友、Email/Password 家人,用於日本收藏願望清單)。~~`posts`~~(✅ 已改為僅 `is_admin()` 可寫入)、~~`allowed_users`~~(✅ 已改為僅 `is_admin()` 可寫入,非管理員 SELECT 也收斂為只讀自己)、~~`transactions`~~(✅ 已改為僅 `is_admin()` 可讀寫,均 2026-07-11 修復)、`quotes`、`japan_items`、`japan_categories`、`spots` 系列、`trip_days`、`cards`、`status`、`daily`、`spot_types/subtypes`、`expense/income_categories` 的寫入政策一律只檢查 `auth.role() = 'authenticated'`,**沒有任何一條額外比對是不是管理員本人**。也就是說,任何一個朋友或家人帳號,只要成功登入(哪怕登入目的只是想勾選日本收藏願望清單),理論上就能透過直接呼叫 Supabase API:
+- ~~讀取/刪除你的完整記帳明細~~(✅ 已修復)
+- 新增、竄改或刪除你的語錄(posts 已修復)
+- ~~修改整份 `allowed_users` 白名單~~(✅ 已修復)
+- 刪改你的旅行行程與日本收藏資料(仍待處理,列入下一輪)
 
 `travel_coupons`、`travel_subway_maps` 這兩張表用 `auth.jwt() ->> 'email' = '特定管理員 email'` 正確做出了「登入 ≠ 管理員」的區分,是本次盤點中**唯一**正確收斂到管理員身分的範例,可作為修復時的參考模式。
 

@@ -250,6 +250,21 @@
   - 管理員登入 → 三種 visibility 皆可讀寫 ✅
   - 臨時建立朋友測試帳號（`allowed_users` 白名單）→ 看得到 public+friends、看不到 private ✅；嘗試編輯/刪除文章，Table Editor 直接確認資料庫未變動，RLS 正確擋下寫入 ✅（前端當下誤顯示「已更新/已刪除」，重新整理即恢復，是既有 UI 提示不準確問題，非安全漏洞，見下方待辦）
 - **已知非安全性問題（待後續清理，非本次任務範圍）**：`posts/index.astro` 的編輯/刪除只檢查 `error` 是否為空，未檢查實際受影響筆數；RLS 擋下 UPDATE/DELETE 時不回傳錯誤、只是實際變更 0 筆，導致非管理員操作被擋下時前端仍誤報成功
+
+### ✅ 安全修復：記帳（transactions）與白名單（allowed_users）鎖定管理員專用（2026-07-11，任務 D 稽核發現，已結案）
+
+- **背景**：SECURITY_AUDIT.md 盤點列為 CRITICAL（transactions）與 HIGH（allowed_users）——兩張表的寫入政策只檢查 `auth.role() = 'authenticated'`，任何登入帳號（含 `allowed_users` 白名單的朋友/家人）皆可完整讀寫全部財務資料、讀寫整份白名單；`ledger.astro` 頁面本身也完全沒有管理員檢查，任何登入帳號手動打開 `/ledger` 即可直接操作
+- **前提決策（供未來查閱）**：執行前與使用者確認記帳系統**無家人/朋友共用需求**，純管理員個人專用，因此設計為「僅 `is_admin()`」而非以 `user_id` 區分擁有權。若未來要開放家人共用記帳，此設計需重新評估（架構細節見 PROJECT_ARCHITECTURE.md「記帳與白名單權限架構」）
+- **修復**：
+  - RLS：重用任務 B 已建立的 `public.is_admin()`；`transactions` 的 SELECT/INSERT/UPDATE/DELETE 一律僅 `is_admin()`；`allowed_users` 的 SELECT 改為 `is_admin() OR (auth.jwt()->>'email' ilike email)`（管理員全讀，非管理員只讀自己那一列），INSERT/UPDATE/DELETE 一律僅 `is_admin()`
+  - 頁面：`ledger.astro` 比照 `JapanCollection.astro` 的 `isAdminUser` 判斷模式，新增 `session.user.email !== adminEmail` 比對，非管理員（含白名單帳號）一律導回首頁並提示「僅管理員可使用記帳系統」
+- **驗證結果（2026-07-11，使用者實測）**：
+  - 白名單朋友測試帳號登入 → `/ledger` 被導回首頁 ✅
+  - 朋友帳號 session 直接繞過頁面、對資料庫查 `transactions` → 回傳 0 筆、無錯誤，資料庫層確認擋住 ✅
+  - 管理員帳號 → `/ledger` 正常讀寫 ✅
+  - 朋友帳號的 `/trip`、`/japan` 既有白名單相關功能（願望清單等）不受影響 ✅
+  - `allowed_users` 前台無管理 UI（依 PROJECT_ARCHITECTURE.md 是透過 Supabase Dashboard 手動管理），無對應前端可測，以 RLS 政策本身作為驗收依據
+- **過程中發現、記錄但未處理的異常（不在本次任務範圍）**：驗證過程中一度出現「明確用朋友測試帳號（`abc19930406test@gmail.com`）登入 `/trip`，畫面卻顯示『管理員已登入，啟用前台管理介面』，但實際新增景點/行程失敗」的狀況；改用全新無痕視窗、關閉其他分頁後重測未再重現。判斷可能與「進行中問題：OAuth 登入後 UI 間歇性未切換」Heisenbug 同一根因家族（畫面顯示的登入身分與實際權限判斷不一致），方向相反（這次是誤判成管理員，而非誤判成訪客）。尚未診斷根因，不確定是否為同一問題，留待下次處理 Heisenbug 時一併納入排查線索
 - 隱私修復任務 C（照片）另案處理，尚未開始
 
 ---
@@ -363,7 +378,7 @@
 
 ## 六、待辦事項總覽（當前最優先）
 
-1. 🔴 **最優先**：「OAuth 登入後 UI 間歇性未切換」Heisenbug（見上方「進行中問題」）。第一輪時序診斷已完成（2026-07-11）：嫌犯一、二均排除，trip.astro auth 管線健康，與 DevTools 開關無因果；診斷碼留在線上，等待真實失敗發生時依取證 SOP 抓 log，定案根因後修復,方能確認階段 2.5 真正收尾
+1. 🔴 **最優先**：「OAuth 登入後 UI 間歇性未切換」Heisenbug（見上方「進行中問題」）。第一輪時序診斷已完成（2026-07-11）：嫌犯一、二均排除，trip.astro auth 管線健康，與 DevTools 開關無因果；診斷碼留在線上，等待真實失敗發生時依取證 SOP 抓 log，定案根因後修復,方能確認階段 2.5 真正收尾。2026-07-11 驗證任務 D 時新增一筆疑似同根因家族的觀察（朋友帳號登入 `/trip` 一度被誤判成管理員，方向與原記錄相反），未確認是否同一問題，下次排查時一併納入
 2. 補做「衝突熱點稽核」修復（commit `2317d2d`）的手動驗證：ESC 鍵、Modal 背景點擊是否都能正確關閉並清除 `modal-open`（原定驗證因發現上述問題而中斷）
 3. **階段 3**：japan_items 加入 trip_id 篩選邏輯（收藏依行程篩選）
 4. **階段 4**：trip_collaborators 協作者權限系統
