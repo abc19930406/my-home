@@ -105,13 +105,54 @@ order by tablename, cmd;
 
 ---
 
-## 四、待補完:RLS 矩陣(等你貼回查詢結果後填入)
+## 四、RLS 矩陣(2026-07-11,依使用者提供的查詢結果整理)
 
-> 收到查詢一、查詢二的結果後,會在此處填入完整矩陣:
-> 每張表 × RLS 是否啟用 × anon/authenticated 角色的 SELECT/INSERT/UPDATE/DELETE 各自允許條件,
-> 並標出風險等級,最後回答「未登入的陌生人現在能讀到哪些表、寫入哪些表」。
+**判讀依據**:PostgreSQL RLS 政策彼此為 OR 關係(任一政策放行即放行)。`roles: {public}` 只代表「這條政策不限定資料庫角色」,實際限制看 `qual`(USING)/`with_check` 條件。三種常見角色語意:
+- `auth.role() = 'authenticated'`:**只要是登入的帳號就符合,不分管理員或朋友/家人**
+- `auth.uid() = user_id`:只能動自己那筆資料
+- `auth.jwt() ->> 'email' = '特定 email'`:真正鎖定管理員身分(唯一正確做法,見 travel_coupons/travel_subway_maps)
 
-（尚未填入,等待使用者提供 SQL 查詢結果）
+全部 20 張表**皆已啟用 RLS**(查詢一 `rowsecurity` 全為 `true`),沒有表是完全裸奔的。問題出在個別政策條件過寬。
+
+| 資料表 | anon(未登入)SELECT | anon 寫入 | authenticated(任何登入帳號,含朋友/家人)SELECT | authenticated 寫入 | 風險等級 |
+|---|---|---|---|---|---|
+| **posts** | 🔴 **全表無條件可讀**(`Anyone can read post metadata`,qual=true,與 visibility 無關) | 否 | 全表可讀(重複放行) | 🔴 任何登入帳號可 INSERT/UPDATE/DELETE **任何人的**貼文 | **CRITICAL** |
+| **transactions** | 否 | 否 | 🔴 任何登入帳號可讀**全部**財務明細 | 🔴 任何登入帳號可 INSERT/UPDATE/DELETE | **CRITICAL** |
+| **japan_items** | 🟡 全表可讀(含 owner_wishlist/owner_quantity) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD **全部**品項(非僅自己的) | **HIGH** |
+| **japan_categories** | 🟡 全表可讀(taxonomy) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD | **HIGH** |
+| **quotes** | 🟢 僅 `visibility='public'` | 否 | 🟡 任何登入帳號可讀**全部**語錄(含私人) | 🔴 任何登入帳號可 INSERT/UPDATE/DELETE **任何人的**語錄 | **HIGH** |
+| **allowed_users**(白名單) | 否 | 否 | 🔴 任何登入帳號可讀/改/刪**整份白名單**(含所有朋友 email) | 同左(ALL) | **HIGH** |
+| **wishlist_items** | 否 | 否 | 🟡 任何登入帳號可讀**所有人的**願望清單(非僅自己) | 🟢 INSERT/UPDATE/DELETE 均鎖定 `auth.uid()=user_id`,只能動自己的 | **MEDIUM** |
+| **spots / trips / trip_days / day_spots** | 🟡 全表可讀(完整行程、地點、座標) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD 任何行程/景點 | **MEDIUM** |
+| **spot_types / spot_subtypes** | 🟡 全表可讀(僅分類名稱) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD | **LOW** |
+| **expense_categories / income_categories** | 🟡 全表可讀(記帳分類名稱,非金額) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD | **LOW** |
+| **cards / status / daily** | 🟢 全表可讀(設計上本就公開:首頁卡片、狀態便條、Polaroid) | 否 | 全表可讀 | 🔴 任何登入帳號可改(cards/status)或 CRUD(daily),非僅管理員 | **LOW**(讀取合理,寫入權限過寬) |
+| **travel_coupons / travel_subway_maps** | 🟢 全表可讀(尚無 UI,表已建但空) | 否 | 全表可讀 | 🟢 **正確示範**:寫入鎖定 `auth.jwt()->>'email' = 'abc19930406@gmail.com'`,真正限定管理員本人 | 目前無資料,結構正確 |
+
+🔴 嚴重 / 🟡 中等 / 🟢 設計合理或已正確收斂
+
+### 明確回答:未登入的陌生人現在能讀到哪些表、寫入哪些表
+
+**能讀(不需要任何帳號,直接呼叫 API 或查看靜態頁面原始碼即可)**:
+`posts`(**含私人與朋友限定文章的完整內容**)、`japan_items`、`japan_categories`、`spots`、`trips`、`trip_days`、`day_spots`、`spot_types`、`spot_subtypes`、`expense_categories`、`income_categories`、`cards`、`status`、`daily`、`quotes`(僅 public 標記的)、`travel_coupons`、`travel_subway_maps`。
+
+**讀不到**:`transactions`(財務明細)、`allowed_users`(白名單)、`wishlist_items`(願望清單)——這三張表的 SELECT 政策都要求 `authenticated`,匿名者完全無法查詢。
+
+**寫入**:**沒有任何一張表允許匿名寫入**。所有 INSERT/UPDATE/DELETE 政策都至少要求 `auth.role() = 'authenticated'`、`auth.uid() = user_id`,或管理員 email 比對,匿名者無法新增/修改/刪除任何資料。
+
+### 貫穿多張表的系統性問題:「authenticated」被當成「admin」使用
+
+你的登入設計本來就存在非管理員的登入帳號(Google OAuth 朋友、Email/Password 家人,用於日本收藏願望清單)。但 `posts`、`quotes`、`japan_items`、`japan_categories`、`allowed_users`、`transactions`、`spots` 系列、`trip_days`、`cards`、`status`、`daily`、`spot_types/subtypes`、`expense/income_categories` 的寫入政策一律只檢查 `auth.role() = 'authenticated'`,**沒有任何一條額外比對是不是管理員本人**。也就是說,任何一個朋友或家人帳號,只要成功登入(哪怕登入目的只是想勾選日本收藏願望清單),理論上就能透過直接呼叫 Supabase API:
+- 讀取/刪除你的完整記帳明細
+- 新增、竄改或刪除你的短文(含私人文章)、語錄
+- 修改整份 `allowed_users` 白名單(等於能自行把任何 email 加入白名單)
+- 刪改你的旅行行程與日本收藏資料
+
+`travel_coupons`、`travel_subway_maps` 這兩張表用 `auth.jwt() ->> 'email' = '特定管理員 email'` 正確做出了「登入 ≠ 管理員」的區分,是本次盤點中**唯一**正確收斂到管理員身分的範例,可作為修復時的參考模式。
+
+### 待釐清項目
+
+`japan_images` 資料表在程式碼中有寫入操作([JapanCollection.astro:1078](src/components/JapanCollection.astro:1078)、[japan.astro:1074](src/pages/japan.astro:1074)),但**未出現在查詢一的 `pg_tables` 結果中**,因此也沒有對應的 RLS 政策資料。可能原因待確認(例如實際表名不同、或查詢時被遺漏),本次不猜測結論,留待下次查詢時一併確認。另外 Storage bucket(`post_images`、`japan_images`、`travel_images` 等)的存取權限屬 `storage.objects` 表的政策,不在本次查詢範圍內,如需盤點需另外查詢。
 
 ---
 
@@ -119,4 +160,4 @@ order by tablename, cmd;
 
 - 本文件僅盤點現況,**未修改任何程式碼、未執行任何會變更資料庫的操作**
 - 不提出修復方案,修復留待後續任務
-- 完整矩陣需要你貼回 SQL 查詢結果才能完成
+- 完整矩陣已根據使用者提供的兩段 SQL 查詢結果(2026-07-11)填入
