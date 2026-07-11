@@ -548,7 +548,18 @@ try {
         for (let i = 0; i < pendingMediaItems.length; i++) {
           const m = pendingMediaItems[i];
           if (m.dbId) {
-            await supabase.from('post_media_items').update({ sort_order: i }).eq('id', m.dbId);
+            // 加 .select() 是為了拿到實際受影響的列：RLS 擋下 UPDATE 時不會回傳錯誤，只會影響 0 筆，
+            // 若只看 error 會誤判成功（此專案已多次遇過同一個坑）
+            const { data: updateData, error: updateError } = await supabase
+              .from('post_media_items')
+              .update({ sort_order: i })
+              .eq('id', m.dbId)
+              .select();
+            if (updateError) {
+              alert('媒體排序更新失敗：' + updateError.message);
+            } else if (!updateData || updateData.length === 0) {
+              alert('媒體排序更新失敗：沒有權限或項目不存在（實際未變更），請重新整理頁面確認現況');
+            }
           } else {
             const { error: mediaError } = await supabase
               .from('post_media_items')
