@@ -1,6 +1,7 @@
+> ⚠️ 本文件已於 2026-07 廢棄,內容為 2026-05 的過時版本,僅供歷史參考。專案現況一律以 PROJECT_ARCHITECTURE.md、PROJECT_ARCHITECTURE_V2.md、PROJECT_PROGRESS.md 為準。
+
 # The Corner Table — 專案架構與開發說明書
 
-> ⚠️ **AI 助理注意：開啟此專案前，請務必先完整閱讀這份文件。**
 
 ---
 

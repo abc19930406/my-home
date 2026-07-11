@@ -41,6 +41,7 @@
 - 每個 Modal 的**所有**關閉路徑(按鈕、背景點擊、ESC)都必須清除 `body.modal-open`
 - 靜態頁面加 `export const prerender = true`;API 路由加 `export const prerender = false`
 - 日期一律本地時區;涉及相對時間以系統當前日期為準,不確定就問
+- `/japan` 與 `/travel` 為凍結頁面:所有收藏與行程相關的 bug 修復和功能開發,一律只改 `/trip` 使用的 TripPlanner.astro 與 JapanCollection.astro;除非使用者明確指示,不得修改 japan.astro 與 travel.astro
 
 ## 經驗外部化
 
