@@ -109,6 +109,24 @@ try {
                 <div id="image-previews-container" class="image-previews-grid" style="display: none; margin-bottom: 1rem;">
                   <!-- JS 動態插入預覽圖 -->
                 </div>
+                <div class="form-group">
+                  <label>媒體（YouTube 影片 / 短片 / 錄音，選填）</label>
+                  <div class="media-add-row">
+                    <input type="text" id="media-youtube-url" placeholder="貼上 YouTube 網址" />
+                    <button type="button" id="btn-add-youtube" class="btn-add-media">＋ YouTube</button>
+                  </div>
+                  <div class="media-add-row">
+                    <label for="media-clip-input" class="btn-add-media btn-file-label">＋ 短片（50MB 內）</label>
+                    <input type="file" id="media-clip-input" accept="video/*" style="display: none;" />
+                  </div>
+                  <div class="media-add-row">
+                    <label for="media-audio-input" class="btn-add-media btn-file-label">＋ 錄音</label>
+                    <input type="file" id="media-audio-input" accept="audio/*" style="display: none;" />
+                  </div>
+                </div>
+                <div id="media-list-container" class="media-list" style="display: none;">
+                  <!-- JS 動態插入已加入的媒體項目 -->
+                </div>
                 <div class="form-actions">
                   <button type="button" id="close-add-form" class="btn-cancel">取消</button>
                   <button type="submit" id="save-post-btn" class="btn-submit">發布文章</button>
@@ -249,6 +267,9 @@ try {
     currentImageUrls = [];
     currentImagePaths = [];
     renderPreviews();
+    pendingMediaItems = [];
+    deletedMediaIds = [];
+    renderMediaList();
     if (savePostBtn) {
       savePostBtn.textContent = '發布文章';
       (savePostBtn as HTMLButtonElement).disabled = false;
@@ -266,6 +287,123 @@ try {
     const { data } = await supabase.storage.from('post_media').createSignedUrl(paths[0], 3600);
     return { coverUrl: data?.signedUrl || null, photoCount: paths.length };
   }
+
+  // --- 媒體區塊（YouTube / 短片 / 錄音） ---
+  // dbId 有值代表這筆已存在資料庫（編輯既有文章時載入），儲存時用來判斷 UPDATE 還是 INSERT
+  let pendingMediaItems: any[] = [];
+  let deletedMediaIds: string[] = [];
+  const MAX_CLIP_SIZE = 50 * 1024 * 1024; // 50MB
+
+  const mediaListContainer = document.getElementById('media-list-container');
+  const mediaYoutubeUrlInput = document.getElementById('media-youtube-url') as HTMLInputElement;
+  const btnAddYoutube = document.getElementById('btn-add-youtube');
+  const mediaClipInput = document.getElementById('media-clip-input') as HTMLInputElement;
+  const mediaAudioInput = document.getElementById('media-audio-input') as HTMLInputElement;
+
+  const mediaKindLabel: Record<string, string> = { youtube: 'YouTube', clip: '短片', audio: '錄音' };
+
+  function renderMediaList() {
+    if (!mediaListContainer) return;
+    if (pendingMediaItems.length === 0) {
+      mediaListContainer.style.display = 'none';
+      mediaListContainer.innerHTML = '';
+      return;
+    }
+    mediaListContainer.style.display = 'flex';
+    mediaListContainer.innerHTML = pendingMediaItems.map((item, index) => `
+      <div class="media-list-item" data-index="${index}">
+        <span class="media-kind-tag">${mediaKindLabel[item.kind]}</span>
+        <span class="media-label">${item.label}</span>
+        <button type="button" class="btn-media-up" data-index="${index}" title="上移" ${index === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="btn-media-down" data-index="${index}" title="下移" ${index === pendingMediaItems.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="btn-media-remove" data-index="${index}" title="移除">×</button>
+      </div>
+    `).join('');
+
+    mediaListContainer.querySelectorAll('.btn-media-remove').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const index = parseInt((e.currentTarget as HTMLElement).dataset.index || '0');
+        const removed = pendingMediaItems.splice(index, 1)[0];
+        if (removed?.dbId) deletedMediaIds.push(removed.dbId);
+        renderMediaList();
+      });
+    });
+    mediaListContainer.querySelectorAll('.btn-media-up').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const index = parseInt((e.currentTarget as HTMLElement).dataset.index || '0');
+        if (index <= 0) return;
+        const tmp = pendingMediaItems[index - 1];
+        pendingMediaItems[index - 1] = pendingMediaItems[index];
+        pendingMediaItems[index] = tmp;
+        renderMediaList();
+      });
+    });
+    mediaListContainer.querySelectorAll('.btn-media-down').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const index = parseInt((e.currentTarget as HTMLElement).dataset.index || '0');
+        if (index >= pendingMediaItems.length - 1) return;
+        const tmp = pendingMediaItems[index + 1];
+        pendingMediaItems[index + 1] = pendingMediaItems[index];
+        pendingMediaItems[index] = tmp;
+        renderMediaList();
+      });
+    });
+  }
+
+  function parseYouTubeId(url: string) {
+    const match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    return match ? match[1] : null;
+  }
+
+  btnAddYoutube?.addEventListener('click', () => {
+    const url = mediaYoutubeUrlInput.value.trim();
+    if (!url) return;
+    const videoId = parseYouTubeId(url);
+    if (!videoId) {
+      alert('YouTube 網址格式不正確，請確認貼上的是完整的影片網址');
+      return;
+    }
+    pendingMediaItems.push({ kind: 'youtube', value: videoId, label: `YouTube：${videoId}` });
+    mediaYoutubeUrlInput.value = '';
+    renderMediaList();
+  });
+
+  async function uploadMediaFile(file: File, kind: 'clip' | 'audio', label: string) {
+    const existingId = (document.getElementById('post-id') as HTMLInputElement).value;
+    const folder = existingId || 'pending';
+    const fileName = `${Math.random().toString(36).substring(2)}.${file.name.split('.').pop()}`;
+    const filePath = `${folder}/${fileName}`;
+
+    showToast(`正在上傳${label}...`);
+    const { error } = await supabase.storage.from('post_media').upload(filePath, file);
+    if (error) {
+      alert(`${label}上傳失敗：${error.message}`);
+      return;
+    }
+    pendingMediaItems.push({ kind, value: filePath, label: file.name });
+    renderMediaList();
+    showToast(`${label}上傳完成`);
+  }
+
+  mediaClipInput?.addEventListener('change', async (e) => {
+    const files = (e.target as HTMLInputElement).files;
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (file.size > MAX_CLIP_SIZE) {
+      alert('短片上限 50MB，較長影片請改用 YouTube 連結');
+      mediaClipInput.value = '';
+      return;
+    }
+    await uploadMediaFile(file, 'clip', '短片');
+    mediaClipInput.value = '';
+  });
+
+  mediaAudioInput?.addEventListener('change', async (e) => {
+    const files = (e.target as HTMLInputElement).files;
+    if (!files || files.length === 0) return;
+    await uploadMediaFile(files[0], 'audio', '錄音');
+    mediaAudioInput.value = '';
+  });
 
   function renderPreviews() {
     if (!imagePreviewContainer) return;
@@ -402,6 +540,24 @@ try {
             coverEl.remove();
           }
         }
+
+        // 同步媒體項目：先刪除被移除的，已存在的更新排序，新增的寫入資料庫
+        for (const delId of deletedMediaIds) {
+          await supabase.from('post_media_items').delete().eq('id', delId);
+        }
+        for (let i = 0; i < pendingMediaItems.length; i++) {
+          const m = pendingMediaItems[i];
+          if (m.dbId) {
+            await supabase.from('post_media_items').update({ sort_order: i }).eq('id', m.dbId);
+          } else {
+            const { error: mediaError } = await supabase
+              .from('post_media_items')
+              .insert({ post_id: id, kind: m.kind, value: m.value, sort_order: i });
+            if (mediaError) alert('部分媒體項目儲存失敗：' + mediaError.message);
+          }
+        }
+        deletedMediaIds = [];
+
         showToast('已更新');
       } else if (newPost) {
         // 新文章的照片先前存在 pending/ 暫存資料夾，現在已拿到真正的 id，搬移歸位
@@ -427,6 +583,21 @@ try {
             newPost.image_urls = finalPaths;
             newPost.image_url = finalPaths[0] || null;
           }
+        }
+
+        // 新文章的短片/錄音先前可能存在 pending/ 暫存資料夾，搬移歸位；YouTube 項目不涉及檔案，直接寫入
+        for (let i = 0; i < pendingMediaItems.length; i++) {
+          const m = pendingMediaItems[i];
+          if ((m.kind === 'clip' || m.kind === 'audio') && m.value.startsWith('pending/')) {
+            const fileName = m.value.split('/').pop();
+            const newPath = `${newPost.id}/${fileName}`;
+            const { error: moveError } = await supabase.storage.from('post_media').move(m.value, newPath);
+            if (!moveError) m.value = newPath;
+          }
+          const { error: mediaError } = await supabase
+            .from('post_media_items')
+            .insert({ post_id: newPost.id, kind: m.kind, value: m.value, sort_order: i });
+          if (mediaError) alert('部分媒體項目儲存失敗：' + mediaError.message);
         }
 
         // 新增 UI
@@ -502,7 +673,26 @@ try {
           renderPreviews();
         });
       }
-      
+
+      // 載入既有媒體項目
+      pendingMediaItems = [];
+      deletedMediaIds = [];
+      renderMediaList();
+      const { data: mediaItems } = await supabase
+        .from('post_media_items')
+        .select('*')
+        .eq('post_id', post.id)
+        .order('sort_order', { ascending: true });
+      if (mediaItems && mediaItems.length > 0) {
+        pendingMediaItems = mediaItems.map((m: any) => ({
+          dbId: m.id,
+          kind: m.kind,
+          value: m.value,
+          label: m.kind === 'youtube' ? `YouTube：${m.value}` : m.value.split('/').pop()
+        }));
+        renderMediaList();
+      }
+
       if (savePostBtn) savePostBtn.textContent = '更新文章';
       if (addPostSection) addPostSection.style.display = 'block';
       if (openAddFormBtn) openAddFormBtn.style.display = 'none';

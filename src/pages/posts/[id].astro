@@ -36,6 +36,49 @@ if (post) {
   }
 }
 
+// 媒體項目（YouTube / 短片 / 錄音）：影片類（youtube + clip）依 sort_order 合併一組，錄音另成一組
+type VideoItem = { kind: 'youtube'; id: string } | { kind: 'clip'; url: string };
+let videoItems: VideoItem[] = [];
+let audioItems: string[] = [];
+if (post) {
+  const { data: mediaItems } = await supabase
+    .from('post_media_items')
+    .select('*')
+    .eq('post_id', post.id)
+    .order('sort_order', { ascending: true });
+
+  if (mediaItems && mediaItems.length > 0) {
+    const clipPaths = mediaItems.filter((m) => m.kind === 'clip').map((m) => m.value as string);
+    const audioPaths = mediaItems.filter((m) => m.kind === 'audio').map((m) => m.value as string);
+
+    const clipSigned = await Promise.all(
+      clipPaths.map((p) => supabase.storage.from('post_media').createSignedUrl(p, 3600))
+    );
+    const clipUrlMap: Record<string, string> = {};
+    clipPaths.forEach((p, i) => { clipUrlMap[p] = clipSigned[i].data?.signedUrl || ''; });
+
+    const audioSigned = await Promise.all(
+      audioPaths.map((p) => supabase.storage.from('post_media').createSignedUrl(p, 3600))
+    );
+    const audioUrlMap: Record<string, string> = {};
+    audioPaths.forEach((p, i) => { audioUrlMap[p] = audioSigned[i].data?.signedUrl || ''; });
+
+    videoItems = mediaItems
+      .filter((m) => m.kind === 'youtube' || m.kind === 'clip')
+      .map((m) =>
+        m.kind === 'youtube'
+          ? ({ kind: 'youtube', id: m.value } as VideoItem)
+          : ({ kind: 'clip', url: clipUrlMap[m.value] } as VideoItem)
+      )
+      .filter((v) => v.kind === 'youtube' || !!v.url);
+
+    audioItems = mediaItems
+      .filter((m) => m.kind === 'audio')
+      .map((m) => audioUrlMap[m.value])
+      .filter((u) => !!u);
+  }
+}
+
 const visibilityMap = {
   public: { text: '公開', color: 'var(--tag-public)' },
   friends: { text: '朋友', color: 'var(--tag-friends)' },
@@ -86,6 +129,34 @@ const visibilityMap = {
               <div class="post-detail-content" id="post-body">
                 <div set:html={htmlContent} />
               </div>
+
+              {videoItems.length > 0 && (
+                <div class="post-video-section">
+                  {videoItems.map((v) => (
+                    v.kind === 'youtube' ? (
+                      <div class="post-video-embed">
+                        <iframe
+                          src={`https://www.youtube-nocookie.com/embed/${v.id}`}
+                          title="YouTube 影片"
+                          frameborder="0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowfullscreen
+                        ></iframe>
+                      </div>
+                    ) : (
+                      <video class="post-video-clip" src={v.url} controls preload="metadata" />
+                    )
+                  ))}
+                </div>
+              )}
+
+              {audioItems.length > 0 && (
+                <div class="post-audio-section">
+                  {audioItems.map((url: string) => (
+                    <audio class="post-audio-item" src={url} controls preload="metadata" />
+                  ))}
+                </div>
+              )}
             </article>
           ) : (
             <div id="post-locked" class="post-locked-shell">
@@ -297,6 +368,56 @@ const visibilityMap = {
         }
       }
 
+      // 媒體項目：用目前登入者的 session 換簽名網址（RLS 自動判權），影片類（youtube+clip）一組、錄音一組
+      const { data: mediaItems } = await supabase
+        .from('post_media_items')
+        .select('*')
+        .eq('post_id', post.id)
+        .order('sort_order', { ascending: true });
+
+      let videoHtml = '';
+      let audioHtml = '';
+      if (mediaItems && mediaItems.length > 0) {
+        const clipPaths = mediaItems.filter((m) => m.kind === 'clip').map((m) => m.value);
+        const clipSigned = await Promise.all(
+          clipPaths.map((p) => supabase.storage.from('post_media').createSignedUrl(p, 3600))
+        );
+        const clipUrlMap = {};
+        clipPaths.forEach((p, i) => { clipUrlMap[p] = clipSigned[i].data?.signedUrl || ''; });
+
+        const audioPaths = mediaItems.filter((m) => m.kind === 'audio').map((m) => m.value);
+        const audioSigned = await Promise.all(
+          audioPaths.map((p) => supabase.storage.from('post_media').createSignedUrl(p, 3600))
+        );
+        const audioUrlMap = {};
+        audioPaths.forEach((p, i) => { audioUrlMap[p] = audioSigned[i].data?.signedUrl || ''; });
+
+        const videoParts = mediaItems
+          .filter((m) => m.kind === 'youtube' || m.kind === 'clip')
+          .map((m) => {
+            if (m.kind === 'youtube') {
+              return `<div class="post-video-embed"><iframe src="https://www.youtube-nocookie.com/embed/${m.value}" title="YouTube 影片" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
+            }
+            const url = clipUrlMap[m.value];
+            return url ? `<video class="post-video-clip" src="${url}" controls preload="metadata"></video>` : '';
+          })
+          .filter(Boolean);
+        if (videoParts.length > 0) {
+          videoHtml = '<div class="post-video-section">' + videoParts.join('') + '</div>';
+        }
+
+        const audioParts = mediaItems
+          .filter((m) => m.kind === 'audio')
+          .map((m) => {
+            const url = audioUrlMap[m.value];
+            return url ? `<audio class="post-audio-item" src="${url}" controls preload="metadata"></audio>` : '';
+          })
+          .filter(Boolean);
+        if (audioParts.length > 0) {
+          audioHtml = '<div class="post-audio-section">' + audioParts.join('') + '</div>';
+        }
+      }
+
       if (container) {
         container.innerHTML = `
           <div class="post-detail-header">
@@ -308,6 +429,8 @@ const visibilityMap = {
           </div>
           ${imagesHtml}
           <div class="post-detail-content" id="post-body">${htmlContent}</div>
+          ${videoHtml}
+          ${audioHtml}
         `;
       }
 
