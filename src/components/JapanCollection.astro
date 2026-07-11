@@ -256,6 +256,15 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
                 </select>
               </div>
 
+              <!-- 歸屬行程(選填，預設一般收藏) -->
+              <div class="form-group">
+                <label for="form-item-trip">歸屬</label>
+                <select id="form-item-trip">
+                  <option value="">一般收藏</option>
+                  <!-- JS 動態插入行程清單 -->
+                </select>
+              </div>
+
               <!-- 備註 -->
               <div class="form-group">
                 <label for="form-item-note">備註</label>
@@ -402,6 +411,17 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   let isAdminUser = false;
   let isAllowedUser = false;
   let currentUser = null;
+  let tripsCache = [];
+  // 篩選範圍：trip-and-general(本行程＋一般,預設) / trip-only(僅本行程) / general-only(僅一般收藏) / all(全部)
+  // 僅管理員可切換,非管理員固定用預設值
+  let currentTripFilterMode = 'trip-and-general';
+
+  // 監聽 TripPlanner 廣播的行程切換事件(V2 階段 2 預留的掛鉤),即時重新篩選
+  // 提前綁定在 script 最上層,避免 Race Condition；filterAndRenderItems 每次都直接讀 window.currentTripId 最新值,
+  // 就算這個監聽器綁定時已經錯過第一次廣播也不影響正確性
+  window.addEventListener('trip-changed', () => {
+    filterAndRenderItems();
+  });
 
   // --- Utility Functions ---
   function showToast(message) {
@@ -419,10 +439,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     const { data: cats } = await supabase.from('japan_categories').select('*').order('sort_order', { ascending: true });
     const { data: items } = await supabase.from('japan_items').select('*').order('created_at', { ascending: false });
     const { data: wishlists } = await supabase.from('wishlist_items').select('*');
-    
+    const { data: trips } = await supabase.from('trips').select('id, name').order('created_at', { ascending: true });
+
     categoriesCache = cats || [];
     itemsCache = items || [];
     allWishlistItems = wishlists || [];
+    tripsCache = trips || [];
 
     // 2. 身分驗證與即時探索隱私狀態檢查
     const { data: statusObj } = await supabase.from('status').select('japan_explore_public').eq('id', 1).single();
@@ -469,6 +491,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       // 載入管理選單與 Modal 相關下拉
       renderManageCategoryRows();
       populateMainCategoryDropdown();
+      populateTripDropdown();
 
       // 管理員：不論公開或私人均保持可見以進行設定
       if (exploreSection) exploreSection.style.display = 'block';
@@ -574,6 +597,19 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         friendOpts += `<option value="${email}" ${currentFriendFilter === email ? 'selected' : ''}>${name}</option>`;
       });
       html += `<div class="friend-filter-container"><select class="friend-select" id="friend-filter-select">${friendOpts}</select></div>`;
+
+      // 收藏依行程篩選範圍切換器(僅管理員可見,非管理員固定用「本行程＋一般」)
+      const scopeLabels = {
+        'trip-and-general': '本行程＋一般',
+        'trip-only': '僅本行程',
+        'general-only': '僅一般收藏',
+        'all': '全部'
+      };
+      let scopeOpts = '';
+      Object.keys(scopeLabels).forEach(key => {
+        scopeOpts += `<option value="${key}" ${currentTripFilterMode === key ? 'selected' : ''}>${scopeLabels[key]}</option>`;
+      });
+      html += `<div class="trip-scope-filter-container"><select class="trip-scope-select" id="trip-scope-filter-select">${scopeOpts}</select></div>`;
     }
 
     mainContainer.innerHTML = html;
@@ -590,6 +626,14 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     if (friendSelect) {
       friendSelect.addEventListener('change', (e) => {
         currentFriendFilter = e.target.value;
+        filterAndRenderItems();
+      });
+    }
+
+    const tripScopeSelect = document.getElementById('trip-scope-filter-select');
+    if (tripScopeSelect) {
+      tripScopeSelect.addEventListener('change', (e) => {
+        currentTripFilterMode = e.target.value;
         filterAndRenderItems();
       });
     }
@@ -700,6 +744,18 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
     let filtered = [...itemsCache];
 
+    // 依行程篩選：非管理員固定用「本行程＋一般」；currentTripId 尚未設定時一律不過濾(退回顯示全部,避免空白清單)
+    const tripScope = isAdminUser ? currentTripFilterMode : 'trip-and-general';
+    const activeTripId = window.currentTripId;
+    if (tripScope === 'general-only') {
+      filtered = filtered.filter(item => !item.trip_id);
+    } else if (tripScope === 'trip-only' && activeTripId) {
+      filtered = filtered.filter(item => String(item.trip_id) === String(activeTripId));
+    } else if (tripScope === 'trip-and-general' && activeTripId) {
+      filtered = filtered.filter(item => !item.trip_id || String(item.trip_id) === String(activeTripId));
+    }
+    // tripScope === 'all'，或 trip-only/trip-and-general 但 activeTripId 尚未設定時：不套用任何行程篩選
+
     if (currentMainFilter === 'wishlist') {
       if (isAdminUser) {
         filtered = filtered.filter(item => item.owner_wishlist === true);
@@ -769,7 +825,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     filtered.forEach(item => {
       const cat = categoriesCache.find(c => String(c.id) === String(item.category_id));
       const catName = cat ? cat.name : '未分類';
-      const imgTag = item.image_url 
+      const trip = item.trip_id ? tripsCache.find(t => String(t.id) === String(item.trip_id)) : null;
+      const tripBadgeHtml = trip ? `<span class="card-trip-badge">${trip.name}</span>` : '';
+      const imgTag = item.image_url
         ? `<img src="${item.image_url}" alt="${item.name}" class="item-image" loading="lazy" />` 
         : `
           <div class="card-img-placeholder">
@@ -853,7 +911,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           <div class="card-info">
             <div class="card-title-row">
               <h4 class="card-title">${item.name}</h4>
-              <span class="card-tag">${catName}</span>
+              <div class="card-tags-group">
+                <span class="card-tag">${catName}</span>
+                ${tripBadgeHtml}
+              </div>
             </div>
             ${noteTag}
             ${countHtml}
@@ -1014,12 +1075,22 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   function populateMainCategoryDropdown() {
     if (!mainCatSelect) return;
     const mainCats = categoriesCache.filter(c => c.parent_id === null);
-    
+
     let html = '<option value="">請選擇主分類</option>';
     mainCats.forEach(cat => {
       html += `<option value="${cat.id}">${cat.name}</option>`;
     });
     mainCatSelect.innerHTML = html;
+  }
+
+  // --- 新增/編輯品項 Modal 的「歸屬」下拉：一般收藏 + 行程清單 ---
+  function populateTripDropdown() {
+    if (!tripSelect) return;
+    let html = '<option value="">一般收藏</option>';
+    tripsCache.forEach(trip => {
+      html += `<option value="${trip.id}">${trip.name}</option>`;
+    });
+    tripSelect.innerHTML = html;
   }
 
   mainCatSelect?.addEventListener('change', () => {
@@ -1114,6 +1185,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   const itemIdInput = document.getElementById('form-item-id');
   const itemNameInput = document.getElementById('form-item-name');
   const itemNoteInput = document.getElementById('form-item-note');
+  const tripSelect = document.getElementById('form-item-trip');
 
   function openModal(isEdit = false, item = null) {
     if (!modal) return;
@@ -1131,6 +1203,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       itemNameInput.value = item.name;
       itemNoteInput.value = item.note || '';
       imageUrlInput.value = item.image_url || '';
+      if (tripSelect) tripSelect.value = item.trip_id ? String(item.trip_id) : '';
 
       if (item.image_url) {
         if (previewImg) previewImg.src = item.image_url;
@@ -1200,11 +1273,15 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     const subId = subCatSelect.value;
     const category_id = subId ? parseInt(subId) : (mainId ? parseInt(mainId) : null);
 
+    // 歸屬行程：空字串代表一般收藏，存 null
+    const tripIdValue = tripSelect && tripSelect.value ? tripSelect.value : null;
+
     const itemData = {
       name,
       note: note || null,
       image_url: image_url || null,
-      category_id
+      category_id,
+      trip_id: tripIdValue
     };
 
     try {

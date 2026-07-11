@@ -196,6 +196,23 @@
   font-family: inherit;
 }
 
+.trip-scope-filter-container {
+  display: flex;
+  align-items: center;
+}
+
+.trip-scope-select {
+  padding: 6px 12px;
+  border-radius: 20px;
+  border: 1px solid rgba(112, 144, 184, 0.3);
+  background: white;
+  color: var(--japan-text);
+  font-size: 0.85rem;
+  outline: none;
+  cursor: pointer;
+  font-family: inherit;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-5px); }
   to { opacity: 1; transform: translateY(0); }
@@ -522,10 +539,28 @@
   font-weight: 600;
 }
 
+.card-tags-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
 .card-tag {
   background: var(--japan-tag-bg);
   color: var(--japan-tag-text);
   font-size: 0.78rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.card-trip-badge {
+  background: var(--japan-primary);
+  color: white;
+  font-size: 0.72rem;
   padding: 3px 8px;
   border-radius: 4px;
   white-space: nowrap;
