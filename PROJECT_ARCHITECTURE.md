@@ -264,7 +264,8 @@ if (!session) {
 | 資料表 | 說明 |
 |--------|------|
 | posts | 短文（日噹） |
-| post_images | 短文照片 |
+| post_images | 短文照片，舊表，已停用（改用 post_media bucket + post_media_items） |
+| post_media_items | 短文媒體：YouTube / 短片 / 錄音（2026-07-11 新增，見下方章節） |
 | quotes | 語錄收藏 |
 | status | 現在狀態（id=1 固定） |
 | daily | Polaroid 底片日記 |
@@ -320,6 +321,14 @@ if (!session) {
   - `posts/[id].astro` 前端（friends/private 文章）：登入後用使用者 session 產生，RLS 自動判權
   - `posts/index.astro` 列表頁封面縮圖：僅對每篇文章的第一張照片產生簽名網址
 - **搬遷紀錄**：舊 `post_images` bucket 內 11 個檔案，僅 1 個實際被文章引用（id=7），已手動複製至 `post_media/7/`，其餘 10 個為孤兒檔案，未搬遷、未刪除，原樣留在 `post_images`
+
+### 短文媒體支援：YouTube / 短片 / 錄音（2026-07-11 新增）
+- **資料表 `post_media_items`**：`id`(uuid)、`post_id`(FK→posts，on delete cascade)、`kind`(`youtube`/`clip`/`audio`)、`value`(youtube 存解析出的影片 ID；clip/audio 存 `post_media` bucket 內路徑)、`sort_order`、`created_at`
+- **RLS**：SELECT 條件與 `posts` 表本身完全一致（`visibility='public'` 或 `is_admin()` 或 `visibility='friends'` 且 `is_friend()`）；INSERT/UPDATE/DELETE 一律僅 `is_admin()`；照片欄位維持在 `posts.image_url`/`image_urls`，未搬進此表
+- **短片/錄音檔案**：與照片共用 `post_media` bucket 與其 RLS，走一樣的 `pending/` 暫存 → 存檔後 `move()` 歸位流程；短片上傳前檢查檔案大小，超過 50MB 直接擋下（前端限制，非資料庫層）
+- **YouTube**：只存**解析出的影片 ID**（不存完整網址），編輯器貼網址後用正規表達式解析（支援 `youtube.com/watch?v=`、`youtube.com/embed/`、`youtu.be/` 三種格式），解析失敗即時提示格式錯誤；渲染時組成 `https://www.youtube-nocookie.com/embed/{id}` 內嵌（隱私增強模式，不使用一般 `youtube.com/embed`）。**注意**：YouTube「私人」等級的影片通常無法被任何網站嵌入播放，只有「非公開」（unlisted）才能正常嵌入，這是 YouTube 平台限制不是本站問題
+- **顯示順序**：單篇頁固定為「照片瀑布流 → 文字 → 影片（YouTube+短片依 `sort_order` 混合排列）→ 錄音（依 `sort_order`）」。**排序僅在同類型項目之間有意義**（例如兩支短片誰先誰後）；不同類型之間的區塊順序（影片一定在錄音之前）是寫死的，調整跨類型的 `sort_order` 不會反映在頁面上，避免誤判為排序功能故障
+- **iOS 錄音上傳限制**：網頁 `<input type="file">` 無法直接讀取「語音備忘錄」App 內部的錄音，這是蘋果平台限制，任何網站都無法透過調整 `accept` 屬性解決；使用者需先在語音備忘錄用「共用 → 儲存到檔案」匯出，再用「選擇檔案」上傳
 
 ---
 
@@ -417,3 +426,4 @@ if (!session) {
 6. **修改程式碼後必須在同一輪完成 git commit + push 並確認推送成功，才算真正部署**：曾發生 Antigravity 完成多輪程式碼修改但未執行 commit/push，Vercel 持續運行舊版本，導致後續多輪瀏覽器測試實際上都在測試舊程式碼，造成大量誤判、浪費大量排查時間。修改完成後應立即貼出 `git push` 的終端機輸出確認成功，且應在 Vercel Deployments 頁籤確認新版本狀態為 Ready（且 commit SHA 相符）後才進行驗證測試
 7. **頁面搬移/重構時，先前已修復的規則容易被靜默遺漏**：例如 `.map-wrapper { isolation: isolate }` 這類 CSS 隔離規則，原本已在舊版 /travel 頁面修復並記錄於本文件，但搬移為 TripPlanner.astro 時未被帶過去，直到後續稽核才發現相關檔案完全沒有任何 isolation 或明確 z-index 設定。重構或搬移程式碼時，應主動逐條比對本文件已記載的規則是否真的體現在新程式碼中，不能只憑「功能測試通過」就假設所有先前修復都還在
 8. **懷疑 race condition 或間歇性 bug 時，優先控制測試環境變數**：瀏覽器的無痕模式、DevTools 開啟/關閉等狀態可能改變 JavaScript 執行時序（例如 console 呼叫本身有效能開銷）或儲存行為（例如 Safari 無痕模式對 localStorage 的限制），進而讓 bug 時有時無、難以穩定重現。若懷疑是時序或環境相關問題，應優先在不同瀏覽器/模式間切換比對以縮小範圍，而非在同一環境下反覆重測
+9. **flex/grid 項目預設 `min-width: auto`，內容過長時會撐大整個容器**（2026-07-11 教訓）：`display: flex`（或 grid）的直接子項目，即使設了 `flex: 1`、`overflow: hidden`、`text-overflow: ellipsis`，只要沒有明確加上 `min-width: 0`，仍會被內部無法換行的長文字（如長檔名、UUID）撐大到超出容器寬度；且這個「撐大」效應會沿著 flex 容器鏈一路往上傳遞，直到某層有 `overflow-x: hidden` 才會被裁掉——若這層剛好又不提供橫向捲動，使用者會完全看不到、也點不到被推出畫面的元素（例如表單送出按鈕）。修這類問題**不能只加在直接出問題的元素上**，要往上檢查每一層 flex/grid 容器是否都設了 `min-width: 0`；懷疑是這類問題時，用瀏覽器工具在目標裝置寬度下量測各層 `getBoundingClientRect().width` 找出實際撐大的那一層，不要憑截圖猜測就動手改

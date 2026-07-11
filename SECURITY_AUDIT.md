@@ -43,7 +43,8 @@
 | **daily** | 無 frontmatter 查詢(polaroid.astro 無 build-time `.from()`) | SELECT/INSERT/UPDATE/DELETE 在 [polaroid.astro](src/pages/polaroid.astro:187) |
 | **japan_images** | 無 | INSERT 在 JapanCollection.astro、japan.astro(上傳圖片記錄) |
 | **post_images** | ✅ 2026-07-11 已停用:無資料表查詢,僅 Storage bucket 操作 | 舊 bucket,已無任何程式碼引用(改用下方 `post_media`);原 11 個檔案中僅 1 個被實際使用,已搬遷,其餘孤兒檔案原樣保留未刪 |
-| **post_media**(新增,2026-07-11) | 短文照片私有 bucket,RLS 詳見 PROJECT_ARCHITECTURE.md「短文照片私有化」 | `storage.from('post_media')` upload/move/createSignedUrl 在 posts/index.astro、posts/[id].astro |
+| **post_media**(新增,2026-07-11) | 短文照片/短片/錄音私有 bucket,RLS 詳見 PROJECT_ARCHITECTURE.md「短文照片私有化」「短文媒體支援」 | `storage.from('post_media')` upload/move/createSignedUrl 在 posts/index.astro、posts/[id].astro |
+| **post_media_items**(新增,2026-07-11) | ✅ 建表當下即依 posts 表 SELECT 邏輯設計 RLS(is_admin/is_friend),非事後補修 | 短文的 YouTube 影片、上傳短片、錄音,寫入僅 `is_admin()`,詳見 PROJECT_ARCHITECTURE.md「短文媒體支援」 |
 
 ### 尚未在程式碼中被引用、但資料庫已建立的表(依 PROJECT_ARCHITECTURE.md)
 
