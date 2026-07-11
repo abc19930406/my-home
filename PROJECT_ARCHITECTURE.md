@@ -281,7 +281,7 @@ if (!session) {
 | income_categories | 收入來源（動態管理） |
 | expense_categories | 支出分類（動態管理） |
 | japan_categories | 日本收藏分類（兩層） |
-| japan_items | 日本收藏品項（含 owner_wishlist、owner_quantity；📋 規劃新增 trip_id） |
+| japan_items | 日本收藏品項（含 owner_wishlist、owner_quantity、trip_id；trip_id NULL=一般收藏，有值=歸屬該行程，見 PROJECT_ARCHITECTURE_V2.md 第四節） |
 | allowed_users | 日本收藏白名單（email + display_name） |
 | wishlist_items | 朋友/家人願望清單（含 quantity） |
 | trips | 旅行行程 |

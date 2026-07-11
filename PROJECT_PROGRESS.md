@@ -339,18 +339,29 @@
   - 管理員將一則語錄的 visibility 從 public 改為 friend，更新當下「看起來沒反應」：實際上 Table Editor 確認資料庫已正確變更，且程式碼覆核確認成功提示 toast 有無條件觸發，只是 1.5 秒的提示訊息被使用者切換視窗查資料庫時錯過，非真正的靜默失敗
 - **測試中發現、記錄但未處理的獨立問題（已建立獨立任務卡片，未來可一鍵展開）**：`posts`、`quotes` 兩個頁面登入狀態下的列表排序皆會錯亂——build time 只抓 public 內容排序後烘進靜態 HTML，登入後另外抓的 friends/private 內容透過 `insertAdjacentHTML('afterbegin', ...)` 一律插在最前面，不管實際 `created_at` 早晚，新增項目時也是同樣邏輯插到最前面，導致整體並非真正依發布時間排序。與本次任務的 RLS/isAdmin/寫入檢查修改無關，屬獨立的既有架構限制，同時影響兩個頁面，需要重新設計登入後的資料合併排序邏輯，故未在本次任務內處理
 
+### ✅ V2 階段 3：收藏依行程篩選（2026-07-12，已結案）
+
+- **背景**：`japan_items` 支援歸屬行程，`/trip` 收藏分頁可依行程篩選；架構規劃詳見 PROJECT_ARCHITECTURE_V2.md 第四節
+- **資料庫**：新增 `japan_items.trip_id`（可空，FK → `trips.id`，`ON DELETE SET NULL`——刪除行程時品項自動退回一般收藏，不連帶刪除）；RLS 未改動，SELECT 本就是刻意公開的展示設計、寫入已於任務 G 收斂為僅 `is_admin()`，新欄位不改變保護模型
+- **前端（`JapanCollection.astro`）**：
+  - 篩選為前端邏輯，資料照現行方式全量載入後在瀏覽器端過濾
+  - 管理員新增/編輯品項表單新增「歸屬」下拉（一般收藏 + 行程清單）
+  - 歸屬行程的品項卡片顯示行程名稱徽章，一般收藏不顯示
+  - **與原規劃不同**：原規劃是篩選跟隨「行程」分頁目前選中的行程（透過既有的 `window.currentTripId`/`trip-changed` 掛鉤），且僅管理員可切換篩選範圍。開發驗收時使用者提出調整：(1) 收藏分頁改用完全獨立的行程下拉選單直接選行程，與「行程」分頁選中哪個行程無關；(2) 篩選器開放給所有人使用（含朋友帳號、未登入訪客），不再限管理員。已依新方向重新實作，`window.currentTripId`/`trip-changed` 機制本身未被移除，仍供「行程」分頁自己使用
+  - `japan.astro`、`travel.astro` 兩個凍結頁面完全未修改，diff 為零
+- **驗證結果（2026-07-12，使用者實測）**：未指派品項前顯示與改版前完全一致 ✅；指派/切換/改回一般收藏，卡片徽章與篩選結果皆正確反映 ✅；收藏分頁切換行程即時重篩 ✅；設計調整後的獨立選單與開放對象（管理員/朋友/訪客皆可用）驗證通過 ✅；`/japan` 舊頁面全量顯示、功能照舊 ✅
+
 ---
 
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
 
-1. **收藏分頁依行程篩選**：`japan_items.trip_id` 篩選邏輯（一般收藏 NULL vs 行程收藏的 UI 切換）
-2. **旅行資源子分頁**：優惠券（`travel_coupons`，表已建立）+ 地鐵圖分類化（`travel_subway_maps` 改全域庫 + `trip_subway_categories` 關聯表）
-3. **交通查詢子分頁**：`spot_transport_routes` 表 + 行程內嵌交通方式 UI + AI 輔助搜尋
-4. **協作者權限系統**：`trip_collaborators` 表，雙開關權限（can_edit_wishlist / can_edit_itinerary）+ Sandbox 模式
-5. **AI 助手分頁**：`/api/ai-assistant` Serverless API，含 tool use 寫入功能（add_spot / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）
-6. **舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan
+1. **旅行資源子分頁**：優惠券（`travel_coupons`，表已建立）+ 地鐵圖分類化（`travel_subway_maps` 改全域庫 + `trip_subway_categories` 關聯表）
+2. **交通查詢子分頁**：`spot_transport_routes` 表 + 行程內嵌交通方式 UI + AI 輔助搜尋
+3. **協作者權限系統**：`trip_collaborators` 表，雙開關權限（can_edit_wishlist / can_edit_itinerary）+ Sandbox 模式
+4. **AI 助手分頁**：`/api/ai-assistant` Serverless API，含 tool use 寫入功能（add_spot / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）
+5. **舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan
 7. **程式碼清理階段**（獨立規劃，待全部功能穩定後執行）：統一 Modal 開關/CSS class 命名規則、移除殘留冗餘邏輯
 
 ### 其他規劃中功能
@@ -408,7 +419,7 @@
 | income_categories | 收入來源（動態管理） | ✅ |
 | expense_categories | 支出分類（動態管理） | ✅ |
 | japan_categories | 日本收藏分類（兩層） | ✅ |
-| japan_items | 日本收藏品項（含 owner_wishlist、owner_quantity） | ✅，📋 待新增 trip_id |
+| japan_items | 日本收藏品項（含 owner_wishlist、owner_quantity、trip_id） | ✅ |
 | allowed_users | 日本收藏白名單 | ✅ |
 | wishlist_items | 朋友/家人願望清單（含 quantity） | ✅ |
 | trips | 旅行行程 | ✅ |
@@ -454,7 +465,7 @@
 
 1. 🔴 **最優先**：「OAuth 登入後 UI 間歇性未切換」Heisenbug（見上方「進行中問題」）。第一輪時序診斷已完成（2026-07-11）：嫌犯一、二均排除，trip.astro auth 管線健康，與 DevTools 開關無因果；診斷碼留在線上，等待真實失敗發生時依取證 SOP 抓 log，定案根因後修復,方能確認階段 2.5 真正收尾。2026-07-11 驗證任務 D 時新增一筆疑似同根因家族的觀察（朋友帳號登入 `/trip` 一度被誤判成管理員，方向與原記錄相反），未確認是否同一問題，下次排查時一併納入
 2. 補做「衝突熱點稽核」修復（commit `2317d2d`）的手動驗證：ESC 鍵、Modal 背景點擊是否都能正確關閉並清除 `modal-open`（原定驗證因發現上述問題而中斷）
-3. **階段 3**：japan_items 加入 trip_id 篩選邏輯（收藏依行程篩選）
+3. ~~階段 3：japan_items 加入 trip_id 篩選邏輯（收藏依行程篩選）~~ **✅ 2026-07-12 已完成**，詳見上方「V2 階段 3：收藏依行程篩選」
 4. **階段 4**：trip_collaborators 協作者權限系統
 5. **階段 5**：旅行資源頁面（優惠券 + 地鐵圖分類）
 6. **階段 6**：交通查詢系統（spot_transport_routes + AI 整理）
