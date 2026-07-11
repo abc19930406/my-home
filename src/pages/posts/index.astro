@@ -229,7 +229,10 @@ try {
     (document.getElementById('post-id') as HTMLInputElement).value = '';
     currentImageUrls = [];
     renderPreviews();
-    if (savePostBtn) savePostBtn.textContent = '發布文章';
+    if (savePostBtn) {
+      savePostBtn.textContent = '發布文章';
+      (savePostBtn as HTMLButtonElement).disabled = false;
+    }
   }
 
   let currentImageUrls: string[] = [];
