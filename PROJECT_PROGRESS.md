@@ -327,6 +327,18 @@
   - YouTube 一度「上傳失敗」，事後確認是使用者貼完網址後忘記點「新增」按鈕，非程式問題
 - 至此短文媒體改版任務 C1（私有 bucket）、C2（瀑布流+燈箱）、C3（YouTube/短片/錄音）全數結案；未做項目維持任務排除範圍：頁面內直接錄音、影片轉檔壓縮、既有照片搬進 `post_media_items`
 
+### ✅ 安全修復：語錄（quotes）收斂為三級保護（2026-07-11，隱私修復任務 H，已結案）
+
+- **背景**：`quotes` 表雖然前端表單早就有 public/friends/private 三級選項，但資料庫從未真正把關——任何登入帳號（含朋友）皆可讀寫全部語錄；`fetchPrivateQuotes` 的渲染邏輯把 `isAdmin` 寫死 `true`，只要有 session 就顯示編輯/刪除按鈕、也把 private 語錄一併顯示給朋友看
+- **修復（架構細節見 PROJECT_ARCHITECTURE.md「語錄三級保護架構」）**：
+  - RLS：重用 `is_admin()`/`is_friend()`，SELECT 收斂為 `visibility='public' OR is_admin() OR (visibility='friends' AND is_friend())`，INSERT/UPDATE/DELETE 一律僅 `is_admin()`
+  - 前端：`fetchPrivateQuotes` 的 `isAdmin` 改為真正比對 `session.user.email === adminEmail`（新增 `adminEmail` 透過 `define:vars` 注入，此頁原本沒有這個管道）；update/delete 呼叫補上 `.select()` 檢查受影響筆數，0 筆時明確提示「沒有權限或資料不存在」而非誤報成功
+- **驗證結果（2026-07-11，使用者實測）**：未登入僅見 public 語錄 ✅；朋友帳號看得到 public+friends、看不到 private，friends 語錄卡片不再顯示編輯/刪除按鈕 ✅；管理員三級皆可讀寫，下拉選單三值各測一輪正常 ✅；朋友帳號透過 Console 強行呼叫寫入得到明確「沒有權限」提示而非誤報成功 ✅
+- **過程中的插曲（已釐清，非 bug）**：
+  - 朋友帳號在 **public 語錄卡片**（SSR 渲染）上仍看得到編輯/刪除按鈕、且當下（RLS 未收緊前）能成功寫入——這是既有的、範圍外的 `checkAdmin()` 全域「有 session 即管理員」判斷造成，`.admin-only` class 在編譯時已寫死在 public 卡片 HTML 裡，不受本次 `fetchPrivateQuotes` 修正影響；RLS 收緊後實際寫入已被擋下，僅剩 UI 顯示不精確，記錄於 PROJECT_ARCHITECTURE.md，留待未來一併處理
+  - 管理員將一則語錄的 visibility 從 public 改為 friend，更新當下「看起來沒反應」：實際上 Table Editor 確認資料庫已正確變更，且程式碼覆核確認成功提示 toast 有無條件觸發，只是 1.5 秒的提示訊息被使用者切換視窗查資料庫時錯過，非真正的靜默失敗
+- **測試中發現、記錄但未處理的獨立問題（已建立獨立任務卡片，未來可一鍵展開）**：`posts`、`quotes` 兩個頁面登入狀態下的列表排序皆會錯亂——build time 只抓 public 內容排序後烘進靜態 HTML，登入後另外抓的 friends/private 內容透過 `insertAdjacentHTML('afterbegin', ...)` 一律插在最前面，不管實際 `created_at` 早晚，新增項目時也是同樣邏輯插到最前面，導致整體並非真正依發布時間排序。與本次任務的 RLS/isAdmin/寫入檢查修改無關，屬獨立的既有架構限制，同時影響兩個頁面，需要重新設計登入後的資料合併排序邏輯，故未在本次任務內處理
+
 ---
 
 ## 二、規劃中功能（尚未開始）

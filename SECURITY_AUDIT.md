@@ -27,7 +27,7 @@
 | 資料表 | Build-time / SSR 讀取(烘進 HTML 或每次請求皆讀) | Client-side 讀寫(瀏覽器內執行) |
 |---|---|---|
 | **posts** | ✅ 2026-07-11 已修復:[posts/index.astro:13](src/pages/posts/index.astro:13) `SELECT *`,`.eq('visibility','public')` 過濾,prerender=true(僅烘公開文章)<br>[posts/\[id\].astro](src/pages/posts/[id].astro) SSR 改為查不到即渲染無內容外殼,不再無過濾渲染全文,詳見 PROJECT_PROGRESS.md「隱私修復任務 B」 | UPDATE/INSERT/DELETE 皆在 [posts/index.astro](src/pages/posts/index.astro:313)(313/316/412 行);RLS 已收緊為僅管理員可寫入 |
-| **quotes** | [quotes/index.astro:11](src/pages/quotes/index.astro:11) `SELECT *`,有 `.eq('visibility','public')` 過濾,prerender=true | UPDATE/INSERT/DELETE 在 [quotes/index.astro](src/pages/quotes/index.astro:285)(285/288/409 行) |
+| **quotes** | ✅ 2026-07-11 已修復:[quotes/index.astro:11](src/pages/quotes/index.astro:11) `SELECT *`,有 `.eq('visibility','public')` 過濾,prerender=true | UPDATE/INSERT/DELETE 在 [quotes/index.astro](src/pages/quotes/index.astro)(update/insert/delete 呼叫點);RLS 已收緊為僅 `is_admin()`;前端 `fetchPrivateQuotes` 的 `isAdmin` 判斷已改為真正比對 email,朋友帳號不再誤顯示編輯/刪除按鈕 |
 | **japan_items** | [JapanCollection.astro:24](src/components/JapanCollection.astro:24)、[japan.astro:25](src/pages/japan.astro:25) `SELECT *`,無過濾,prerender=true(嵌入 /trip 與 /japan)——**SELECT 為刻意保留的公開展示設計,不動** | ✅ 2026-07-11 已修復:SELECT/UPDATE/INSERT/DELETE 遍布 JapanCollection.astro、japan.astro(願望清單、數量、收藏品 CRUD),寫入(INSERT/UPDATE/DELETE)RLS 已收緊為僅 `is_admin()` |
 | **japan_categories** | [JapanCollection.astro:14](src/components/JapanCollection.astro:14)、[japan.astro:15](src/pages/japan.astro:15) `SELECT *`,prerender=true——**SELECT 為刻意保留的公開展示設計,不動** | ✅ 2026-07-11 已修復:DELETE/INSERT 在 JapanCollection.astro、japan.astro(分類管理),寫入 RLS 已收緊為僅 `is_admin()` |
 | **trips** | [TripPlanner.astro:13](src/components/TripPlanner.astro:13)、[travel.astro:14](src/pages/travel.astro:14) `SELECT *`,prerender=true | INSERT/UPDATE 在 TripPlanner.astro、travel.astro(行程管理) |
@@ -124,7 +124,7 @@ order by tablename, cmd;
 | **transactions**(✅ 2026-07-11 已修復) | 否 | 否 | ~~🔴 任何登入帳號可讀全部財務明細~~ | ~~🔴 任何登入帳號可 INSERT/UPDATE/DELETE~~ | ~~CRITICAL~~ → 已收斂為僅 `is_admin()` 可讀寫 |
 | **japan_items**(✅ 2026-07-11 寫入已修復,SELECT 維持公開設計) | 🟡 全表可讀(含 owner_wishlist/owner_quantity,刻意保留) | 否 | 全表可讀(不變) | ~~🔴 任何登入帳號可 CRUD 全部品項~~ → 已收斂為僅 `is_admin()` 可寫入 | 寫入已收斂,SELECT 維持設計原狀 |
 | **japan_categories**(✅ 2026-07-11 寫入已修復,SELECT 維持公開設計) | 🟡 全表可讀(taxonomy,刻意保留) | 否 | 全表可讀(不變) | ~~🔴 任何登入帳號可 CRUD~~ → 已收斂為僅 `is_admin()` 可寫入 | 寫入已收斂,SELECT 維持設計原狀 |
-| **quotes** | 🟢 僅 `visibility='public'` | 否 | 🟡 任何登入帳號可讀**全部**語錄(含私人) | 🔴 任何登入帳號可 INSERT/UPDATE/DELETE **任何人的**語錄 | **HIGH** |
+| **quotes**(✅ 2026-07-11 已修復) | 🟢 僅 `visibility='public'` | 否 | ~~🟡 任何登入帳號可讀全部語錄~~ | ~~🔴 任何登入帳號可 INSERT/UPDATE/DELETE 任何人的語錄~~ | ~~HIGH~~ → 已收斂為 public/is_admin()/is_friend() 判斷,寫入僅 is_admin() |
 | **allowed_users**(白名單,✅ 2026-07-11 已修復) | 否 | 否 | ~~🔴 任何登入帳號可讀/改/刪整份白名單~~ | ~~同左(ALL)~~ | ~~HIGH~~ → 已收斂為管理員全讀/非管理員僅讀自己那一列,寫入僅 `is_admin()` |
 | **wishlist_items** | 否 | 否 | 🟡 任何登入帳號可讀**所有人的**願望清單(非僅自己) | 🟢 INSERT/UPDATE/DELETE 均鎖定 `auth.uid()=user_id`,只能動自己的 | **MEDIUM** |
 | **spots / trips / trip_days / day_spots** | 🟡 全表可讀(完整行程、地點、座標) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD 任何行程/景點 | **MEDIUM** |
@@ -138,7 +138,7 @@ order by tablename, cmd;
 ### 明確回答:未登入的陌生人現在能讀到哪些表、寫入哪些表
 
 **能讀(不需要任何帳號,直接呼叫 API 或查看靜態頁面原始碼即可)**:
-~~`posts`(含私人與朋友限定文章的完整內容)~~(✅ 2026-07-11 已修復,現況見下方)、`japan_items`、`japan_categories`、`spots`、`trips`、`trip_days`、`day_spots`、`spot_types`、`spot_subtypes`、`expense_categories`、`income_categories`、`cards`、`status`、`daily`、`quotes`(僅 public 標記的)、`travel_coupons`、`travel_subway_maps`。
+~~`posts`(含私人與朋友限定文章的完整內容)~~(✅ 2026-07-11 已修復,現況見下方)、`japan_items`、`japan_categories`、`spots`、`trips`、`trip_days`、`day_spots`、`spot_types`、`spot_subtypes`、`expense_categories`、`income_categories`、`cards`、`status`、`daily`、~~`quotes`~~(僅 public 標記的,✅ 已修復,非 public 現況見下方)、`travel_coupons`、`travel_subway_maps`。
 
 **posts 現況(2026-07-11 起)**:匿名者只能讀到 `visibility='public'` 的文章;`friends`/`private` 一律讀不到。
 
@@ -148,7 +148,7 @@ order by tablename, cmd;
 
 ### 貫穿多張表的系統性問題:「authenticated」被當成「admin」使用
 
-你的登入設計本來就存在非管理員的登入帳號(Google OAuth 朋友、Email/Password 家人,用於日本收藏願望清單)。~~`posts`~~(✅ 已改為僅 `is_admin()` 可寫入)、~~`allowed_users`~~(✅ 已改為僅 `is_admin()` 可寫入,非管理員 SELECT 也收斂為只讀自己)、~~`transactions`~~(✅ 已改為僅 `is_admin()` 可讀寫)、~~`japan_items`~~、~~`japan_categories`~~(✅ 寫入已改為僅 `is_admin()`,SELECT 維持公開設計不動,均 2026-07-11 修復)、`quotes`、`spots` 系列、`trip_days`、`cards`、`status`、`daily`、`spot_types/subtypes`、`expense/income_categories` 的寫入政策一律只檢查 `auth.role() = 'authenticated'`,**沒有任何一條額外比對是不是管理員本人**。也就是說,任何一個朋友或家人帳號,只要成功登入(哪怕登入目的只是想勾選日本收藏願望清單),理論上就能透過直接呼叫 Supabase API:
+你的登入設計本來就存在非管理員的登入帳號(Google OAuth 朋友、Email/Password 家人,用於日本收藏願望清單)。~~`posts`~~(✅ 已改為僅 `is_admin()` 可寫入)、~~`allowed_users`~~(✅ 已改為僅 `is_admin()` 可寫入,非管理員 SELECT 也收斂為只讀自己)、~~`transactions`~~(✅ 已改為僅 `is_admin()` 可讀寫)、~~`japan_items`~~、~~`japan_categories`~~(✅ 寫入已改為僅 `is_admin()`,SELECT 維持公開設計不動)、~~`quotes`~~(✅ 已改為僅 `is_admin()` 可寫入,SELECT 收斂為 public/is_admin()/is_friend(),均 2026-07-11 修復)、`spots` 系列、`trip_days`、`cards`、`status`、`daily`、`spot_types/subtypes`、`expense/income_categories` 的寫入政策一律只檢查 `auth.role() = 'authenticated'`,**沒有任何一條額外比對是不是管理員本人**。也就是說,任何一個朋友或家人帳號,只要成功登入(哪怕登入目的只是想勾選日本收藏願望清單),理論上就能透過直接呼叫 Supabase API:
 - ~~讀取/刪除你的完整記帳明細~~(✅ 已修復)
 - 新增、竄改或刪除你的語錄(posts 已修復)、~~日本收藏品項與分類~~(✅ 已修復)
 - ~~修改整份 `allowed_users` 白名單~~(✅ 已修復)

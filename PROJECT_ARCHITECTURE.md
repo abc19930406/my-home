@@ -196,6 +196,14 @@ if (!session) {
 - **⚠️ 重要教訓(2026-07-11 執行前稽核發現)**：動工前逐一比對兩張表所有 `.insert()/.update()/.delete()` 呼叫點是否都有 `isAdminUser` 判斷守護,結果發現 `japan_categories` 4 個寫入點中 1 個(新增主分類)、`japan_items` 5 個寫入點中 4 個(新增/編輯品項、切換願望清單、刪除品項),實際上**只靠 CSS `admin-only { display:none }` 隱藏按鈕**,對應的事件處理程式碼裡完全沒有 `isAdminUser` 檢查——因為這些操作是透過**委派事件監聽器**（綁在整個卡片容器上、無條件執行）處理，任何人只要在瀏覽器 Console 對隱藏元素呼叫 `.click()`（不需要先讓它可見）就能觸發請求。**「前端隱藏」與「資料庫規則」是兩件完全獨立的事，看得到 admin-only 的 UI 判斷不代表寫入請求真的被擋住，只有 RLS 才是唯一可靠的防線。新增任何寫入功能時，一律先確認 RLS 是否已限制，不能只靠前端判斷或按鈕隱藏。**（完整比對記錄見 PROJECT_PROGRESS.md「任務 G」）
 - **驗證方式**：管理員寫入正常 + 朋友帳號繞過頁面直接呼叫 API 應被拒絕；DELETE 操作務必用 Table Editor 確認資料實際未變動（PostgREST 對 RLS 擋下的 DELETE 仍回傳 `200/204 success:true`，不能只看回應）
 
+### 語錄(quotes)三級保護架構(2026-07-11 安全修復)
+- **原則**：與 posts 表的 visibility 保護完全同等級,重用 `is_admin()`/`is_friend()`
+- **RLS 層**：SELECT 為 `visibility='public' OR is_admin() OR (visibility='friends' AND is_friend())`;INSERT/UPDATE/DELETE 一律僅 `is_admin()`
+- **前端層(quotes/index.astro)**：
+  - `fetchPrivateQuotes()` 渲染時原本把 `isAdmin` 寫死 `true`,只要有 session(含朋友帳號)就顯示編輯/刪除按鈕；已改為 `session.user.email === adminEmail` 的真正比對,`adminEmail` 透過 `define:vars` 注入(比照其他頁面既有模式)
+  - update/delete 呼叫原本只檢查 `error` 是否為空,補上 `.select()` 檢查受影響筆數,0 筆時明確提示「沒有權限或資料不存在」，insert 呼叫本身已有 `.select().single()`，RLS 擋下 INSERT 會直接拋錯不會靜默，不需額外處理
+- **已知但本次不修的相關問題**：`checkAdmin()` 對「有 session 即視為管理員」的判斷是全站共用的既有模式（其他頁面如 posts/index.astro 也有相同寫法），會讓朋友帳號在**SSR 渲染的 public 語錄卡片**上也看到編輯/刪除按鈕（這些卡片的 `.admin-only` class 是編譯時就寫死的，不受本次 `fetchPrivateQuotes` 修正影響）；RLS 已擋下實際寫入，屬 UI 顯示不精確而非安全漏洞，留待未來一併處理
+
 ---
 
 ## /trip 頁面 Supabase 單一入口架構（重要）
