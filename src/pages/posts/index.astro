@@ -729,46 +729,53 @@ try {
     // 事件已委派至 postsContainer，此處僅需處理權限顯示
   }
 
-  // 4. Client Side: 抓取私密文章並顯示
-  async function fetchPrivatePosts() {
+  // 4. Client Side：登入後改為一次性重抓「全部」文章（public/friends/private，交由 RLS 過濾），
+  // 依 created_at 整體排序重繪，取代舊版「private 內容固定插最前面」的作法。
+  // 舊版問題：(1) private/friends 內容一律排在所有 public 內容之前，不管實際發布時間；
+  // (2) 逐筆 insertAdjacentHTML('afterbegin') 還會讓 private 內容彼此之間的順序反過來。
+  // seq 用來避免 onAuthStateChange 短時間內連續觸發多次時，較舊的回應覆蓋較新的畫面（同 trip.astro 的 authUIUpdateSeq 手法）
+  let postsRefreshSeq = 0;
+  async function refreshPostsList() {
+    const seq = ++postsRefreshSeq;
     const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
     const isAdmin = !!session;
 
     const { data, error } = await supabase
       .from('posts')
       .select('*')
-      .neq('visibility', 'public')
       .order('created_at', { ascending: false });
 
-    if (!error && data && data.length > 0) {
-      const container = document.getElementById('posts-container');
-      const emptyMsg = document.getElementById('empty-msg');
-      if (emptyMsg) emptyMsg.style.display = 'none';
+    if (seq !== postsRefreshSeq) return;
+    if (error || !data) return;
 
-      for (const post of data) {
-        if (document.querySelector(`[data-id="${post.id}"]`)) continue;
+    const container = document.getElementById('posts-container');
+    if (!container) return;
+
+    if (data.length === 0) {
+      container.innerHTML = '<p class="empty-state" id="empty-msg">尚無公開短文</p>';
+    } else {
+      const itemsHtml = await Promise.all(data.map(async (post) => {
         const paths = post.image_urls && post.image_urls.length > 0
           ? post.image_urls
           : (post.image_url ? [post.image_url] : []);
         const { coverUrl, photoCount } = await getCoverInfo(paths);
-        // 再次確認：上面 await 期間，onAuthStateChange 可能已連續觸發另一次 fetchPrivatePosts()
-        // 並搶先插入了同一篇，這裡是插入前的最後把關，避免同一篇重複顯示
-        if (document.querySelector(`[data-id="${post.id}"]`)) continue;
-        const postHtml = createPostHtml(post, isAdmin, coverUrl, photoCount);
-        container?.insertAdjacentHTML('afterbegin', postHtml);
-      }
+        return createPostHtml(post, isAdmin, coverUrl, photoCount);
+      }));
+      if (seq !== postsRefreshSeq) return;
+      container.innerHTML = itemsHtml.join('');
     }
-    
+
     bindActions();
   }
 
   // 監聽 Auth 狀態變化，確保登入跳轉後能即時反應
   supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-      fetchPrivatePosts();
+      refreshPostsList();
     }
   });
 
   // 保留初始呼叫作為備用
-  fetchPrivatePosts();
+  refreshPostsList();
 </script>
