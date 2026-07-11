@@ -189,7 +189,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
             <button class="filter-btn status-btn" id="filter-status-visited" data-status="visited">已去</button>
             
             <!-- ＋ 新增景點 (預設隱藏，登入後由 JS 顯示) -->
-            <button id="btn-open-spot-modal" class="btn-add-spot admin-only" style="display: none;">
+            <button id="btn-open-spot-modal" class="btn-add-spot itinerary-edit-only" style="display: none;">
               <i class="ti ti-plus"></i> 新增景點
             </button>
             
@@ -210,7 +210,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       <div class="map-wrapper">
         <div id="travel-map" class="map-container"></div>
         <!-- 地圖提示文字 (預設隱藏，登入後由 JS 顯示) -->
-        <div id="map-hint-banner" class="map-hint-banner admin-only" style="display: none;">
+        <div id="map-hint-banner" class="map-hint-banner itinerary-edit-only" style="display: none;">
           <i class="ti ti-info-circle"></i> 點擊地圖任意位置可快速新增景點
         </div>
       </div>
@@ -240,7 +240,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           <div id="itinerary-days-list" style="display: flex; flex-direction: column; gap: 8px;">
             <!-- 動態生成天數按鈕 -->
           </div>
-          <button id="btn-add-day" class="btn-add-day admin-only" style="display: none;">
+          <button id="btn-add-day" class="btn-add-day itinerary-edit-only" style="display: none;">
             ＋ 新增一天
           </button>
         </div>
@@ -249,7 +249,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           <div id="itinerary-spots-list" class="spots-list">
             <div class="empty-state">請先選擇左側天數</div>
           </div>
-          <button id="btn-open-wishlist-modal" class="btn-add-itinerary-spot admin-only" style="display: none;">
+          <button id="btn-open-wishlist-modal" class="btn-add-itinerary-spot itinerary-edit-only" style="display: none;">
             ＋ 從想去清單選擇
           </button>
         </div>
@@ -583,6 +583,46 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     let showChainStores = false;
     let isAdminUser = false;
     const adminEmail = window.__ADMIN_EMAIL__ || '';
+    // trip_id -> { can_edit_wishlist, can_edit_itinerary }（V2 階段 4 任務二：協作者權限）
+    let collaboratorTripPermissions = {};
+
+    function canEditItinerary(tripId) {
+      if (isAdminUser) return true;
+      if (!tripId) return false;
+      const perm = collaboratorTripPermissions[tripId];
+      return !!(perm && perm.can_edit_itinerary);
+    }
+
+    function updateItineraryEditUI() {
+      const canEdit = canEditItinerary(currentTripId);
+      document.querySelectorAll('.itinerary-edit-only').forEach(el => {
+        el.style.display = canEdit ? 'inline-flex' : 'none';
+      });
+    }
+
+    async function loadCollaboratorPermissions(currentSession) {
+      if (!currentSession || currentSession.user.email === adminEmail) {
+        collaboratorTripPermissions = {};
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('trip_collaborators')
+          .select('trip_id, can_edit_wishlist, can_edit_itinerary')
+          .ilike('user_email', currentSession.user.email);
+        if (error) throw error;
+        const map = {};
+        (data || []).forEach(row => { map[row.trip_id] = row; });
+        collaboratorTripPermissions = map;
+      } catch (err) {
+        console.warn('⚠️ trip_collaborators 查詢失敗（協作者權限）：', err);
+        collaboratorTripPermissions = {};
+      }
+    }
+
+    window.addEventListener('trip-changed', () => {
+      updateItineraryEditUI();
+    });
 
     // --- 認證 UI 更新邏輯 (提前綁定以避免 Race Condition) ---
     const topAuthGuest = document.getElementById('top-auth-guest');
@@ -600,11 +640,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       if (currentSession && currentSession.user.email === adminEmail) {
         if (currentSeq !== authUIUpdateSeq) return;
         isAdminUser = true;
+        collaboratorTripPermissions = {};
         document.querySelectorAll('.admin-only').forEach(el => {
           el.style.display = 'inline-flex';
         });
         if (topAuthGuest) topAuthGuest.style.display = 'none';
         if (topAuthUser) topAuthUser.style.display = 'block';
+        updateItineraryEditUI();
 
         console.log('🔑 管理員已登入，啟用前台管理介面。');
       } else if (currentSession) {
@@ -638,14 +680,21 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           if (topAuthGuest) topAuthGuest.style.display = 'block';
           if (topAuthUser) topAuthUser.style.display = 'none';
         }
+
+        // 協作者權限查詢（與上方 admin/白名單朋友判斷各自獨立，任何登入者都可能是某行程的協作者）
+        await loadCollaboratorPermissions(currentSession);
+        if (currentSeq !== authUIUpdateSeq) return;
+        updateItineraryEditUI();
       } else {
         if (currentSeq !== authUIUpdateSeq) return;
         isAdminUser = false;
+        collaboratorTripPermissions = {};
         document.querySelectorAll('.admin-only').forEach(el => {
           el.style.display = 'none';
         });
         if (topAuthGuest) topAuthGuest.style.display = 'block';
         if (topAuthUser) topAuthUser.style.display = 'none';
+        updateItineraryEditUI();
       }
     }
 
@@ -848,8 +897,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           openInfoWindow = null;
         }
 
-        // 只有管理員可以點擊地圖新增景點
-        if (!isAdminUser) return;
+        // 只有管理員，或該行程有 can_edit_itinerary 權限的協作者，可以點擊地圖新增景點
+        if (!canEditItinerary(currentTripId)) return;
 
         const lat = e.latLng.lat();
         const lng = e.latLng.lng();
@@ -1320,7 +1369,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       border-radius:8px; font-size:12px;
       text-decoration:none; font-weight:600;
     ">🗺 Google Maps</a>
-    ${isAdminUser ? `
+    ${canEditItinerary(currentTripId) ? `
     <button onclick="window.openSpotModal('${spot.id}')" style="
       flex:1; padding:7px;
       background:#8B7355; color:white;
@@ -1510,8 +1559,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           imagesRow += `</div>`;
         }
 
-        // 管理員按鈕 (編輯/刪除)
-        const adminActions = isAdminUser ? `
+        // 編輯/刪除按鈕（管理員，或該行程有 can_edit_itinerary 權限的協作者）
+        const adminActions = canEditItinerary(currentTripId) ? `
           <div class="spot-admin-actions">
             <button class="btn-spot-icon edit" data-action="edit-spot" data-spot-id="${spot.id}" title="編輯景點">
               <i class="ti ti-pencil"></i>
@@ -1741,7 +1790,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       spotsList?.addEventListener('click', async (e) => {
         const btn = e.target.closest('.btn-itinerary-action');
         if (btn) {
-          if (!isAdminUser) return;
+          if (!canEditItinerary(currentTripId)) return;
           const daySpotId = btn.dataset.id;
           if (btn.classList.contains('delete')) {
             if (confirm('確定從行程中移除此景點？')) {
@@ -1861,10 +1910,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
             <button class="day-btn ${isActive ? 'active' : ''}" data-id="${day.id}" style="flex-grow: 1; min-width: 80px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 10px 8px;">
               第 ${day.day_number} 天
             </button>
-            ${isAdminUser ? `
-              <button class="btn-day-up admin-only" data-id="${day.id}" title="向上移" style="background: none; border: none; font-size: 1rem; cursor: pointer; padding: 2px; color: var(--travel-text-muted); opacity: ${isFirst ? '0.3' : '0.6'}; transition: opacity 0.2s;" ${isFirst ? 'disabled' : ''} onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='${isFirst ? '0.3' : '0.6'}'"><i class="ti ti-arrow-up"></i></button>
-              <button class="btn-day-down admin-only" data-id="${day.id}" title="向下移" style="background: none; border: none; font-size: 1rem; cursor: pointer; padding: 2px; color: var(--travel-text-muted); opacity: ${isLast ? '0.3' : '0.6'}; transition: opacity 0.2s; margin-right: 0px;" ${isLast ? 'disabled' : ''} onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='${isLast ? '0.3' : '0.6'}'"><i class="ti ti-arrow-down"></i></button>
-              <button class="btn-day-delete admin-only" data-id="${day.id}" title="刪除" style="font-size: 1rem; padding: 2px;"><i class="ti ti-trash"></i></button>
+            ${canEditItinerary(currentTripId) ? `
+              <button class="btn-day-up" data-id="${day.id}" title="向上移" style="background: none; border: none; font-size: 1rem; cursor: pointer; padding: 2px; color: var(--travel-text-muted); opacity: ${isFirst ? '0.3' : '0.6'}; transition: opacity 0.2s;" ${isFirst ? 'disabled' : ''} onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='${isFirst ? '0.3' : '0.6'}'"><i class="ti ti-arrow-up"></i></button>
+              <button class="btn-day-down" data-id="${day.id}" title="向下移" style="background: none; border: none; font-size: 1rem; cursor: pointer; padding: 2px; color: var(--travel-text-muted); opacity: ${isLast ? '0.3' : '0.6'}; transition: opacity 0.2s; margin-right: 0px;" ${isLast ? 'disabled' : ''} onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='${isLast ? '0.3' : '0.6'}'"><i class="ti ti-arrow-down"></i></button>
+              <button class="btn-day-delete" data-id="${day.id}" title="刪除" style="font-size: 1rem; padding: 2px;"><i class="ti ti-trash"></i></button>
             ` : ''}
           </div>
         `;
@@ -2002,8 +2051,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
               <div class="spot-name">${spot.name}</div>
               <div class="spot-note">${spot.address || ''}</div>
             </div>
-            ${isAdminUser ? `
-              <div class="spot-actions admin-only">
+            ${canEditItinerary(currentTripId) ? `
+              <div class="spot-actions">
                 ${index > 0 ? `<button class="btn-itinerary-action move-up" data-id="${ds.id}"><i class="ti ti-arrow-up"></i></button>` : `<div style="width: 28px;"></div>`}
                 ${index < daySpotsCache.length - 1 ? `<button class="btn-itinerary-action move-down" data-id="${ds.id}"><i class="ti ti-arrow-down"></i></button>` : `<div style="width: 28px;"></div>`}
                 <button class="btn-itinerary-action delete" data-id="${ds.id}"><i class="ti ti-x"></i></button>
@@ -2303,7 +2352,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       const spotsContainer = document.getElementById('spots-cards-container');
       if (spotsContainer) {
         spotsContainer.addEventListener('click', async (e) => {
-          if (!isAdminUser) return;
+          if (!canEditItinerary(currentTripId)) return;
           
           const editBtn = e.target.closest('[data-action="edit-spot"]');
           if (editBtn) {
