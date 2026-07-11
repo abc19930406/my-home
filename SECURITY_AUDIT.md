@@ -42,7 +42,8 @@
 | **income_categories / expense_categories** | 無 | SELECT 在 ledger.astro |
 | **daily** | 無 frontmatter 查詢(polaroid.astro 無 build-time `.from()`) | SELECT/INSERT/UPDATE/DELETE 在 [polaroid.astro](src/pages/polaroid.astro:187) |
 | **japan_images** | 無 | INSERT 在 JapanCollection.astro、japan.astro(上傳圖片記錄) |
-| **post_images** | 無資料表查詢,僅 Storage bucket 操作 | `storage.from('post_images')` upload/getPublicUrl 在 [posts/index.astro:272](src/pages/posts/index.astro:272) |
+| **post_images** | ✅ 2026-07-11 已停用:無資料表查詢,僅 Storage bucket 操作 | 舊 bucket,已無任何程式碼引用(改用下方 `post_media`);原 11 個檔案中僅 1 個被實際使用,已搬遷,其餘孤兒檔案原樣保留未刪 |
+| **post_media**(新增,2026-07-11) | 短文照片私有 bucket,RLS 詳見 PROJECT_ARCHITECTURE.md「短文照片私有化」 | `storage.from('post_media')` upload/move/createSignedUrl 在 posts/index.astro、posts/[id].astro |
 
 ### 尚未在程式碼中被引用、但資料庫已建立的表(依 PROJECT_ARCHITECTURE.md)
 
@@ -156,7 +157,9 @@ order by tablename, cmd;
 
 ### 待釐清項目
 
-`japan_images` 資料表在程式碼中有寫入操作([JapanCollection.astro:1078](src/components/JapanCollection.astro:1078)、[japan.astro:1074](src/pages/japan.astro:1074)),但**未出現在查詢一的 `pg_tables` 結果中**,因此也沒有對應的 RLS 政策資料。可能原因待確認(例如實際表名不同、或查詢時被遺漏),本次不猜測結論,留待下次查詢時一併確認。另外 Storage bucket(`post_images`、`japan_images`、`travel_images` 等)的存取權限屬 `storage.objects` 表的政策,不在本次查詢範圍內,如需盤點需另外查詢。
+`japan_images` 資料表在程式碼中有寫入操作([JapanCollection.astro:1078](src/components/JapanCollection.astro:1078)、[japan.astro:1074](src/pages/japan.astro:1074)),但**未出現在查詢一的 `pg_tables` 結果中**,因此也沒有對應的 RLS 政策資料。可能原因待確認(例如實際表名不同、或查詢時被遺漏),本次不猜測結論,留待下次查詢時一併確認。
+
+Storage bucket 的存取權限屬 `storage.objects` 表的政策,本次盤點當下不在查詢範圍內。**2026-07-11 更新**:`post_media`(短文照片)已在後續任務中完成 RLS 收緊,詳見 PROJECT_ARCHITECTURE.md「短文照片私有化」。`japan_images`、`travel_images` 等其餘 Storage bucket 仍未盤點,權限現況未知,列入下一輪。
 
 ---
 

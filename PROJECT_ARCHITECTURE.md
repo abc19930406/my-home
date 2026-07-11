@@ -301,11 +301,25 @@ if (!session) {
 - DELETE：用戶只能刪除自己的記錄（auth.uid() = user_id）
 
 ### Storage Buckets
-- post_images（PUBLIC）
+- post_media（PRIVATE，2026-07-11 新增，短文照片專用，見下方「短文照片私有化」章節）
+- post_images（PUBLIC，已停用，短文照片已全數搬遷至 post_media；舊檔案保留未刪除，不再被任何程式碼讀取）
 - japan_images（PUBLIC）
 - travel_images（PUBLIC）
 - travel_coupons（PUBLIC）
 - travel_subway_maps（PUBLIC）
+
+### 短文照片私有化：post_media（2026-07-11 安全修復）
+- **原則**：照片存取權限跟隨所屬文章的 `visibility`，與任務 B 的文字保護同等級——public 文章的照片任何人可讀，friends 文章僅白名單朋友，private 僅管理員
+- **Bucket 設定**：`post_media` 為私有 bucket（Public bucket 關閉），路徑規則固定為 `{post_id}/{檔名}`，第一層目錄即為權限判斷依據
+- **RLS（storage.objects，重用任務 B 的 `is_admin()`/`is_friend()`）**：
+  - SELECT：`is_admin()` 無條件可讀整個 bucket（管理員需要在文章尚未存檔、照片還在 `pending/` 暫存資料夾時就能預覽）；非管理員需路徑解析出的 `post_id` 對應到一篇存在的文章，且 `visibility='public'` 或（`visibility='friends'` 且 `is_friend()`）
+  - INSERT/UPDATE/DELETE：一律僅 `is_admin()`
+- **上傳流程**：新增文章時 `id` 尚未存在，照片先上傳至 `pending/{隨機檔名}`；文章存檔取得真正 `id` 後，程式碼呼叫 Storage 的 `move()` 搬進 `{id}/` 資料夾，並用第二次 `UPDATE` 把最終路徑寫回 `posts.image_url`/`image_urls`。編輯既有文章時 `id` 已知，直接上傳至 `{id}/`，不經過 `pending/`
+- **讀取方式**：`posts.image_url`/`image_urls` 欄位存的是 **bucket 內路徑**，不是網址（簽名網址 1 小時後失效，不能落地存資料庫）。頁面渲染時才呼叫 `createSignedUrl(path, 3600)` 動態換成當下有效的臨時網址：
+  - `posts/[id].astro` SSR（public 文章）：frontmatter 內用 anon key 產生
+  - `posts/[id].astro` 前端（friends/private 文章）：登入後用使用者 session 產生，RLS 自動判權
+  - `posts/index.astro` 列表頁封面縮圖：僅對每篇文章的第一張照片產生簽名網址
+- **搬遷紀錄**：舊 `post_images` bucket 內 11 個檔案，僅 1 個實際被文章引用（id=7），已手動複製至 `post_media/7/`，其餘 10 個為孤兒檔案，未搬遷、未刪除，原樣留在 `post_images`
 
 ---
 
