@@ -4,6 +4,8 @@ import Layout from '../../layouts/Layout.astro';
 import { supabase } from '../../lib/supabase-client';
 import '../../styles/quotes.css';
 
+const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
+
 // 1. Build Time: 抓取 public 語錄
 let publicQuotes = [];
 try {
@@ -170,8 +172,13 @@ try {
   <div id="toast" class="toast"></div>
 </Layout>
 
+<script define:vars={{ adminEmail }} is:inline>
+  window.__ADMIN_EMAIL__ = adminEmail;
+</script>
+
 <script>
   import { supabase } from '../../lib/supabase-client';
+  const adminEmail = window.__ADMIN_EMAIL__ || '';
 
   // 觸發重新部署:改經後端 API 驗證管理員身分,hook 網址不再暴露於前端
   async function triggerDeploy() {
@@ -280,10 +287,18 @@ try {
 
     let error;
     let newQuote: any = null;
+    let noPermission = false;
 
     if (id) {
-      const { error: err } = await supabase.from('quotes').update(quoteData).eq('id', id);
+      // 加 .select() 是為了拿到實際受影響的列：RLS 擋下 UPDATE 時不會回傳錯誤，只會影響 0 筆，
+      // 若只看 error 會誤判成功（此專案已多次遇過同一個坑）
+      const { data: updateData, error: err } = await supabase
+        .from('quotes')
+        .update(quoteData)
+        .eq('id', id)
+        .select();
       error = err;
+      if (!err && (!updateData || updateData.length === 0)) noPermission = true;
     } else {
       const { data, error: err } = await supabase.from('quotes').insert([quoteData]).select().single();
       error = err;
@@ -292,6 +307,9 @@ try {
 
     if (error) {
       alert('儲存失敗');
+      if (saveBtn) (saveBtn as HTMLButtonElement).disabled = false;
+    } else if (noPermission) {
+      alert('沒有權限或資料不存在，未實際變更');
       if (saveBtn) (saveBtn as HTMLButtonElement).disabled = false;
     } else {
       triggerDeploy();
@@ -406,8 +424,13 @@ try {
     if (target.classList.contains('btn-inline-delete')) {
       if (!confirm('確定刪除此語錄？')) return;
       const id = target.dataset.id;
-      const { error } = await supabase.from('quotes').delete().eq('id', id);
-      if (!error) {
+      // 加 .select() 是為了拿到實際受影響的列：RLS 擋下 DELETE 時不會回傳錯誤，只會影響 0 筆
+      const { data: deleteData, error } = await supabase.from('quotes').delete().eq('id', id).select();
+      if (error) {
+        alert('刪除失敗：' + error.message);
+      } else if (!deleteData || deleteData.length === 0) {
+        alert('沒有權限或資料不存在，未實際刪除');
+      } else {
         showToast('已刪除');
         target.closest('.quote-card')?.remove();
         triggerDeploy();
@@ -419,6 +442,10 @@ try {
   async function fetchPrivateQuotes() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
+
+    // 朋友帳號也會有 session，必須實際比對 email 才是真正的管理員，
+    // 不能只看「有沒有登入」——否則朋友也會在卡片上看到編輯/刪除按鈕
+    const isAdmin = session.user.email === adminEmail;
 
     const { data, error } = await supabase
       .from('quotes')
@@ -433,7 +460,7 @@ try {
 
       data.forEach(quote => {
         if (document.querySelector(`.quote-card[data-id="${quote.id}"]`)) return;
-        const html = createQuoteHtml(quote, true, 0);
+        const html = createQuoteHtml(quote, isAdmin, 0);
         grid?.insertAdjacentHTML('afterbegin', html);
       });
     }
