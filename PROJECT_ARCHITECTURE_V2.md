@@ -176,21 +176,26 @@
 - 所有行程、所有收藏品、AI 助手 — 完整存取權限
 - ⚠️ 曾發生權限漏洞：`updateAuthUI` 一度未比對 email，只要有 session 即無條件設為管理員，已修正為嚴格比對 `currentSession.user.email === adminEmail`
 
-### 6.2 協作者（trip_collaborators）📋 規劃中
+### 6.2 協作者（trip_collaborators）🔶 地基完成，權限執行未做（2026-07-12，V2 階段 4 任務一）
 
-新表 `trip_collaborators`：
+表 `trip_collaborators`（已建立）：
 
 | 欄位 | 說明 |
 |------|------|
-| id | uuid |
-| trip_id | 關聯 trips |
-| user_email | 協作者 email（白名單比對沿用 ilike） |
-| can_edit_wishlist | boolean，是否可瀏覽/標記/調整收藏願望清單 |
-| can_edit_itinerary | boolean，是否可編輯該行程的地圖/每日行程 |
+| id | uuid，PK |
+| trip_id | uuid，NOT NULL，FK → trips（`ON DELETE CASCADE`） |
+| user_email | text，NOT NULL，寫入前 trim + 轉小寫 |
+| can_edit_wishlist | boolean，預設 false，是否可瀏覽/標記/調整收藏願望清單 |
+| can_edit_itinerary | boolean，預設 false，是否可編輯該行程的地圖/每日行程 |
+| created_at | timestamptz，預設 now() |
+
+UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=lower(auth.jwt()->>'email')`（協作者查得到自己那一列）；INSERT/UPDATE/DELETE 一律僅 `is_admin()`（重用既有 `public.is_admin()`）。
 
 - 兩個權限**獨立開關**，可任意組合（例如：某人只能調整願望清單，不能改行程）
 - 每個行程可指定不同協作者與權限組合
-- 協作者登入後僅看到「行程」「收藏」分頁（依權限決定可否編輯），無「AI」分頁，Sandbox 模式生效
+- **管理員 UI 已上線**（`TripPlanner.astro`）：行程標題旁 👥 圖示（`admin-only`）開啟 Modal（`travel-collaborators-modal`），可對目前選中行程新增/移除協作者、切換兩個開關；三種關閉路徑（按鈕/背景/ESC）皆會清除 `body.modal-open`；寫入操作皆檢查受影響筆數，RLS 擋下時明確提示而非誤報成功
+- ⚠️ **本階段僅完成地基，尚未落實任何實際權限效果**：`can_edit_wishlist`/`can_edit_itinerary` 這兩個欄位目前只是被記錄下來，`spots`/`trip_days`/`day_spots`/`japan_items` 等表的 RLS **完全沒有讀取這兩個欄位**，新增協作者此時不會讓對方獲得任何額外的實際寫入權限。權限執行（讓協作者依開關狀態真的能編輯對應資料）與 Sandbox 模式為後續任務（本規劃編號的另外兩個子任務）
+- 協作者登入後屆時將僅看到「行程」「收藏」分頁（依權限決定可否編輯），無「AI」分頁，Sandbox 模式生效（規劃中，未實作）
 
 ### 6.3 一般收藏（trip_id IS NULL）
 
@@ -209,7 +214,7 @@
 | travel_subway_maps | ✅ 已建立，需調整 | 地鐵圖，移除 trip_id，改用 category 分組 |
 | trip_subway_categories | 📋 | trip_id + category，行程關聯的地鐵圖分類 |
 | spot_transport_routes | 📋 | origin_spot_id + destination_spot_id + 多筆交通方式（mode/duration/cost/note/timetable_url/subway_map_category） |
-| trip_collaborators | 📋 | trip_id + user_email + can_edit_wishlist + can_edit_itinerary |
+| trip_collaborators | ✅ 已建立（2026-07-12） | trip_id + user_email + can_edit_wishlist + can_edit_itinerary，RLS 已設定，管理員 UI 已上線，權限尚未在其他表執行 |
 
 ### 7.2 既有資料表異動
 
@@ -237,14 +242,14 @@
 | 2 | 行程子分頁遷移：地圖、行程模式、連鎖店功能遷移至 TripPlanner.astro | ✅ 已完成 |
 | 2.5 | Supabase 單一入口架構重構 + Race Condition 修正（原規劃外，因應實作過程發現的問題而新增） | 🔶 大致完成，有未解決問題待釐清 |
 | 3 | 收藏分頁整合：japan_items.trip_id、收藏分頁顯示邏輯、一般收藏 vs 行程收藏 | ✅ 已完成（2026-07-12） |
-| 4 | 協作者權限系統：trip_collaborators、雙開關權限、Sandbox 模式 | 📋 待開始 |
+| 4 | 協作者權限系統：trip_collaborators、雙開關權限、Sandbox 模式（共三個子任務，任務一已完成） | 🔶 進行中（任務一：地基與管理員 UI ✅ 2026-07-12；任務二：權限落實、任務三：Sandbox 模式 📋 待開始） |
 | 5 | 資源子分頁：優惠券、地鐵圖分類化、trip_subway_categories | 📋 待開始 |
 | 6 | 交通查詢子分頁：spot_transport_routes、行程內嵌交通方式 UI | 📋 待開始 |
 | 7 | AI 助手（只讀）：/api/ai-assistant，讀取行程/收藏資料並回答問題 | 📋 待開始 |
 | 8 | AI 工具逐個開放：add_spot、toggle_wishlist 等寫入工具 | 📋 待開始 |
 | 9 | 程式碼清理與重構：統一 Modal/CSS 命名規則、評估舊頁面下線 | 📋 待開始（待功能全部穩定後執行） |
 
-> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節。
+> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 任務一的實作記錄與盤點回報，見 PROJECT_PROGRESS.md「V2 階段 4 任務一」章節。
 
 ---
 

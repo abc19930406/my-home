@@ -358,6 +358,18 @@
   - `japan.astro`、`travel.astro` 兩個凍結頁面完全未修改，diff 為零
 - **驗證結果（2026-07-12，使用者實測）**：未指派品項前顯示與改版前完全一致 ✅；指派/切換/改回一般收藏，卡片徽章與篩選結果皆正確反映 ✅；收藏分頁切換行程即時重篩 ✅；設計調整後的獨立選單與開放對象（管理員/朋友/訪客皆可用）驗證通過 ✅；`/japan` 舊頁面全量顯示、功能照舊 ✅
 
+### ✅ V2 階段 4 任務一：協作者權限系統地基（2026-07-12，已結案，共三個子任務，本次僅第一個）
+
+- **背景**：階段 4 規劃建立 `trip_collaborators` 表，讓每個行程可指定協作者並給予「調整願望清單」「編輯行程」兩個獨立權限開關；規劃詳見 PROJECT_ARCHITECTURE_V2.md 第六節。本任務範圍**只建地基**（資料表 + RLS + 管理員管理 UI），刻意不落實任何實際權限效果——新增協作者此時不會讓對方獲得任何額外寫入權限，是預期行為
+- **執行前盤點（唯讀，供後續兩個子任務設計參考）**：
+  - `spots` 表已有 `trip_id`（uuid，FK → `trips.id`），是景點的唯一歸屬欄位；但該欄位資料庫層**可為 NULL**，`TripPlanner.astro` 的 `spotPayload`（約第 2864 行）目前每次寫入都會帶 `trip_id`，實務上不會留空——與 `japan_items.trip_id`（NULL 是刻意設計的「一般收藏」）意義不同，這裡的可空比較像遺留而非刻意設計，留意未來若要以「景點屬於哪個行程」做協作者權限判斷的邊界情況
+  - `day_spots` 只有 `spot_id → spots.id`、`day_id → trip_days.id` 兩條獨立外鍵，**資料庫層沒有任何約束驗證「spot 的 trip_id」與「day 所屬 trip_days 的 trip_id」一致**，也沒有 UNIQUE 擋住同一個 spot_id 出現在多筆 day_spots。目前是靠前端（`TripPlanner.astro` 第 1980 行，選點清單過濾 `spot.trip_id == currentTripId`）限制使用者只能把自己行程的景點排進自己行程的天數，繞過前端理論上可讓一個 spot 被跨行程引用。屬記錄性質，本次任務範圍不修
+  - `TripPlanner.astro` 新增/編輯景點寫入的欄位（`spotPayload`）：`trip_id`、`name`、`place_id`、`spot_type_id`、`spot_subtype_id`、`address`、`lat`、`lng`、`open_hours`、`price`、`note`、`status`、`rating`、`images`，共 13 個；`spots.category`/`spots.icon`（DB 為 `NOT NULL`，有預設值）從未被前端寫入，一律吃預設值 `'景點'`/`'📍'`，推測是被 `spot_type_id`/`spot_subtype_id` 兩層分類系統取代後尚未清理的舊欄位
+- **資料庫**：新增 `trip_collaborators`（`id` uuid PK、`trip_id` uuid NOT NULL FK→`trips.id` `ON DELETE CASCADE`、`user_email` text NOT NULL、`can_edit_wishlist`/`can_edit_itinerary` boolean 預設 false、`created_at`，`UNIQUE(trip_id, user_email)`）；RLS 重用既有 `public.is_admin()`：SELECT 為 `is_admin() OR lower(user_email)=lower(auth.jwt()->>'email')`（協作者可讀到自己那一列），INSERT/UPDATE/DELETE 一律僅 `is_admin()`
+- **前端（`TripPlanner.astro`）**：行程標題（「景點清單」旁）新增 👥 圖示按鈕（`admin-only`），開啟 `travel-collaborators-modal`：列出目前選中行程的協作者（email + 兩個開關 + 移除鈕），下方表單可新增協作者（email 前端 trim + 轉小寫）；新增/切換開關/移除三種寫入操作皆用 `.select()` 檢查受影響筆數，0 筆時明確提示「沒有權限或資料不存在」而非誤報成功；Modal 三種關閉路徑（按鈕、背景點擊、ESC）統一收斂到 `closeCollaboratorsModal()`，皆會清除 `body.modal-open`；Modal ID/class 加 `travel-` 前綴
+- **驗證結果（2026-07-12，使用者實測）**：管理員新增協作者、切換兩個開關、移除再重新加入，清單皆正確反映 ✅；朋友帳號登入看不到協作者管理入口，Console 直查 `trip_collaborators` 只回傳自己那一列，寫入被拒且提示正確 ✅；Modal 三種關閉方式後頁面捲動正常 ✅；`/japan`、`/travel` 凍結頁面完全未修改，diff 為零
+- **明確排除（留待階段 4 後續兩個子任務）**：`can_edit_wishlist`/`can_edit_itinerary` 兩個欄位目前只是被記錄，`spots`/`trip_days`/`day_spots`/`japan_items` 等表的 RLS 完全沒有讀取這兩個欄位，協作者此時仍無法編輯任何東西；Sandbox 模式未開發
+
 ---
 
 ## 二、規劃中功能（尚未開始）
@@ -366,7 +378,7 @@
 
 1. **旅行資源子分頁**：優惠券（`travel_coupons`，表已建立）+ 地鐵圖分類化（`travel_subway_maps` 改全域庫 + `trip_subway_categories` 關聯表）
 2. **交通查詢子分頁**：`spot_transport_routes` 表 + 行程內嵌交通方式 UI + AI 輔助搜尋
-3. **協作者權限系統**：`trip_collaborators` 表，雙開關權限（can_edit_wishlist / can_edit_itinerary）+ Sandbox 模式
+3. **協作者權限系統**：~~`trip_collaborators` 表~~ **✅ 2026-07-12 已建立（任務一）**，剩餘兩個子任務待開始——雙開關權限**實際執行**（can_edit_wishlist / can_edit_itinerary 目前只記錄未生效）+ Sandbox 模式
 4. **AI 助手分頁**：`/api/ai-assistant` Serverless API，含 tool use 寫入功能（add_spot / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）
 5. **舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan
 6. **程式碼清理階段**（獨立規劃，待全部功能穩定後執行）：統一 Modal 開關/CSS class 命名規則、移除殘留冗餘邏輯
@@ -439,7 +451,7 @@
 | travel_subway_maps | 地鐵圖 | ✅ 已建立，📋 待調整為全域分類庫（移除 trip_id） |
 | trip_subway_categories | trip_id + category，行程關聯的地鐵圖分類 | 📋 規劃中 |
 | spot_transport_routes | 景點間交通方式（origin/destination/mode/duration/cost/note/timetable_url/subway_map_category） | 📋 規劃中 |
-| trip_collaborators | trip_id + user_email + can_edit_wishlist + can_edit_itinerary | 📋 規劃中 |
+| trip_collaborators | trip_id + user_email + can_edit_wishlist + can_edit_itinerary | ✅ 已建立（2026-07-12，RLS 已設定，管理員 UI 已上線，權限尚未在其他表執行） |
 
 ### Storage Buckets
 
@@ -473,7 +485,7 @@
 1. 🔴 **最優先**：「OAuth 登入後 UI 間歇性未切換」Heisenbug（見上方「進行中問題」）。第一輪時序診斷已完成（2026-07-11）：嫌犯一、二均排除，trip.astro auth 管線健康，與 DevTools 開關無因果；診斷碼留在線上，等待真實失敗發生時依取證 SOP 抓 log，定案根因後修復,方能確認階段 2.5 真正收尾。2026-07-11 驗證任務 D 時新增一筆疑似同根因家族的觀察（朋友帳號登入 `/trip` 一度被誤判成管理員，方向與原記錄相反），未確認是否同一問題，下次排查時一併納入
 2. 補做「衝突熱點稽核」修復（commit `2317d2d`）的手動驗證：ESC 鍵、Modal 背景點擊是否都能正確關閉並清除 `modal-open`（原定驗證因發現上述問題而中斷）
 3. ~~階段 3：japan_items 加入 trip_id 篩選邏輯（收藏依行程篩選）~~ **✅ 2026-07-12 已完成**，詳見上方「V2 階段 3：收藏依行程篩選」
-4. **階段 4**：trip_collaborators 協作者權限系統
+4. **階段 4**：協作者權限系統，任務一（trip_collaborators 資料表+管理員管理 UI）**✅ 2026-07-12 已完成**，詳見上方「V2 階段 4 任務一」；剩餘：任務二（在 spots/trip_days/day_spots/japan_items 等表的 RLS 中實際執行 can_edit_wishlist/can_edit_itinerary 權限）、任務三（Sandbox 模式）
 5. **階段 5**：旅行資源頁面（優惠券 + 地鐵圖分類）
 6. **階段 6**：交通查詢系統（spot_transport_routes + AI 整理）
 7. **階段 7-8**：AI 助手分頁與 Serverless API 串接
