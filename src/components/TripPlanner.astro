@@ -222,6 +222,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           <button id="btn-edit-trip" class="admin-only" style="display: none; background: transparent; border: none; font-size: 1rem; cursor: pointer; color: var(--travel-text-muted); margin-left: 8px;" title="編輯行程">
             <i class="ti ti-pencil"></i>
           </button>
+          <button id="btn-manage-collaborators" class="admin-only" style="display: none; background: transparent; border: none; font-size: 1rem; cursor: pointer; color: var(--travel-text-muted); margin-left: 4px;" title="管理協作者">
+            <i class="ti ti-users"></i>
+          </button>
         </h3>
         <div class="spots-list" id="spots-cards-container">
           <!-- JS 將動態渲染過濾後的景點 -->
@@ -475,6 +478,47 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       </div>
     </div>
   </div>
+
+  <!-- ==========================================
+       彈出視窗 4：管理行程協作者 Modal（V2 階段 4 任務一）
+       ========================================== -->
+  <div id="travel-collaborators-modal" class="travel-modal-overlay modal-overlay">
+    <div class="modal-box" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3>👥 管理協作者</h3>
+        <button type="button" class="btn-modal-close" id="btn-collaborators-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="travel-collaborators-list" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;">
+          <!-- JS 動態渲染 -->
+        </div>
+        <hr style="margin: 16px 0; border: none; border-top: 1px dashed var(--travel-border);" />
+        <form id="add-collaborator-form" style="display: flex; flex-direction: column; gap: 8px;">
+          <input
+            type="email"
+            id="new-collaborator-email"
+            placeholder="協作者 email"
+            required
+            autocomplete="off"
+            style="width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--travel-border); font-size: 0.9rem; box-sizing: border-box;"
+          />
+          <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; cursor: pointer;">
+              <input type="checkbox" id="new-collaborator-wishlist" /> 可調整願望清單
+            </label>
+            <label style="display: flex; align-items: center; gap: 4px; font-size: 0.85rem; cursor: pointer;">
+              <input type="checkbox" id="new-collaborator-itinerary" /> 可編輯行程
+            </label>
+          </div>
+          <button type="submit" class="btn-primary" style="align-self: flex-end; padding: 6px 16px;">＋ 新增協作者</button>
+        </form>
+        <p style="font-size: 0.78rem; color: var(--travel-text-muted); margin-top: 12px; line-height: 1.5;">
+          ⚠️ 目前新增協作者尚不會產生任何實際權限效果（權限執行為後續開發項目），此處僅為管理名單。
+        </p>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast 訊息通知 -->
   <div id="toast" class="toast">已成功儲存</div>
 
@@ -3211,6 +3255,166 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         }
       });
 
+      // ==========================================
+      // 11. Modal 互動與控制：協作者 (Collaborators, V2 階段 4 任務一)
+      // 本階段僅管理協作者名單，尚未在其他表的 RLS 中「執行」can_edit_wishlist / can_edit_itinerary
+      // ==========================================
+      const collaboratorsModal = document.getElementById('travel-collaborators-modal');
+      const btnManageCollaborators = document.getElementById('btn-manage-collaborators');
+      const btnCollaboratorsClose = document.getElementById('btn-collaborators-modal-close');
+      const collaboratorsListEl = document.getElementById('travel-collaborators-list');
+      const addCollaboratorForm = document.getElementById('add-collaborator-form');
+
+      async function loadCollaborators() {
+        if (!collaboratorsListEl) return;
+        collaboratorsListEl.innerHTML = '<div class="empty-state">載入中...</div>';
+        const { data, error } = await supabase
+          .from('trip_collaborators')
+          .select('*')
+          .eq('trip_id', currentTripId)
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          collaboratorsListEl.innerHTML = '<div class="empty-state">載入協作者失敗</div>';
+          console.error('載入協作者失敗:', error);
+          return;
+        }
+
+        renderCollaborators(data || []);
+      }
+
+      function renderCollaborators(list) {
+        if (!collaboratorsListEl) return;
+        if (list.length === 0) {
+          collaboratorsListEl.innerHTML = '<div class="empty-state">尚無協作者</div>';
+          return;
+        }
+
+        collaboratorsListEl.innerHTML = list.map(c => `
+          <div class="collaborator-row" data-id="${c.id}" style="display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--travel-border); border-radius: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+              <strong style="font-size: 0.9rem; word-break: break-all;">${c.user_email}</strong>
+              <button type="button" class="btn-collaborator-remove" data-id="${c.id}" style="background: none; border: none; color: #c0392b; cursor: pointer; font-size: 0.95rem; flex-shrink: 0;" title="移除協作者"><i class="ti ti-trash"></i></button>
+            </div>
+            <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+              <label style="display: flex; align-items: center; gap: 4px; font-size: 0.8rem; cursor: pointer;">
+                <input type="checkbox" class="collaborator-toggle-wishlist" data-id="${c.id}" ${c.can_edit_wishlist ? 'checked' : ''} /> 可調整願望清單
+              </label>
+              <label style="display: flex; align-items: center; gap: 4px; font-size: 0.8rem; cursor: pointer;">
+                <input type="checkbox" class="collaborator-toggle-itinerary" data-id="${c.id}" ${c.can_edit_itinerary ? 'checked' : ''} /> 可編輯行程
+              </label>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      function openCollaboratorsModal() {
+        if (!currentTripId) {
+          showToast('請先選擇旅行行程');
+          return;
+        }
+        addCollaboratorForm?.reset();
+        loadCollaborators();
+        collaboratorsModal?.classList.add('show');
+        document.body.classList.add('modal-open');
+      }
+
+      const closeCollaboratorsModal = () => {
+        collaboratorsModal?.classList.remove('show');
+        document.body.classList.remove('modal-open');
+      };
+
+      btnManageCollaborators?.addEventListener('click', openCollaboratorsModal);
+      btnCollaboratorsClose?.addEventListener('click', closeCollaboratorsModal);
+      collaboratorsModal?.addEventListener('click', (e) => {
+        if (e.target === collaboratorsModal) closeCollaboratorsModal();
+      });
+
+      addCollaboratorForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const emailInput = document.getElementById('new-collaborator-email');
+        const wishlistInput = document.getElementById('new-collaborator-wishlist');
+        const itineraryInput = document.getElementById('new-collaborator-itinerary');
+
+        const user_email = (emailInput.value || '').trim().toLowerCase();
+        if (!user_email) return;
+
+        const payload = {
+          trip_id: currentTripId,
+          user_email,
+          can_edit_wishlist: !!wishlistInput.checked,
+          can_edit_itinerary: !!itineraryInput.checked
+        };
+
+        try {
+          const { data, error } = await supabase
+            .from('trip_collaborators')
+            .insert([payload])
+            .select();
+
+          if (error) throw error;
+          if (!data || data.length === 0) {
+            alert('新增協作者失敗：沒有權限或資料未寫入');
+            return;
+          }
+
+          addCollaboratorForm.reset();
+          showToast('已新增協作者');
+          await loadCollaborators();
+        } catch (err) {
+          alert('新增協作者失敗：' + err.message);
+        }
+      });
+
+      collaboratorsListEl?.addEventListener('click', async (e) => {
+        const removeBtn = e.target.closest('.btn-collaborator-remove');
+        if (!removeBtn) return;
+
+        const id = removeBtn.dataset.id;
+        if (!confirm('確定要移除這位協作者嗎？')) return;
+
+        const { data, error } = await supabase
+          .from('trip_collaborators')
+          .delete()
+          .eq('id', id)
+          .select();
+
+        if (error) {
+          alert('移除協作者失敗：' + error.message);
+          return;
+        }
+        if (!data || data.length === 0) {
+          alert('移除協作者失敗：沒有權限或資料不存在');
+          return;
+        }
+        showToast('已移除協作者');
+        await loadCollaborators();
+      });
+
+      collaboratorsListEl?.addEventListener('change', async (e) => {
+        const target = e.target;
+        const isWishlistToggle = target.classList.contains('collaborator-toggle-wishlist');
+        const isItineraryToggle = target.classList.contains('collaborator-toggle-itinerary');
+        if (!isWishlistToggle && !isItineraryToggle) return;
+
+        const id = target.dataset.id;
+        const field = isWishlistToggle ? 'can_edit_wishlist' : 'can_edit_itinerary';
+        const value = target.checked;
+
+        const { data, error } = await supabase
+          .from('trip_collaborators')
+          .update({ [field]: value })
+          .eq('id', id)
+          .select();
+
+        if (error || !data || data.length === 0) {
+          target.checked = !value; // 還原
+          alert('更新權限失敗：' + (error ? error.message : '沒有權限或資料不存在'));
+          return;
+        }
+        showToast('已更新權限');
+      });
+
       // ESC 鍵關閉所有 Modal
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
@@ -3220,6 +3424,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           closeTypeModal();
           closeWishlistModal();
           closeSpotDetailModal();
+          closeCollaboratorsModal();
         }
       });
     };
