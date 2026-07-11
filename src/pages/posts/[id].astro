@@ -8,23 +8,17 @@ import '../../styles/posts.css';
 
 const { id } = Astro.params;
 
-let post = null;
-let htmlContent = '';
-
-const { data, error } = await supabase
+// SSR 一律以 anon key 查詢:RLS 生效後,匿名/無 session 的 SSR 只查得到 public 文章。
+// 查不到(不論是真的不存在、或無權限)一律不揭露差異,交由下方渲染成「需要登入」外殼。
+const { data: post } = await supabase
   .from('posts')
   .select('*')
   .eq('id', id)
   .single();
 
-if (error || !data) {
-  return Astro.redirect('/404');
-}
-
-// Server-side: 只抓資料不檢查權限，交給前端處理
-
-post = data;
-htmlContent = await marked.parse((data.content || '').replace(/\n/g, '\n\n'));
+const htmlContent = post
+  ? await marked.parse((post.content || '').replace(/\n/g, '\n\n'))
+  : '';
 
 const visibilityMap = {
   public: { text: '公開', color: 'var(--tag-public)' },
@@ -33,7 +27,7 @@ const visibilityMap = {
 };
 ---
 
-<Layout title={post?.title || '載入中...'}>
+<Layout title={post?.title || '短文'}>
   <div class="bg-layer bg-day"></div>
   <div class="bg-layer bg-night"></div>
   <div class="halo-sun"></div>
@@ -49,56 +43,57 @@ const visibilityMap = {
             <a href="/posts" class="nav-link">← 返回短文集</a>
           </nav>
 
-          <article id="post-article" style="display: none;">
-            {post ? (
-              <>
-                <div class="post-detail-header">
-                  <div class="post-tag" style={`border-color: ${visibilityMap[post.visibility].color}; color: ${visibilityMap[post.visibility].color};`}>
-                    {visibilityMap[post.visibility].text}
-                  </div>
-                  <h1 class="post-detail-title">{post.title}</h1>
-                  <div class="post-detail-meta">
-                    {post.weather && <span>{post.weather} ・ </span>}
-                    <span>{new Date(post.created_at).toLocaleDateString('zh-TW')}</span>
-                    <span> ・ 閱讀約 {post.reading_time} 分鐘</span>
-                  </div>
+          {post ? (
+            <article id="post-article">
+              <div class="post-detail-header">
+                <div class="post-tag" style={`border-color: ${visibilityMap[post.visibility].color}; color: ${visibilityMap[post.visibility].color};`}>
+                  {visibilityMap[post.visibility].text}
                 </div>
+                <h1 class="post-detail-title">{post.title}</h1>
+                <div class="post-detail-meta">
+                  {post.weather && <span>{post.weather} ・ </span>}
+                  <span>{new Date(post.created_at).toLocaleDateString('zh-TW')}</span>
+                  <span> ・ 閱讀約 {post.reading_time} 分鐘</span>
+                </div>
+              </div>
 
-                {/* 圖片展示區塊 (幻燈片) */}
-                {(post.image_urls && post.image_urls.length > 0) ? (
-                  <div class="post-slideshow">
-                    {post.image_urls.map((url: string, index: number) => (
-                      <div class="slide" data-index={index}>
-                        <img src={url} alt={post.title} />
+              {(post.image_urls && post.image_urls.length > 0) ? (
+                <div class="post-slideshow">
+                  {post.image_urls.map((url: string, index: number) => (
+                    <div class="slide" data-index={index}>
+                      <img src={url} alt={post.title} />
+                    </div>
+                  ))}
+
+                  {post.image_urls.length > 1 && (
+                    <>
+                      <button class="ss-prev" id="prevSlide">&#10094;</button>
+                      <button class="ss-next" id="nextSlide">&#10095;</button>
+                      <div class="ss-dots-container">
+                        {post.image_urls.map((_: any, index: number) => (
+                          <span class="ss-dot" data-index={index}></span>
+                        ))}
                       </div>
-                    ))}
-                    
-                    {post.image_urls.length > 1 && (
-                      <>
-                        <button class="ss-prev" id="prevSlide">&#10094;</button>
-                        <button class="ss-next" id="nextSlide">&#10095;</button>
-                        <div class="ss-dots-container">
-                          {post.image_urls.map((_: any, index: number) => (
-                            <span class="ss-dot" data-index={index}></span>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : post.image_url && (
-                  <div class="post-image-container">
-                    <img src={post.image_url} alt={post.title} class="post-main-image" />
-                  </div>
-                )}
-
-                <div class="post-detail-content" id="post-body">
-                  <div set:html={htmlContent} />
+                    </>
+                  )}
                 </div>
-              </>
-            ) : (
-              <p class="empty-state">找不到這篇文章</p>
-            )}
-          </article>
+              ) : post.image_url && (
+                <div class="post-image-container">
+                  <img src={post.image_url} alt={post.title} class="post-main-image" />
+                </div>
+              )}
+
+              <div class="post-detail-content" id="post-body">
+                <div set:html={htmlContent} />
+              </div>
+            </article>
+          ) : (
+            <div id="post-locked" class="post-locked-shell">
+              <p class="empty-state">🔒 此文章需要登入檢視</p>
+              <a href={`/login?from=/posts/${id}`} id="post-login-link" class="btn-post-login">🔑 登入</a>
+              <div id="post-client-container"></div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -107,39 +102,16 @@ const visibilityMap = {
   </div>
 </Layout>
 
-<script is:inline define:vars={{ post }}>
+<script define:vars={{ id }} is:inline>
   // 1. 處理主題 (防止閃爍)
   const savedTheme = localStorage.getItem('tcr-theme') || 'day';
   document.documentElement.classList.toggle('theme-night', savedTheme === 'night');
   document.body.classList.add('posts-page');
-  window.__POST__ = post;
+  window.__POST_ID__ = id;
 </script>
 
 <script>
   import { supabase } from '../../lib/supabase-client';
-
-  const post = window.__POST__;
-  const postArticle = document.getElementById('post-article');
-
-  async function checkPermission() {
-    if (!postArticle) return;
-
-    if (post.visibility === 'public') {
-      postArticle.style.display = 'block';
-      initSlideshow();
-      return;
-    }
-
-    // 非公開文章，檢查 session
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) {
-      window.location.href = `/login?from=/posts/${post.id}`;
-      return;
-    }
-
-    postArticle.style.display = 'block';
-    initSlideshow();
-  }
 
   function initSlideshow() {
     let slideIndex = 0;
@@ -150,15 +122,15 @@ const visibilityMap = {
 
     if (slides.length === 0) return;
 
-    function showSlides(n: number) {
+    function showSlides(n) {
       if (n >= slides.length) slideIndex = 0;
       else if (n < 0) slideIndex = slides.length - 1;
       else slideIndex = n;
-      
-      slides.forEach(s => (s as HTMLElement).style.display = 'none');
-      dots.forEach(d => d.classList.remove('active'));
-      
-      (slides[slideIndex] as HTMLElement).style.display = 'block';
+
+      slides.forEach((s) => { s.style.display = 'none'; });
+      dots.forEach((d) => d.classList.remove('active'));
+
+      slides[slideIndex].style.display = 'block';
       if (dots[slideIndex]) dots[slideIndex].classList.add('active');
     }
 
@@ -178,11 +150,93 @@ const visibilityMap = {
       });
     });
 
-    // 初始顯示
     showSlides(0);
   }
 
-  checkPermission();
+  // 動態載入 marked(CDN,鎖定確切版本,與 npm 端一致),只有需要前端渲染 Markdown 時才載入
+  function waitForMarked() {
+    return new Promise((resolve) => {
+      if (window.__markedParse) return resolve(window.__markedParse);
+      const s = document.createElement('script');
+      s.type = 'module';
+      s.textContent = `
+        import { marked } from 'https://cdn.jsdelivr.net/npm/marked@18.0.3/+esm';
+        window.__markedParse = marked.parse;
+        window.dispatchEvent(new Event('marked-ready'));
+      `;
+      document.head.appendChild(s);
+      window.addEventListener('marked-ready', () => resolve(window.__markedParse), { once: true });
+    });
+  }
+
+  const postLocked = document.getElementById('post-locked');
+
+  if (!postLocked) {
+    // SSR 已成功渲染 public 文章,直接初始化輪播
+    initSlideshow();
+  } else {
+    // SSR 抓不到(無權限或不存在):登入後以使用者自己的 session 重新查詢,RLS 自動判權
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return; // 保持「需要登入」提示原樣
+
+      const { data: post } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('id', window.__POST_ID__)
+        .single();
+
+      const container = document.getElementById('post-client-container');
+      const loginLink = document.getElementById('post-login-link');
+      const lockedMsg = postLocked.querySelector('.empty-state');
+
+      if (!post) {
+        if (lockedMsg) lockedMsg.textContent = '⚠️ 無權限或文章不存在';
+        if (loginLink) loginLink.style.display = 'none';
+        return;
+      }
+
+      const markedParse = await waitForMarked();
+      const htmlContent = await markedParse((post.content || '').replace(/\n/g, '\n\n'));
+
+      const visibilityMap = {
+        public: { text: '公開', color: 'var(--tag-public)' },
+        friends: { text: '朋友', color: 'var(--tag-friends)' },
+        private: { text: '私人', color: 'var(--tag-private)' }
+      };
+      const v = visibilityMap[post.visibility] || visibilityMap.private;
+
+      let imagesHtml = '';
+      if (post.image_urls && post.image_urls.length > 0) {
+        imagesHtml = '<div class="post-slideshow">' +
+          post.image_urls.map((url, i) =>
+            `<div class="slide" data-index="${i}" style="display:${i === 0 ? 'block' : 'none'}"><img src="${url}" alt="${post.title}" /></div>`
+          ).join('') +
+          '</div>';
+      } else if (post.image_url) {
+        imagesHtml = `<div class="post-image-container"><img src="${post.image_url}" alt="${post.title}" class="post-main-image" /></div>`;
+      }
+
+      if (container) {
+        container.innerHTML = `
+          <div class="post-detail-header">
+            <div class="post-tag" style="border-color: ${v.color}; color: ${v.color};">${v.text}</div>
+            <h1 class="post-detail-title">${post.title}</h1>
+            <div class="post-detail-meta">
+              ${post.weather ? post.weather + ' ・ ' : ''}${new Date(post.created_at).toLocaleDateString('zh-TW')} ・ 閱讀約 ${post.reading_time} 分鐘
+            </div>
+          </div>
+          ${imagesHtml}
+          <div class="post-detail-content" id="post-body">${htmlContent}</div>
+        `;
+      }
+
+      if (lockedMsg) lockedMsg.remove();
+      if (loginLink) loginLink.style.display = 'none';
+
+      initSlideshow();
+    })();
+  }
 </script>
 
 <style>
@@ -262,5 +316,21 @@ const visibilityMap = {
     padding: 2rem;
     color: var(--nb-text-muted);
     font-style: italic;
+  }
+
+  .post-locked-shell {
+    text-align: center;
+    padding: 3rem 1rem;
+  }
+
+  .btn-post-login {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 8px 20px;
+    border-radius: 20px;
+    background: var(--nb-text-title);
+    color: #fff;
+    text-decoration: none;
+    font-size: 0.9rem;
   }
 </style>
