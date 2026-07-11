@@ -412,16 +412,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   let isAllowedUser = false;
   let currentUser = null;
   let tripsCache = [];
-  // 篩選範圍：trip-and-general(本行程＋一般,預設) / trip-only(僅本行程) / general-only(僅一般收藏) / all(全部)
-  // 僅管理員可切換,非管理員固定用預設值
-  let currentTripFilterMode = 'trip-and-general';
-
-  // 監聽 TripPlanner 廣播的行程切換事件(V2 階段 2 預留的掛鉤),即時重新篩選
-  // 提前綁定在 script 最上層,避免 Race Condition；filterAndRenderItems 每次都直接讀 window.currentTripId 最新值,
-  // 就算這個監聽器綁定時已經錯過第一次廣播也不影響正確性
-  window.addEventListener('trip-changed', () => {
-    filterAndRenderItems();
-  });
+  // 收藏依行程篩選：'all'(全部,預設) / 'general'(僅一般收藏) / 某個行程的 id(該行程＋一般收藏)
+  // 獨立於「行程」分頁目前選中的行程，任何人(管理員、朋友、訪客)皆可使用
+  let selectedTripFilterId = 'all';
 
   // --- Utility Functions ---
   function showToast(message) {
@@ -597,20 +590,15 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         friendOpts += `<option value="${email}" ${currentFriendFilter === email ? 'selected' : ''}>${name}</option>`;
       });
       html += `<div class="friend-filter-container"><select class="friend-select" id="friend-filter-select">${friendOpts}</select></div>`;
-
-      // 收藏依行程篩選範圍切換器(僅管理員可見,非管理員固定用「本行程＋一般」)
-      const scopeLabels = {
-        'trip-and-general': '本行程＋一般',
-        'trip-only': '僅本行程',
-        'general-only': '僅一般收藏',
-        'all': '全部'
-      };
-      let scopeOpts = '';
-      Object.keys(scopeLabels).forEach(key => {
-        scopeOpts += `<option value="${key}" ${currentTripFilterMode === key ? 'selected' : ''}>${scopeLabels[key]}</option>`;
-      });
-      html += `<div class="trip-scope-filter-container"><select class="trip-scope-select" id="trip-scope-filter-select">${scopeOpts}</select></div>`;
     }
+
+    // 收藏依行程篩選：任何人(管理員、朋友、訪客)皆可使用，與「行程」分頁目前選中的行程無關
+    let tripFilterOpts = `<option value="all" ${selectedTripFilterId === 'all' ? 'selected' : ''}>全部</option>`;
+    tripFilterOpts += `<option value="general" ${selectedTripFilterId === 'general' ? 'selected' : ''}>一般收藏</option>`;
+    tripsCache.forEach(trip => {
+      tripFilterOpts += `<option value="${trip.id}" ${selectedTripFilterId === String(trip.id) ? 'selected' : ''}>${trip.name}</option>`;
+    });
+    html += `<div class="trip-scope-filter-container"><select class="trip-scope-select" id="trip-scope-filter-select">${tripFilterOpts}</select></div>`;
 
     mainContainer.innerHTML = html;
 
@@ -633,7 +621,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     const tripScopeSelect = document.getElementById('trip-scope-filter-select');
     if (tripScopeSelect) {
       tripScopeSelect.addEventListener('change', (e) => {
-        currentTripFilterMode = e.target.value;
+        selectedTripFilterId = e.target.value;
         filterAndRenderItems();
       });
     }
@@ -744,17 +732,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
     let filtered = [...itemsCache];
 
-    // 依行程篩選：非管理員固定用「本行程＋一般」；currentTripId 尚未設定時一律不過濾(退回顯示全部,避免空白清單)
-    const tripScope = isAdminUser ? currentTripFilterMode : 'trip-and-general';
-    const activeTripId = window.currentTripId;
-    if (tripScope === 'general-only') {
+    // 依行程篩選：獨立於「行程」分頁目前選中的行程，任何人皆可選擇
+    if (selectedTripFilterId === 'general') {
       filtered = filtered.filter(item => !item.trip_id);
-    } else if (tripScope === 'trip-only' && activeTripId) {
-      filtered = filtered.filter(item => String(item.trip_id) === String(activeTripId));
-    } else if (tripScope === 'trip-and-general' && activeTripId) {
-      filtered = filtered.filter(item => !item.trip_id || String(item.trip_id) === String(activeTripId));
+    } else if (selectedTripFilterId !== 'all') {
+      filtered = filtered.filter(item => !item.trip_id || String(item.trip_id) === String(selectedTripFilterId));
     }
-    // tripScope === 'all'，或 trip-only/trip-and-general 但 activeTripId 尚未設定時：不套用任何行程篩選
+    // selectedTripFilterId === 'all'：不套用任何行程篩選
 
     if (currentMainFilter === 'wishlist') {
       if (isAdminUser) {
