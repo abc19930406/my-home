@@ -26,7 +26,7 @@
 
 | 資料表 | Build-time / SSR 讀取(烘進 HTML 或每次請求皆讀) | Client-side 讀寫(瀏覽器內執行) |
 |---|---|---|
-| **posts** | [posts/index.astro:13](src/pages/posts/index.astro:13) `SELECT *`,有 `.eq('visibility','public')` 過濾,prerender=true(僅烘公開文章)<br>[posts/\[id\].astro:15](src/pages/posts/\[id\].astro:15) `SELECT *`,**無任何權限過濾**,註解明寫「只抓資料不檢查權限,交給前端處理」,SSR 每次請求執行 | UPDATE/INSERT/DELETE 皆在 [posts/index.astro](src/pages/posts/index.astro:313)(313/316/412 行) |
+| **posts** | ✅ 2026-07-11 已修復:[posts/index.astro:13](src/pages/posts/index.astro:13) `SELECT *`,`.eq('visibility','public')` 過濾,prerender=true(僅烘公開文章)<br>[posts/\[id\].astro](src/pages/posts/[id].astro) SSR 改為查不到即渲染無內容外殼,不再無過濾渲染全文,詳見 PROJECT_PROGRESS.md「隱私修復任務 B」 | UPDATE/INSERT/DELETE 皆在 [posts/index.astro](src/pages/posts/index.astro:313)(313/316/412 行);RLS 已收緊為僅管理員可寫入 |
 | **quotes** | [quotes/index.astro:11](src/pages/quotes/index.astro:11) `SELECT *`,有 `.eq('visibility','public')` 過濾,prerender=true | UPDATE/INSERT/DELETE 在 [quotes/index.astro](src/pages/quotes/index.astro:285)(285/288/409 行) |
 | **japan_items** | [JapanCollection.astro:24](src/components/JapanCollection.astro:24)、[japan.astro:25](src/pages/japan.astro:25) `SELECT *`,**無過濾**,prerender=true(嵌入 /trip 與 /japan) | SELECT/UPDATE/INSERT/DELETE 遍布 JapanCollection.astro、japan.astro(願望清單、數量、收藏品 CRUD) |
 | **japan_categories** | [JapanCollection.astro:14](src/components/JapanCollection.astro:14)、[japan.astro:15](src/pages/japan.astro:15) `SELECT *`,prerender=true | DELETE/UPSERT 在 JapanCollection.astro、japan.astro(分類管理) |
@@ -54,7 +54,7 @@
 
 這一項是讀程式碼直接發現的**設計層級問題**,無論 RLS 政策如何設定都存在,先列出:
 
-### 🔴 `posts/[id].astro` 完全不做權限過濾
+### ✅ 已修復(2026-07-11)~~`posts/[id].astro` 完全不做權限過濾~~
 ```
 第 14-18 行:
 const { data, error } = await supabase
@@ -67,6 +67,8 @@ const { data, error } = await supabase
 這代表:只要有人知道或猜到某篇 `private`/`friends` 短文的 `id`,直接訪問 `/posts/<id>`,**伺服器端就會把該篇完整內容(含 private 標記的文字)查出來寫進回應的 HTML**,是否隱藏只交給前端 JS 決定要不要顯示——但資料已經在 HTTP 回應內容裡了,對任何會看網頁原始碼或攔截網路請求的人形同公開。這與 RLS 是否允許 anon SELECT `posts` **獨立存在**:即使 RLS 開放 anon SELECT,問題出在「查詢時完全沒有依 visibility 過濾」,而不只是「該不該讓 anon 查」。
 
 其餘所有其他頁面的 frontmatter 查詢(posts 列表、quotes 列表)都有确實加上 `.eq('visibility','public')` 過濾,只有這個單篇頁例外。
+
+**修復狀態(2026-07-11)**:已改為 SSR 查不到即渲染無內容外殼,不再無條件渲染全文;同步收緊 `posts` 表 RLS(新增 `is_admin()`/`is_friend()` 判斷)。修復細節見 PROJECT_ARCHITECTURE.md「短文（posts）visibility 權限架構」、PROJECT_PROGRESS.md「隱私修復任務 B」。以下第四節矩陣與風險排序為**修復前**的歷史紀錄,保留供對照,posts 現況已不再是 CRITICAL。
 
 ---
 
@@ -116,7 +118,7 @@ order by tablename, cmd;
 
 | 資料表 | anon(未登入)SELECT | anon 寫入 | authenticated(任何登入帳號,含朋友/家人)SELECT | authenticated 寫入 | 風險等級 |
 |---|---|---|---|---|---|
-| **posts** | 🔴 **全表無條件可讀**(`Anyone can read post metadata`,qual=true,與 visibility 無關) | 否 | 全表可讀(重複放行) | 🔴 任何登入帳號可 INSERT/UPDATE/DELETE **任何人的**貼文 | **CRITICAL** |
+| **posts**(✅ 2026-07-11 已修復,見上方說明) | ~~🔴 全表無條件可讀~~(`Anyone can read post metadata`,qual=true,與 visibility 無關) | 否 | ~~全表可讀~~ | ~~🔴 任何登入帳號可 INSERT/UPDATE/DELETE 任何人的貼文~~ | ~~CRITICAL~~ → 已收斂為 public/is_admin()/is_friend() 判斷,寫入僅 is_admin() |
 | **transactions** | 否 | 否 | 🔴 任何登入帳號可讀**全部**財務明細 | 🔴 任何登入帳號可 INSERT/UPDATE/DELETE | **CRITICAL** |
 | **japan_items** | 🟡 全表可讀(含 owner_wishlist/owner_quantity) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD **全部**品項(非僅自己的) | **HIGH** |
 | **japan_categories** | 🟡 全表可讀(taxonomy) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD | **HIGH** |
@@ -134,7 +136,9 @@ order by tablename, cmd;
 ### 明確回答:未登入的陌生人現在能讀到哪些表、寫入哪些表
 
 **能讀(不需要任何帳號,直接呼叫 API 或查看靜態頁面原始碼即可)**:
-`posts`(**含私人與朋友限定文章的完整內容**)、`japan_items`、`japan_categories`、`spots`、`trips`、`trip_days`、`day_spots`、`spot_types`、`spot_subtypes`、`expense_categories`、`income_categories`、`cards`、`status`、`daily`、`quotes`(僅 public 標記的)、`travel_coupons`、`travel_subway_maps`。
+~~`posts`(含私人與朋友限定文章的完整內容)~~(✅ 2026-07-11 已修復,現況見下方)、`japan_items`、`japan_categories`、`spots`、`trips`、`trip_days`、`day_spots`、`spot_types`、`spot_subtypes`、`expense_categories`、`income_categories`、`cards`、`status`、`daily`、`quotes`(僅 public 標記的)、`travel_coupons`、`travel_subway_maps`。
+
+**posts 現況(2026-07-11 起)**:匿名者只能讀到 `visibility='public'` 的文章;`friends`/`private` 一律讀不到。
 
 **讀不到**:`transactions`(財務明細)、`allowed_users`(白名單)、`wishlist_items`(願望清單)——這三張表的 SELECT 政策都要求 `authenticated`,匿名者完全無法查詢。
 
@@ -142,7 +146,7 @@ order by tablename, cmd;
 
 ### 貫穿多張表的系統性問題:「authenticated」被當成「admin」使用
 
-你的登入設計本來就存在非管理員的登入帳號(Google OAuth 朋友、Email/Password 家人,用於日本收藏願望清單)。但 `posts`、`quotes`、`japan_items`、`japan_categories`、`allowed_users`、`transactions`、`spots` 系列、`trip_days`、`cards`、`status`、`daily`、`spot_types/subtypes`、`expense/income_categories` 的寫入政策一律只檢查 `auth.role() = 'authenticated'`,**沒有任何一條額外比對是不是管理員本人**。也就是說,任何一個朋友或家人帳號,只要成功登入(哪怕登入目的只是想勾選日本收藏願望清單),理論上就能透過直接呼叫 Supabase API:
+你的登入設計本來就存在非管理員的登入帳號(Google OAuth 朋友、Email/Password 家人,用於日本收藏願望清單)。~~`posts`~~(✅ 2026-07-11 已改為僅 `is_admin()` 可寫入,不再受影響)、`quotes`、`japan_items`、`japan_categories`、`allowed_users`、`transactions`、`spots` 系列、`trip_days`、`cards`、`status`、`daily`、`spot_types/subtypes`、`expense/income_categories` 的寫入政策一律只檢查 `auth.role() = 'authenticated'`,**沒有任何一條額外比對是不是管理員本人**。也就是說,任何一個朋友或家人帳號,只要成功登入(哪怕登入目的只是想勾選日本收藏願望清單),理論上就能透過直接呼叫 Supabase API:
 - 讀取/刪除你的完整記帳明細
 - 新增、竄改或刪除你的短文(含私人文章)、語錄
 - 修改整份 `allowed_users` 白名單(等於能自行把任何 email 加入白名單)

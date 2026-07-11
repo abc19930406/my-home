@@ -171,6 +171,17 @@ if (!session) {
 }
 ```
 
+### 短文（posts）visibility 權限架構（2026-07-11 安全修復）
+- **原則**：非公開短文的內容,必須在**資料庫層(RLS)**與**頁面層(SSR/靜態 HTML)**都只對有權限者可見,不能只靠前端 JS 判斷顯示與否——舊機制曾把全文渲染進 HTML、只用 `display: none` 隱藏,任何人檢視原始碼即可讀取
+- **RLS 層**：`posts` 表的 SELECT 政策為 `visibility = 'public' OR is_admin() OR (visibility = 'friends' AND is_friend())`;INSERT/UPDATE/DELETE 一律僅 `is_admin()`
+  - `public.is_admin()`、`public.is_friend()` 為 `SECURITY DEFINER` 輔助函式(email 寫死管理員本人比對;`is_friend()` 查 `allowed_users` 白名單,不分大小寫)
+  - 用 `SECURITY DEFINER` 是必要的:若在 policy 內直接子查詢 `allowed_users`,會受該表自身 RLS 限制導致查不到資料
+- **頁面層**：
+  - `posts/index.astro`(列表,prerender=true):build time 只抓 `visibility='public'` 烘進靜態 HTML;登入後由 client-side `fetchPrivatePosts()` 重新查詢,RLS 自動依身分過濾,無須額外程式碼判斷
+  - `posts/[id].astro`(單篇,SSR):一律以 anon key 查詢,RLS 生效後匿名 SSR 只查得到 public 文章。查到 → 照常渲染(SSR HTML 內含完整內容,public 文章維持既有 SEO 行為);**查不到** → 不再猜測是「不存在」還是「無權限」,一律渲染不含任何文章內容的外殼(「需要登入」提示 + 登入按鈕),由前端 client script 以使用者自己的 session 重新查詢,RLS 自動判權,查得到才動態渲染全文(Markdown 轉換改用 CDN 版 `marked@18.0.3`,鎖定確切版本,與 npm 端一致)
+  - **禁止**再出現「先把全文渲染進 HTML、只用 `display:none` 隱藏、前端 JS 事後檢查」這種機制——資料一旦進了 HTTP 回應就等於外洩,前端顯示與否無法補救
+- **已知限制**：RLS 對 UPDATE/DELETE 若擋下操作,不會回傳錯誤,只會實際變更 0 筆資料;`posts/index.astro` 目前的編輯/刪除前端邏輯只檢查 `error` 是否為空,未檢查實際受影響筆數,非管理員操作被 RLS 正確擋下時,前端仍會誤顯示「已更新/已刪除」(重新整理後會恢復原狀,資料庫本身未受影響,不是安全漏洞,是前端提示不準確,留待後續清理)
+
 ---
 
 ## /trip 頁面 Supabase 單一入口架構（重要）

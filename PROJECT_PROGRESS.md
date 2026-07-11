@@ -236,7 +236,21 @@
 - **驗證**：build 產物已確認無任何 hook 網址/相關變數殘留
 - **收尾完成（2026-07-11，使用者於 Vercel 後台操作並驗證）**：新 hook `backend-trigger` 建立、`VERCEL_DEPLOY_HOOK` 與 `ADMIN_EMAIL` 環境變數設定完成；管理員實測 /admin 儲存可觸發新部署 ✅；舊 Deploy Hook 已刪除（洩漏網址永久失效）、`PUBLIC_VERCEL_DEPLOY_HOOK` 變數已刪除；刪除後再次實測觸發部署正常 ✅
 - **驗收紀錄**：無 token / 偽造 token 呼叫 `/api/trigger-deploy` 均回 401；Astro 內建 CSRF 防護（checkOrigin）額外阻擋非同源 POST（403）
-- 隱私修復任務 B（短文外洩）、C（照片）另案處理，尚未開始
+
+### ✅ 安全修復：短文（posts）visibility 保護（2026-07-11，隱私修復任務 B，已結案）
+
+- **問題**（見 SECURITY_AUDIT.md 盤點）：兩層問題疊加——(1) `posts` 的 RLS SELECT 政策 `Anyone can read post metadata`（`qual: true`）對匿名者完全開放，與 visibility 無關；(2) `posts/[id].astro` 的 SSR 查詢完全不過濾權限（註解原文：「只抓資料不檢查權限，交給前端處理」），只用前端 `display: none` 隱藏私人/朋友文章，資料早已寫進 HTTP 回應，檢視原始碼即可讀取
+- **修復（架構細節見 PROJECT_ARCHITECTURE.md「短文（posts）visibility 權限架構」）**：
+  - RLS：新增 `is_admin()`、`is_friend()` 兩個 `SECURITY DEFINER` 輔助函式，`posts` 的 SELECT 改為 `visibility='public' OR is_admin() OR (visibility='friends' AND is_friend())`，INSERT/UPDATE/DELETE 一律僅 `is_admin()`
+  - 頁面：`posts/[id].astro` 移除「渲染全文 + display:none + 前端檢查」機制；SSR 抓不到（無權限或不存在，刻意不區分）一律渲染無內容外殼，登入後由前端以使用者 session 重新查詢，RLS 自動判權，動態渲染時 Markdown 轉換改用 CDN `marked@18.0.3`（鎖定確切版本）
+  - `posts/index.astro` 不需改動（client-side `fetchPrivatePosts()` 原邏輯已相容 RLS 過濾）；過程中發現並順手修復一個既有 bug：發布/編輯成功後儲存按鈕永久卡在 disabled，導致第二次之後的送出完全沒反應（`resetForm()` 補上解除 disabled）
+- **驗證結果（2026-07-11，使用者實測）**：
+  - 無痕視窗開私人文章網址 → 顯示「需要登入」外殼，檢視原始碼搜尋不到文章內容 ✅
+  - 無痕視窗開 `/posts` 列表 → 只看到 public 文章，原始碼搜尋不到非公開文章 ✅
+  - 管理員登入 → 三種 visibility 皆可讀寫 ✅
+  - 臨時建立朋友測試帳號（`allowed_users` 白名單）→ 看得到 public+friends、看不到 private ✅；嘗試編輯/刪除文章，Table Editor 直接確認資料庫未變動，RLS 正確擋下寫入 ✅（前端當下誤顯示「已更新/已刪除」，重新整理即恢復，是既有 UI 提示不準確問題，非安全漏洞，見下方待辦）
+- **已知非安全性問題（待後續清理，非本次任務範圍）**：`posts/index.astro` 的編輯/刪除只檢查 `error` 是否為空，未檢查實際受影響筆數；RLS 擋下 UPDATE/DELETE 時不回傳錯誤、只是實際變更 0 筆，導致非管理員操作被擋下時前端仍誤報成功
+- 隱私修復任務 C（照片）另案處理，尚未開始
 
 ---
 
