@@ -217,7 +217,7 @@
 |--------|------|------|
 | spot_types | 新增 `is_chain_store` boolean | ✅ 已完成 |
 | spot_subtypes | 新增 `is_chain_store` boolean | ✅ 已完成 |
-| japan_items | 新增 `trip_id`（可空，FK → trips） | 📋 |
+| japan_items | 新增 `trip_id`（可空，FK → trips，`ON DELETE SET NULL`） | ✅ 已完成（2026-07-12） |
 | travel_subway_maps | 移除/不再使用 `trip_id`（改用 trip_subway_categories） | 📋 |
 
 ### 7.3 Storage Buckets
@@ -254,13 +254,14 @@
 - `spot_types` / `spot_subtypes` 新增 `is_chain_store`，連鎖店地圖標記縮小變淡
 - 「顯示連鎖店」篩選開關，地圖視野不受切換影響
 - `travel_coupons`、`travel_subway_maps` 資料表與 Storage bucket 建立（地鐵圖部分待第五階段調整為全域分類庫）
+- `japan_items` 新增 `trip_id`（2026-07-12，V2 階段 3，見第四節）
 
 ### /trip 頁面實作
 - trip.astro 骨架（Desktop/Mobile 雙版面、三分頁切換、管理員判斷）
 - TripPlanner.astro、JapanCollection.astro 元件搬移完成
 - Supabase 單一入口架構（trip.astro 統一管理 createClient/getSession/onAuthStateChange，子元件透過事件接收狀態）
 - Race Condition 防護機制（`window.__latestAuthState` 快照 + 事件提前綁定）
-- CDN 版本鎖定（`@supabase/supabase-js@2`）
+- CDN 版本鎖定（`@supabase/supabase-js@2.110.2`，2026-07-11 由浮動 `@2` 進一步凍結為確切版號，詳見 PROJECT_PROGRESS.md「Heisenbug」相關記錄）
 - 管理員權限判斷安全性修正（嚴格 email 比對）
 - 朋友帳號三層權限顯示修復（TripPlanner.astro 的 updateAuthUI 補齊白名單朋友判斷分支，詳見 PROJECT_PROGRESS.md）
 - 多項 Modal/CSS/z-index 衝突修正（詳見 PROJECT_PROGRESS.md）

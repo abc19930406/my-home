@@ -335,9 +335,16 @@
   - 前端：`fetchPrivateQuotes` 的 `isAdmin` 改為真正比對 `session.user.email === adminEmail`（新增 `adminEmail` 透過 `define:vars` 注入，此頁原本沒有這個管道）；update/delete 呼叫補上 `.select()` 檢查受影響筆數，0 筆時明確提示「沒有權限或資料不存在」而非誤報成功
 - **驗證結果（2026-07-11，使用者實測）**：未登入僅見 public 語錄 ✅；朋友帳號看得到 public+friends、看不到 private，friends 語錄卡片不再顯示編輯/刪除按鈕 ✅；管理員三級皆可讀寫，下拉選單三值各測一輪正常 ✅；朋友帳號透過 Console 強行呼叫寫入得到明確「沒有權限」提示而非誤報成功 ✅
 - **過程中的插曲（已釐清，非 bug）**：
-  - 朋友帳號在 **public 語錄卡片**（SSR 渲染）上仍看得到編輯/刪除按鈕、且當下（RLS 未收緊前）能成功寫入——這是既有的、範圍外的 `checkAdmin()` 全域「有 session 即管理員」判斷造成，`.admin-only` class 在編譯時已寫死在 public 卡片 HTML 裡，不受本次 `fetchPrivateQuotes` 修正影響；RLS 收緊後實際寫入已被擋下，僅剩 UI 顯示不精確，記錄於 PROJECT_ARCHITECTURE.md，留待未來一併處理
+  - 朋友帳號在 **public 語錄卡片**（SSR 渲染）上仍看得到編輯/刪除按鈕、且當下（RLS 未收緊前）能成功寫入——這是既有的、範圍外的 `checkAdmin()` 全域「有 session 即管理員」判斷造成，`.admin-only` class 在編譯時已寫死在 public 卡片 HTML 裡，不受本次 `fetchPrivateQuotes`（2026-07-11 稍後更名為 `refreshQuotesList()`，見下方排序修正記錄）修正影響；RLS 收緊後實際寫入已被擋下，僅剩 UI 顯示不精確，記錄於 PROJECT_ARCHITECTURE.md，留待未來一併處理
   - 管理員將一則語錄的 visibility 從 public 改為 friend，更新當下「看起來沒反應」：實際上 Table Editor 確認資料庫已正確變更，且程式碼覆核確認成功提示 toast 有無條件觸發，只是 1.5 秒的提示訊息被使用者切換視窗查資料庫時錯過，非真正的靜默失敗
-- **測試中發現、記錄但未處理的獨立問題（已建立獨立任務卡片，未來可一鍵展開）**：`posts`、`quotes` 兩個頁面登入狀態下的列表排序皆會錯亂——build time 只抓 public 內容排序後烘進靜態 HTML，登入後另外抓的 friends/private 內容透過 `insertAdjacentHTML('afterbegin', ...)` 一律插在最前面，不管實際 `created_at` 早晚，新增項目時也是同樣邏輯插到最前面，導致整體並非真正依發布時間排序。與本次任務的 RLS/isAdmin/寫入檢查修改無關，屬獨立的既有架構限制，同時影響兩個頁面，需要重新設計登入後的資料合併排序邏輯，故未在本次任務內處理
+- ~~測試中發現、記錄但未處理的獨立問題：`posts`、`quotes` 兩個頁面登入狀態下的列表排序皆會錯亂~~ **✅ 2026-07-11 已修復**（獨立 session 執行，見下方「posts/quotes 列表排序修正」記錄）
+
+### ✅ posts/quotes 列表排序修正（2026-07-11，已結案，於獨立 session/分支執行後合併）
+
+- **背景**：任務 H 驗證時發現的獨立問題（見上方），與當時任務的 RLS/isAdmin 修改無關
+- **根因**：`posts/index.astro`、`quotes/index.astro` 原本 build time 只抓 `visibility='public'` 內容排序後烘進靜態 HTML；登入後另外呼叫 `fetchPrivatePosts()`/`fetchPrivateQuotes()` 抓 friends/private 內容，用 `insertAdjacentHTML('afterbegin', ...)` 逐筆插在最前面。造成 (1) private/friends 內容一律排在所有 public 內容之前，不管實際發布時間早晚 (2) 逐筆 `afterbegin` 插入還會讓 private 內容彼此之間的順序反過來
+- **修復**：兩頁改為一致做法——`refreshPostsList()`/`refreshQuotesList()`：登入後一次性重抓「全部」內容（不分 public/friends/private，交由 RLS 過濾），依 `created_at` 整體排序後整個列表重繪（不再是插入式的局部更新）；用遞增 `seq` 序號避免 `onAuthStateChange` 短時間內連續觸發時，較舊的回應覆蓋較新的畫面（沿用 trip.astro 的 `authUIUpdateSeq` 手法）；`quotes` 的 `page-num` 頁碼標籤原本因插入邏輯只能顯示死值 `"new"`，改為依整體重繪後的陣列位置正確計算
+- **狀態**：commit `051d33d`，已合併進 main（`d664c92`），commit message 記錄「已在 Preview 部署驗證正確」；本記錄由後續 session 依 commit 內容整理，非本 session 直接參與開發或於正式環境重新驗證，若後續發現排序異常可從這裡回頭查
 
 ### ✅ V2 階段 3：收藏依行程篩選（2026-07-12，已結案）
 
@@ -362,7 +369,7 @@
 3. **協作者權限系統**：`trip_collaborators` 表，雙開關權限（can_edit_wishlist / can_edit_itinerary）+ Sandbox 模式
 4. **AI 助手分頁**：`/api/ai-assistant` Serverless API，含 tool use 寫入功能（add_spot / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）
 5. **舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan
-7. **程式碼清理階段**（獨立規劃，待全部功能穩定後執行）：統一 Modal 開關/CSS class 命名規則、移除殘留冗餘邏輯
+6. **程式碼清理階段**（獨立規劃，待全部功能穩定後執行）：統一 Modal 開關/CSS class 命名規則、移除殘留冗餘邏輯
 
 ### 其他規劃中功能
 - 讀書筆記、食記、年度回顧、作品集、書籤收藏、習慣打卡

@@ -177,7 +177,7 @@ if (!session) {
   - `public.is_admin()`、`public.is_friend()` 為 `SECURITY DEFINER` 輔助函式(email 寫死管理員本人比對;`is_friend()` 查 `allowed_users` 白名單,不分大小寫)
   - 用 `SECURITY DEFINER` 是必要的:若在 policy 內直接子查詢 `allowed_users`,會受該表自身 RLS 限制導致查不到資料
 - **頁面層**：
-  - `posts/index.astro`(列表,prerender=true):build time 只抓 `visibility='public'` 烘進靜態 HTML;登入後由 client-side `fetchPrivatePosts()` 重新查詢,RLS 自動依身分過濾,無須額外程式碼判斷
+  - `posts/index.astro`(列表,prerender=true):build time 只抓 `visibility='public'` 烘進靜態 HTML;登入後由 client-side `refreshPostsList()` 重新查詢,RLS 自動依身分過濾,無須額外程式碼判斷(此函式 2026-07-11 由 `fetchPrivatePosts()` 重新設計並更名,細節見下方「登入後列表整體重抓+重繪」)
   - `posts/[id].astro`(單篇,SSR):一律以 anon key 查詢,RLS 生效後匿名 SSR 只查得到 public 文章。查到 → 照常渲染(SSR HTML 內含完整內容,public 文章維持既有 SEO 行為);**查不到** → 不再猜測是「不存在」還是「無權限」,一律渲染不含任何文章內容的外殼(「需要登入」提示 + 登入按鈕),由前端 client script 以使用者自己的 session 重新查詢,RLS 自動判權,查得到才動態渲染全文(Markdown 轉換改用 CDN 版 `marked@18.0.3`,鎖定確切版本,與 npm 端一致)
   - **禁止**再出現「先把全文渲染進 HTML、只用 `display:none` 隱藏、前端 JS 事後檢查」這種機制——資料一旦進了 HTTP 回應就等於外洩,前端顯示與否無法補救
 - **已知限制**：RLS 對 UPDATE/DELETE 若擋下操作,不會回傳錯誤,只會實際變更 0 筆資料;`posts/index.astro` 目前的編輯/刪除前端邏輯只檢查 `error` 是否為空,未檢查實際受影響筆數,非管理員操作被 RLS 正確擋下時,前端仍會誤顯示「已更新/已刪除」(重新整理後會恢復原狀,資料庫本身未受影響,不是安全漏洞,是前端提示不準確,留待後續清理)
@@ -200,9 +200,15 @@ if (!session) {
 - **原則**：與 posts 表的 visibility 保護完全同等級,重用 `is_admin()`/`is_friend()`
 - **RLS 層**：SELECT 為 `visibility='public' OR is_admin() OR (visibility='friends' AND is_friend())`;INSERT/UPDATE/DELETE 一律僅 `is_admin()`
 - **前端層(quotes/index.astro)**：
-  - `fetchPrivateQuotes()` 渲染時原本把 `isAdmin` 寫死 `true`,只要有 session(含朋友帳號)就顯示編輯/刪除按鈕；已改為 `session.user.email === adminEmail` 的真正比對,`adminEmail` 透過 `define:vars` 注入(比照其他頁面既有模式)
+  - 渲染時原本把 `isAdmin` 寫死 `true`,只要有 session(含朋友帳號)就顯示編輯/刪除按鈕；已改為 `session.user.email === adminEmail` 的真正比對,`adminEmail` 透過 `define:vars` 注入(比照其他頁面既有模式)。此判斷目前位於 `refreshQuotesList()`(2026-07-11 由 `fetchPrivateQuotes()` 重新設計並更名,細節見下方)
   - update/delete 呼叫原本只檢查 `error` 是否為空,補上 `.select()` 檢查受影響筆數,0 筆時明確提示「沒有權限或資料不存在」，insert 呼叫本身已有 `.select().single()`，RLS 擋下 INSERT 會直接拋錯不會靜默，不需額外處理
-- **已知但本次不修的相關問題**：`checkAdmin()` 對「有 session 即視為管理員」的判斷是全站共用的既有模式（其他頁面如 posts/index.astro 也有相同寫法），會讓朋友帳號在**SSR 渲染的 public 語錄卡片**上也看到編輯/刪除按鈕（這些卡片的 `.admin-only` class 是編譯時就寫死的，不受本次 `fetchPrivateQuotes` 修正影響）；RLS 已擋下實際寫入，屬 UI 顯示不精確而非安全漏洞，留待未來一併處理
+- **已知但本次不修的相關問題**：`checkAdmin()` 對「有 session 即視為管理員」的判斷是全站共用的既有模式（其他頁面如 posts/index.astro 也有相同寫法），會讓朋友帳號在**SSR 渲染的 public 語錄卡片**上也看到編輯/刪除按鈕（這些卡片的 `.admin-only` class 是編譯時就寫死的，不受 `refreshQuotesList` 的 isAdmin 修正影響）；RLS 已擋下實際寫入，屬 UI 顯示不精確而非安全漏洞，留待未來一併處理
+
+### posts/quotes 登入後列表：整體重抓 + 依 created_at 重繪(2026-07-11 確立的架構模式)
+- **適用情境**：頁面採「build time 只烘 public 內容 + 登入後 client-side 補抓 private/friends 內容」架構時(目前 posts、quotes 皆是),補抓邏輯**不可**用「檢查是否已存在於 DOM → 用 `insertAdjacentHTML('afterbegin', ...)` 插入單筆」的寫法——這會導致 private/friends 內容一律排在所有 public 內容之前(不管實際 `created_at` 早晚)，且逐筆插入還會讓 private 內容彼此的順序反過來
+- **正確做法**：登入後一次性重新查詢「全部」內容(不分 public/friends/private,交由 RLS 過濾)，依 `created_at` 整體排序後**整個容器重繪**(`container.innerHTML = ...`)，不要用局部插入。函式命名慣例：`refreshXxxList()`(取代舊的 `fetchPrivateXxx()` 命名，因為現在抓的不再只是「private 的部分」)
+- **防競態**：`onAuthStateChange` 可能短時間連續觸發多次，每次呼叫遞增一個 `seq` 序號，非同步查詢返回後比對序號是否仍是最新，不是則捨棄該次結果，避免較舊的回應覆蓋較新的畫面(沿用 trip.astro 的 `authUIUpdateSeq` 手法，見下方「/trip 頁面 Supabase 單一入口架構」)
+- **若卡片內含依陣列位置計算的欄位**(例如 quotes 的頁碼 `page-num`)：改為整體重繪後才有正確的陣列位置可用，插入式寫法只能顯示固定值(例如寫死 `"new"`)
 
 ---
 
