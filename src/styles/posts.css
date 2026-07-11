@@ -139,6 +139,9 @@ html.theme-night .halo-moon { opacity: 1; }
 
 .notebook-page {
   flex-grow: 1;
+  /* flex 項目預設 min-width:auto，內容過長(如長檔名)時會撐大整個卡片，
+     被外層 .notebook-container 的 overflow-x:hidden 裁掉且無法捲動觸及；改為 0 讓內容正確縮小/截斷 */
+  min-width: 0;
   position: relative;
   min-height: 85vh;
   padding: 50px 60px 80px 70px;
