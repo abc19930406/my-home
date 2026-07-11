@@ -328,7 +328,7 @@ try {
       } else if (newQuote) {
         // 新增 UI
         const { data: { session } } = await supabase.auth.getSession();
-        const html = createQuoteHtml(newQuote, !!session, 0); // 簡化處理
+        const html = createQuoteHtml(newQuote, !!session, 'new');
         const grid = document.getElementById('quotes-grid');
         const emptyMsg = document.getElementById('empty-msg');
         if (emptyMsg) emptyMsg.style.display = 'none';
@@ -340,12 +340,12 @@ try {
     }
   });
 
-  function createQuoteHtml(quote: any, isAdmin: boolean, index: number) {
+  function createQuoteHtml(quote: any, isAdmin: boolean, pageLabel: string) {
     return `
       <div class="quote-card" data-id="${quote.id}" data-category="${quote.category}" data-source="${quote.source}" data-content="${quote.content}">
         <div class="card-corner"></div>
         <div class="card-sidebar">
-          <span class="page-num">new</span>
+          <span class="page-num">${pageLabel}</span>
         </div>
         <div class="card-main">
           <div class="quote-content">${quote.content}</div>
@@ -438,8 +438,14 @@ try {
     }
   });
 
-  // 6. Client Side: 抓取私密語錄
-  async function fetchPrivateQuotes() {
+  // 6. Client Side：登入後改為一次性重抓「全部」語錄（public/friends/private，交由 RLS 過濾），
+  // 依 created_at 整體排序重繪，取代舊版「private 內容固定插最前面」的作法。
+  // 舊版問題：(1) private/friends 內容一律排在所有 public 內容之前，不管實際發布時間；
+  // (2) 逐筆 insertAdjacentHTML('afterbegin') 還會讓 private 內容彼此之間的順序反過來。
+  // seq 用來避免短時間內連續觸發多次時，較舊的回應覆蓋較新的畫面（同 trip.astro 的 authUIUpdateSeq 手法）
+  let quotesRefreshSeq = 0;
+  async function refreshQuotesList() {
+    const seq = ++quotesRefreshSeq;
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return;
 
@@ -450,22 +456,24 @@ try {
     const { data, error } = await supabase
       .from('quotes')
       .select('*')
-      .neq('visibility', 'public')
       .order('created_at', { ascending: false });
 
-    if (!error && data && data.length > 0) {
-      const grid = document.getElementById('quotes-grid');
-      const emptyMsg = document.getElementById('empty-msg');
-      if (emptyMsg) emptyMsg.style.display = 'none';
+    if (seq !== quotesRefreshSeq) return;
+    if (error || !data) return;
 
-      data.forEach(quote => {
-        if (document.querySelector(`.quote-card[data-id="${quote.id}"]`)) return;
-        const html = createQuoteHtml(quote, isAdmin, 0);
-        grid?.insertAdjacentHTML('afterbegin', html);
-      });
+    const grid = document.getElementById('quotes-grid');
+    if (!grid) return;
+
+    if (data.length === 0) {
+      grid.innerHTML = '<p class="empty-state" id="empty-msg">尚未收藏任何語錄</p>';
+    } else {
+      grid.innerHTML = data
+        .map((quote, index) => createQuoteHtml(quote, isAdmin, `p.${data.length - index}`))
+        .join('');
     }
+
     checkAdmin();
   }
 
-  fetchPrivateQuotes();
+  refreshQuotesList();
 </script>
