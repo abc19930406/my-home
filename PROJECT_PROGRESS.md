@@ -265,6 +265,23 @@
   - 朋友帳號的 `/trip`、`/japan` 既有白名單相關功能（願望清單等）不受影響 ✅
   - `allowed_users` 前台無管理 UI（依 PROJECT_ARCHITECTURE.md 是透過 Supabase Dashboard 手動管理），無對應前端可測，以 RLS 政策本身作為驗收依據
 - **過程中發現、記錄但未處理的異常（不在本次任務範圍）**：驗證過程中一度出現「明確用朋友測試帳號（`abc19930406test@gmail.com`）登入 `/trip`，畫面卻顯示『管理員已登入，啟用前台管理介面』，但實際新增景點/行程失敗」的狀況；改用全新無痕視窗、關閉其他分頁後重測未再重現。判斷可能與「進行中問題：OAuth 登入後 UI 間歇性未切換」Heisenbug 同一根因家族（畫面顯示的登入身分與實際權限判斷不一致），方向相反（這次是誤判成管理員，而非誤判成訪客）。尚未診斷根因，不確定是否為同一問題，留待下次處理 Heisenbug 時一併納入排查線索
+
+### ✅ 安全修復：日本收藏（japan_items / japan_categories）寫入鎖定管理員專用（2026-07-11，任務 D 稽核發現接續任務 G，已結案）
+
+- **背景**：SECURITY_AUDIT.md 盤點列為 HIGH——兩張表的 SELECT 為刻意保留的公開展示設計（收藏頁本質上任何人瀏覽合理），本次**不動**；問題在寫入：INSERT/UPDATE/DELETE 政策只檢查 `auth.role() = 'authenticated'`，任何登入帳號（含白名單朋友/家人）皆可完整新增/修改/刪除全部收藏品項與分類
+- **🔍 執行前稽核發現（本次任務的重要副產品，具獨立參考價值）**：動工前依任務要求逐一比對兩張表所有 `.insert()/.update()/.delete()` 呼叫點，是否都有 `isAdminUser` 判斷守護，結果「前端所有寫入功能都掛 isAdminUser 判斷」這個原始假設**不成立**：
+  - `japan_categories`（4 個寫入點）：刪除主分類、刪除子分類、新增子分類 3 個——因為事件監聽器只在 `if (isAdminUser) { renderManageCategoryRows(); }` 分支內才會被綁定，等同被守住；**新增主分類**（`#btn-add-main-cat`）1 個——監聽器在 script 頂層無條件綁定，handler 內無任何 `isAdminUser` 檢查，純靠 CSS `admin-only { display:none }` 隱藏按鈕
+  - `japan_items`（5 個寫入點）：僅「管理員調整數量」1 個有明確 inline `if (role === 'admin' && isAdminUser)` 檢查；其餘 4 個（新增/編輯品項表單送出、切換擁有者願望清單、刪除品項）皆透過掛在整個卡片容器（`itemsGrid`）上的**委派事件監聽器**處理，該監聽器無條件綁定，對應的 `if (btnEdit)/if (btnDelete)/if (btnWishlistAdmin)` 分支內完全沒有 `isAdminUser` 檢查
+  - 關鍵技術細節：裝著編輯/刪除按鈕的 `.card-admin-actions` 容器**在每張卡片都會被渲染**（只是 inline style 依 `isAdminUser` 決定 `display: flex` 或 `none`），DOM 元素與事件監聽器對任何訪客（含完全未登入者）都實際存在，只是視覺隱藏。理論上任何人在瀏覽器 Console 對隱藏元素呼叫 `.click()`（不需先讓它可見）即可觸發寫入請求，此前資料庫端毫無防備
+  - **教訓（已寫入 PROJECT_ARCHITECTURE.md 對應章節，供未來開發參照）**：「前端隱藏」（CSS `display:none`／`admin-only` class）與「資料庫規則」（RLS）是兩件完全獨立的事，看得到按鈕被藏起來不代表寫入請求真的被擋住。**新增任何寫入功能時，一律先確認 RLS 是否已限制，不要只靠前端判斷或按鈕隱藏當作安全邊界**
+  - 此發現已回報使用者並取得明確同意後才繼續執行 RLS 修復；發現本身不影響 RLS 該怎麼設計（前端功能的設計意圖仍然是僅供管理員使用，只是實作有缺陷，缺陷本身正是需要 RLS 補上的理由）
+- **修復**：RLS 重用任務 B 已建立的 `public.is_admin()`；`japan_items`、`japan_categories` 的 SELECT 政策維持不動，INSERT/UPDATE/DELETE 一律改為僅 `is_admin()`
+- **驗證結果（2026-07-11，使用者實測）**：
+  - 未登入訪客瀏覽 `/japan`、`/trip` 收藏分頁 → 正常瀏覽/搜尋/篩選，SELECT 不受影響 ✅
+  - 管理員於 `/trip` 新增/編輯/刪除收藏品、管理分類 → 正常 ✅
+  - 朋友帳號 session 直接繞過頁面呼叫 API：新增分類 → `403 Forbidden`（明確拒絕）✅；刪除品項 → 網頁回應 `success:true/204`，但 Table Editor 確認資料庫該筆資料**實際未被刪除**，確認是 RLS 靜默擋下（PostgREST 對 RLS 擋下的 DELETE 仍回傳成功狀態，不能只看回應，需查資料庫本身）✅
+  - 朋友帳號既有的願望清單勾選、數量調整功能 → 不受影響，行為與修改前一致 ✅
+- **過程中發現、記錄但未處理的異常（不在本次任務範圍，`/japan` 為凍結頁面不得修改）**：驗證時發現管理員在**舊版 `/japan` 頁面**（非 `/trip`）新增收藏品項時會完全卡住無反應、Console 無任何錯誤訊息、隨後整頁失去回應；同一管理員帳號在 `/trip` 操作完全正常。判斷與本次 RLS 修改無關（RLS 只認登入者身分，不分請求來自哪個頁面；且 `/trip` 用同一帳號寫入正常，證明 `is_admin()` 判斷本身沒問題），較可能是 `japan.astro` 獨立管理 Supabase session 的既有問題（架構與 `/trip` 單一入口不同）。因 `/japan` 屬凍結頁面，依規則不修改，僅記錄；`/trip` 才是實際使用中的頁面，不影響本次任務驗收
 - 隱私修復任務 C（照片）另案處理，尚未開始
 
 ---

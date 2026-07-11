@@ -190,6 +190,12 @@ if (!session) {
 - **頁面層**：`ledger.astro` 原本只檢查 `session` 是否存在(任何登入帳號皆可進入),已比照 `JapanCollection.astro` 的 `isAdminUser` 判斷模式,新增 `session.user.email !== adminEmail` 比對;非管理員(含白名單朋友/家人帳號)一律 `alert` 提示「僅管理員可使用記帳系統」後導回首頁(不是導去登入頁,因為問題不是沒登入)
 - **驗證方式**：頁面層保護可直接瀏覽 `/ledger` 測試;資料庫層保護需繞過頁面、以目標帳號的 session 直接呼叫 `supabase.from('transactions').select('*')` 確認回傳空陣列,才能排除「頁面擋得住但 API 仍開放」的情況
 
+### 日本收藏(japan_items / japan_categories)寫入權限架構(2026-07-11 安全修復)
+- **原則**：收藏頁的 SELECT 為刻意保留的公開展示設計(任何人瀏覽合理),**不受本次修復影響**;問題只在寫入——前端所有新增/編輯/刪除功能設計上都只給管理員用,但資料庫端原本未真正把關
+- **RLS 層**：`japan_items`、`japan_categories` 的 SELECT 政策維持不動;INSERT/UPDATE/DELETE 一律改為僅 `public.is_admin()`(重用任務 B 已建立的函式)
+- **⚠️ 重要教訓(2026-07-11 執行前稽核發現)**：動工前逐一比對兩張表所有 `.insert()/.update()/.delete()` 呼叫點是否都有 `isAdminUser` 判斷守護,結果發現 `japan_categories` 4 個寫入點中 1 個(新增主分類)、`japan_items` 5 個寫入點中 4 個(新增/編輯品項、切換願望清單、刪除品項),實際上**只靠 CSS `admin-only { display:none }` 隱藏按鈕**,對應的事件處理程式碼裡完全沒有 `isAdminUser` 檢查——因為這些操作是透過**委派事件監聽器**（綁在整個卡片容器上、無條件執行）處理，任何人只要在瀏覽器 Console 對隱藏元素呼叫 `.click()`（不需要先讓它可見）就能觸發請求。**「前端隱藏」與「資料庫規則」是兩件完全獨立的事，看得到 admin-only 的 UI 判斷不代表寫入請求真的被擋住，只有 RLS 才是唯一可靠的防線。新增任何寫入功能時，一律先確認 RLS 是否已限制，不能只靠前端判斷或按鈕隱藏。**（完整比對記錄見 PROJECT_PROGRESS.md「任務 G」）
+- **驗證方式**：管理員寫入正常 + 朋友帳號繞過頁面直接呼叫 API 應被拒絕；DELETE 操作務必用 Table Editor 確認資料實際未變動（PostgREST 對 RLS 擋下的 DELETE 仍回傳 `200/204 success:true`，不能只看回應）
+
 ---
 
 ## /trip 頁面 Supabase 單一入口架構（重要）
