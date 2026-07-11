@@ -569,6 +569,7 @@ html.theme-night .halo-moon { opacity: 1; }
   border-radius: 6px;
   font-size: 0.85rem;
   color: var(--nb-text-body);
+  min-width: 0;
 }
 
 .media-list-item .media-kind-tag {
@@ -582,12 +583,14 @@ html.theme-night .halo-moon { opacity: 1; }
 
 .media-list-item .media-label {
   flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .media-list-item button {
+  flex-shrink: 0;
   background: transparent;
   border: none;
   cursor: pointer;
