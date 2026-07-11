@@ -20,6 +20,22 @@ const htmlContent = post
   ? await marked.parse((post.content || '').replace(/\n/g, '\n\n'))
   : '';
 
+// 資料庫存的是 post_media 內的路徑，不是網址；SSR 當下換成 1 小時有效的簽名網址供渲染
+// RLS 生效後：public 文章的媒體 anon 可讀；非 public 走不到這裡（SSR 已抓不到 post）
+let signedImageUrls: string[] = [];
+let signedImageUrl: string | null = null;
+if (post) {
+  if (post.image_urls && post.image_urls.length > 0) {
+    const results = await Promise.all(
+      post.image_urls.map((path: string) => supabase.storage.from('post_media').createSignedUrl(path, 3600))
+    );
+    signedImageUrls = results.map((r) => r.data?.signedUrl).filter((u): u is string => !!u);
+  } else if (post.image_url) {
+    const { data: signedData } = await supabase.storage.from('post_media').createSignedUrl(post.image_url, 3600);
+    signedImageUrl = signedData?.signedUrl ?? null;
+  }
+}
+
 const visibilityMap = {
   public: { text: '公開', color: 'var(--tag-public)' },
   friends: { text: '朋友', color: 'var(--tag-friends)' },
@@ -57,29 +73,29 @@ const visibilityMap = {
                 </div>
               </div>
 
-              {(post.image_urls && post.image_urls.length > 0) ? (
+              {(signedImageUrls.length > 0) ? (
                 <div class="post-slideshow">
-                  {post.image_urls.map((url: string, index: number) => (
+                  {signedImageUrls.map((url: string, index: number) => (
                     <div class="slide" data-index={index}>
                       <img src={url} alt={post.title} />
                     </div>
                   ))}
 
-                  {post.image_urls.length > 1 && (
+                  {signedImageUrls.length > 1 && (
                     <>
                       <button class="ss-prev" id="prevSlide">&#10094;</button>
                       <button class="ss-next" id="nextSlide">&#10095;</button>
                       <div class="ss-dots-container">
-                        {post.image_urls.map((_: any, index: number) => (
+                        {signedImageUrls.map((_: string, index: number) => (
                           <span class="ss-dot" data-index={index}></span>
                         ))}
                       </div>
                     </>
                   )}
                 </div>
-              ) : post.image_url && (
+              ) : signedImageUrl && (
                 <div class="post-image-container">
-                  <img src={post.image_url} alt={post.title} class="post-main-image" />
+                  <img src={signedImageUrl} alt={post.title} class="post-main-image" />
                 </div>
               )}
 
@@ -206,15 +222,25 @@ const visibilityMap = {
       };
       const v = visibilityMap[post.visibility] || visibilityMap.private;
 
+      // 資料庫存的是 post_media 內的路徑，用目前登入者的 session 換簽名網址（RLS 自動判權）
       let imagesHtml = '';
       if (post.image_urls && post.image_urls.length > 0) {
-        imagesHtml = '<div class="post-slideshow">' +
-          post.image_urls.map((url, i) =>
-            `<div class="slide" data-index="${i}" style="display:${i === 0 ? 'block' : 'none'}"><img src="${url}" alt="${post.title}" /></div>`
-          ).join('') +
-          '</div>';
+        const signResults = await Promise.all(
+          post.image_urls.map((path) => supabase.storage.from('post_media').createSignedUrl(path, 3600))
+        );
+        const signedUrls = signResults.map((r) => r.data?.signedUrl).filter(Boolean);
+        if (signedUrls.length > 0) {
+          imagesHtml = '<div class="post-slideshow">' +
+            signedUrls.map((url, i) =>
+              `<div class="slide" data-index="${i}" style="display:${i === 0 ? 'block' : 'none'}"><img src="${url}" alt="${post.title}" /></div>`
+            ).join('') +
+            '</div>';
+        }
       } else if (post.image_url) {
-        imagesHtml = `<div class="post-image-container"><img src="${post.image_url}" alt="${post.title}" class="post-main-image" /></div>`;
+        const { data: signedData } = await supabase.storage.from('post_media').createSignedUrl(post.image_url, 3600);
+        if (signedData?.signedUrl) {
+          imagesHtml = `<div class="post-image-container"><img src="${signedData.signedUrl}" alt="${post.title}" class="post-main-image" /></div>`;
+        }
       }
 
       if (container) {

@@ -228,6 +228,7 @@ try {
     postForm.reset();
     (document.getElementById('post-id') as HTMLInputElement).value = '';
     currentImageUrls = [];
+    currentImagePaths = [];
     renderPreviews();
     if (savePostBtn) {
       savePostBtn.textContent = '發布文章';
@@ -235,7 +236,10 @@ try {
     }
   }
 
+  // currentImagePaths：存進資料庫的實際值（post_media 內的路徑，非網址）
+  // currentImageUrls：僅供畫面預覽用的簽名網址（1 小時後失效，不落地儲存）
   let currentImageUrls: string[] = [];
+  let currentImagePaths: string[] = [];
 
   function renderPreviews() {
     if (!imagePreviewContainer) return;
@@ -253,6 +257,7 @@ try {
         btn.addEventListener('click', (e) => {
           const index = parseInt((e.currentTarget as HTMLElement).dataset.index || '0');
           currentImageUrls.splice(index, 1);
+          currentImagePaths.splice(index, 1);
           renderPreviews();
         });
       });
@@ -261,25 +266,37 @@ try {
     }
   }
 
-  // 圖片上傳
+  // 圖片上傳：私有 bucket post_media，路徑為 {post_id}/{檔名}；
+  // 新增文章時 id 尚未存在，先存進 pending/ 暫存資料夾，送出表單成功拿到 id 後再搬移歸位
   postImageInput?.addEventListener('change', async (e) => {
     const files = (e.target as HTMLInputElement).files;
     if (!files || files.length === 0) return;
 
     showToast(`正在上傳 ${files.length} 張圖片...`);
-    
+
+    const existingId = (document.getElementById('post-id') as HTMLInputElement).value;
+    const folder = existingId || 'pending';
+
     for (const file of Array.from(files)) {
       const fileName = `${Math.random().toString(36).substring(2)}.${file.name.split('.').pop()}`;
-      const filePath = `post_images/${fileName}`;
+      const filePath = `${folder}/${fileName}`;
 
-      const { data, error } = await supabase.storage.from('post_images').upload(filePath, file);
+      const { error } = await supabase.storage.from('post_media').upload(filePath, file);
       if (error) {
-        alert('上傳失敗');
+        alert('上傳失敗：' + error.message);
         continue;
       }
 
-      const { data: { publicUrl } } = supabase.storage.from('post_images').getPublicUrl(filePath);
-      currentImageUrls.push(publicUrl);
+      const { data: signedData, error: signError } = await supabase.storage
+        .from('post_media')
+        .createSignedUrl(filePath, 3600);
+      if (signError || !signedData) {
+        alert('產生預覽網址失敗：' + (signError?.message || '未知錯誤'));
+        continue;
+      }
+
+      currentImagePaths.push(filePath);
+      currentImageUrls.push(signedData.signedUrl);
     }
 
     renderPreviews();
@@ -299,12 +316,12 @@ try {
     const reading_time = Math.max(1, Math.ceil(content.length / 300));
 
     const postData: any = { title, content, weather, visibility, reading_time };
-    
-    // 優先使用多圖陣列
-    postData.image_urls = currentImageUrls;
-    // 為了向下相容，將第一張圖存入單數欄位
-    if (currentImageUrls.length > 0) {
-      postData.image_url = currentImageUrls[0];
+
+    // 存進資料庫的是 post_media 內的路徑，不是網址（簽名網址會過期，不能落地儲存）
+    postData.image_urls = currentImagePaths;
+    // 為了向下相容，將第一張圖路徑存入單數欄位
+    if (currentImagePaths.length > 0) {
+      postData.image_url = currentImagePaths[0];
     }
 
     let error;
@@ -346,6 +363,31 @@ try {
         }
         showToast('已更新');
       } else if (newPost) {
+        // 新文章的照片先前存在 pending/ 暫存資料夾，現在已拿到真正的 id，搬移歸位
+        if (currentImagePaths.some((p) => p.startsWith('pending/'))) {
+          const finalPaths: string[] = [];
+          for (const p of currentImagePaths) {
+            if (p.startsWith('pending/')) {
+              const fileName = p.split('/').pop();
+              const newPath = `${newPost.id}/${fileName}`;
+              const { error: moveError } = await supabase.storage.from('post_media').move(p, newPath);
+              finalPaths.push(moveError ? p : newPath);
+            } else {
+              finalPaths.push(p);
+            }
+          }
+          const { error: fixupError } = await supabase
+            .from('posts')
+            .update({ image_urls: finalPaths, image_url: finalPaths[0] || null })
+            .eq('id', newPost.id);
+          if (fixupError) {
+            console.warn('照片搬移後更新資料庫失敗：', fixupError);
+          } else {
+            newPost.image_urls = finalPaths;
+            newPost.image_url = finalPaths[0] || null;
+          }
+        }
+
         // 新增 UI
         const { data: { session } } = await supabase.auth.getSession();
         const html = createPostHtml(newPost, !!session);
@@ -355,7 +397,7 @@ try {
         container?.insertAdjacentHTML('afterbegin', html);
         showToast('已發布');
       }
-      
+
       resetForm();
     }
   });
@@ -398,9 +440,20 @@ try {
       (document.getElementById('post-weather') as HTMLInputElement).value = post.weather || '';
       (document.getElementById('post-visibility') as HTMLSelectElement).value = post.visibility;
       
-      // 載入圖片陣列
-      currentImageUrls = post.image_urls || (post.image_url ? [post.image_url] : []);
+      // 載入圖片陣列：資料庫存的是路徑，先轉成簽名網址才能預覽
+      currentImagePaths = post.image_urls || (post.image_url ? [post.image_url] : []);
+      currentImageUrls = [];
       renderPreviews();
+      if (currentImagePaths.length > 0) {
+        Promise.all(
+          currentImagePaths.map((path: string) =>
+            supabase.storage.from('post_media').createSignedUrl(path, 3600)
+          )
+        ).then((results) => {
+          currentImageUrls = results.map((r) => r.data?.signedUrl || '');
+          renderPreviews();
+        });
+      }
       
       if (savePostBtn) savePostBtn.textContent = '更新文章';
       if (addPostSection) addPostSection.style.display = 'block';
