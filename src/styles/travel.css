@@ -1866,3 +1866,187 @@ body.modal-open {
 .transport-route-subway-link:hover {
   background-color: var(--travel-secondary);
 }
+
+/* 行程模式內嵌交通方式區塊（V2 階段 6 任務二，窄、淡，不搶景點卡片視覺主體） */
+.itinerary-transport-block {
+  margin: -2px 0 -2px 20px;
+  padding-left: 14px;
+  border-left: 2px dashed var(--travel-border);
+}
+
+.itinerary-transport-empty {
+  padding: 4px 0 4px 14px;
+}
+
+.btn-itinerary-transport-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px dashed var(--travel-border-dashed);
+  background: transparent;
+  color: var(--travel-text-muted);
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.btn-itinerary-transport-add:hover {
+  color: var(--travel-primary);
+  border-color: var(--travel-primary);
+}
+
+.itinerary-transport-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background-color: var(--travel-visited-bg);
+  color: var(--travel-text-muted);
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+}
+
+.itinerary-transport-summary:hover {
+  border-color: var(--travel-border);
+}
+
+.itinerary-transport-summary-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itinerary-transport-more {
+  font-size: 0.7rem;
+  color: var(--travel-primary);
+}
+
+.itinerary-transport-chevron {
+  transition: transform 0.2s ease;
+}
+
+.itinerary-transport-summary.expanded .itinerary-transport-chevron {
+  transform: rotate(180deg);
+}
+
+.itinerary-transport-details {
+  margin-top: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background-color: #FFFFFF;
+  border: 1px solid var(--travel-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.itinerary-transport-route-row {
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--travel-border);
+}
+
+.itinerary-transport-route-row:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.itinerary-transport-route-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--travel-text);
+}
+
+.itinerary-transport-route-mode {
+  font-weight: 600;
+}
+
+.itinerary-transport-route-meta {
+  color: var(--travel-text-muted);
+  font-size: 0.75rem;
+}
+
+.itinerary-transport-route-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.itinerary-transport-route-actions button {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background-color: var(--travel-visited-bg);
+  color: var(--travel-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+}
+
+.itinerary-transport-route-actions button:hover {
+  background-color: var(--travel-secondary);
+  color: var(--travel-primary);
+}
+
+.itinerary-transport-route-note {
+  margin: 6px 0 0;
+  font-size: 0.75rem;
+  color: var(--travel-text-muted);
+  line-height: 1.5;
+}
+
+.itinerary-transport-route-links {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.itinerary-transport-route-links a,
+.itinerary-transport-subway-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--travel-border);
+  background: transparent;
+  color: var(--travel-primary);
+  font-size: 0.72rem;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.btn-itinerary-transport-add-more {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  border: 1px dashed var(--travel-border-dashed);
+  background: transparent;
+  color: var(--travel-text-muted);
+  font-family: inherit;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.btn-itinerary-transport-add-more:hover {
+  color: var(--travel-primary);
+  border-color: var(--travel-primary);
+}

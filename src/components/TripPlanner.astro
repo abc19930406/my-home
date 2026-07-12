@@ -865,6 +865,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     // 非管理員/非 can_edit_itinerary 協作者的「個人篩選」：只影響自己畫面，不寫入資料庫，切換行程時重置為 null（回到預設）
     let personalSubwayCategorySelection = null;
     let transportRoutesCache = []; // 「交通查詢」子分頁：目前起訖點查詢結果（V2 階段 6 任務一）
+    let inlineTransportRoutesByPair = {}; // 行程模式內嵌交通方式：key 為 "{originId}__{destId}"（V2 階段 6 任務二）
     let currentTripId = '';
     let selectedCategoryFilter = 'all';
     let selectedSubcategoryFilter = 'all';
@@ -2095,6 +2096,68 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       // 事件委派：景點列表
       const spotsList = document.getElementById('itinerary-spots-list');
       spotsList?.addEventListener('click', async (e) => {
+        // 內嵌交通方式區塊：展開/收合（所有人皆可）
+        const transportSummary = e.target.closest('.itinerary-transport-summary');
+        if (transportSummary) {
+          const key = transportSummary.dataset.key;
+          const details = document.getElementById(`itinerary-transport-details-${key}`);
+          if (details) {
+            const isOpen = details.style.display !== 'none';
+            details.style.display = isOpen ? 'none' : 'flex';
+            transportSummary.classList.toggle('expanded', !isOpen);
+          }
+          return;
+        }
+
+        // 內嵌交通方式區塊：地鐵圖分類連結（所有人皆可）
+        const transportSubwayLink = e.target.closest('.itinerary-transport-subway-link');
+        if (transportSubwayLink) {
+          jumpToSubwayCategory(transportSubwayLink.dataset.category);
+          return;
+        }
+
+        // 內嵌交通方式區塊：新增（需編輯權）
+        const transportAddBtn = e.target.closest('.btn-itinerary-transport-add, .btn-itinerary-transport-add-more');
+        if (transportAddBtn) {
+          if (!canEditItinerary(currentTripId)) return;
+          openInlineTransportRouteModal(transportAddBtn.dataset.origin, transportAddBtn.dataset.dest);
+          return;
+        }
+
+        // 內嵌交通方式區塊：編輯（需編輯權）
+        const transportEditBtn = e.target.closest('.btn-itinerary-transport-edit');
+        if (transportEditBtn) {
+          if (!canEditItinerary(currentTripId)) return;
+          const route = findInlineTransportRouteById(transportEditBtn.dataset.id);
+          if (route) openInlineTransportRouteModal(route.origin_spot_id, route.destination_spot_id, route);
+          return;
+        }
+
+        // 內嵌交通方式區塊：刪除（需編輯權）
+        const transportDeleteBtn = e.target.closest('.btn-itinerary-transport-delete');
+        if (transportDeleteBtn) {
+          if (!canEditItinerary(currentTripId)) return;
+          if (!confirm('確定要刪除這個交通方式嗎？')) return;
+          const routeId = transportDeleteBtn.dataset.id;
+          const { data, error } = await supabase
+            .from('spot_transport_routes')
+            .delete()
+            .eq('id', routeId)
+            .select();
+          if (error) {
+            alert('刪除失敗：' + error.message);
+            return;
+          }
+          if (!data || data.length === 0) {
+            alert('刪除失敗：沒有權限或資料不存在');
+            return;
+          }
+          showToast('已刪除');
+          await renderDaySpots();
+          await queryTransportRoutes();
+          return;
+        }
+
         const btn = e.target.closest('.btn-itinerary-action');
         if (btn) {
           if (!canEditItinerary(currentTripId)) return;
@@ -2859,20 +2922,52 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       renderItineraryMap();
     }
 
-    function renderDaySpots() {
+    async function renderDaySpots() {
       const list = document.getElementById('itinerary-spots-list');
       if (!list) return;
-      
+
       if (daySpotsCache.length === 0) {
         list.innerHTML = '<div class="empty-state">當天尚無景點，請點選「從想去清單選擇」加入。</div>';
         return;
       }
-      
+
+      // 相鄰景點配對依「目前顯示順序」即時計算，資料庫不因排序移動任何路線資料
+      const pairs = [];
+      for (let i = 0; i < daySpotsCache.length - 1; i++) {
+        pairs.push({
+          originId: daySpotsCache[i].spot.id,
+          destId: daySpotsCache[i + 1].spot.id
+        });
+      }
+
+      inlineTransportRoutesByPair = {};
+      if (pairs.length > 0) {
+        const originIds = [...new Set(pairs.map(p => p.originId))];
+        const { data, error } = await supabase
+          .from('spot_transport_routes')
+          .select('*')
+          .in('origin_spot_id', originIds)
+          .order('sort_order', { ascending: true })
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          console.error('載入內嵌交通方式失敗:', error);
+        } else {
+          pairs.forEach(p => {
+            const key = `${p.originId}__${p.destId}`;
+            inlineTransportRoutesByPair[key] = (data || []).filter(
+              r => r.origin_spot_id === p.originId && r.destination_spot_id === p.destId
+            );
+          });
+        }
+      }
+
+      const canEdit = canEditItinerary(currentTripId);
       let html = '';
       daySpotsCache.forEach((ds, index) => {
         const spot = ds.spot;
         const typeInfo = spotTypesCache.find(t => t.id == spot.spot_type_id) || { emoji: '📍' };
-        
+
         html += `
           <div class="itinerary-spot-item" data-id="${ds.id}" style="cursor: pointer;">
             <div class="spot-order-badge">${index + 1}</div>
@@ -2881,7 +2976,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
               <div class="spot-name">${spot.name}</div>
               <div class="spot-note">${spot.address || ''}</div>
             </div>
-            ${canEditItinerary(currentTripId) ? `
+            ${canEdit ? `
               <div class="spot-actions">
                 ${index > 0 ? `<button class="btn-itinerary-action move-up" data-id="${ds.id}"><i class="ti ti-arrow-up"></i></button>` : `<div style="width: 28px;"></div>`}
                 ${index < daySpotsCache.length - 1 ? `<button class="btn-itinerary-action move-down" data-id="${ds.id}"><i class="ti ti-arrow-down"></i></button>` : `<div style="width: 28px;"></div>`}
@@ -2890,8 +2985,103 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
             ` : ''}
           </div>
         `;
+
+        // 交通區塊本身不可拖曳、不參與排序，僅為相鄰景點間的顯示用區塊
+        if (index < daySpotsCache.length - 1) {
+          const nextSpot = daySpotsCache[index + 1].spot;
+          const key = `${spot.id}__${nextSpot.id}`;
+          html += renderInlineTransportBlock(spot.id, nextSpot.id, inlineTransportRoutesByPair[key] || [], canEdit);
+        }
       });
       list.innerHTML = html;
+    }
+
+    // --- 行程模式內嵌交通方式區塊（V2 階段 6 任務二） ---
+    function renderInlineTransportBlock(originId, destId, routes, canEdit) {
+      const key = `${originId}__${destId}`;
+
+      if (routes.length === 0) {
+        if (!canEdit) return ''; // 無編輯權且無路線：不顯示任何東西
+        return `
+          <div class="itinerary-transport-block itinerary-transport-empty" data-origin="${originId}" data-dest="${destId}">
+            <button type="button" class="btn-itinerary-transport-add" data-origin="${originId}" data-dest="${destId}">
+              <i class="ti ti-plus"></i> 交通方式
+            </button>
+          </div>
+        `;
+      }
+
+      const first = routes[0];
+      const metaParts = [];
+      if (first.duration_minutes) metaParts.push(`${first.duration_minutes} 分`);
+      const moreCount = routes.length - 1;
+
+      return `
+        <div class="itinerary-transport-block" data-origin="${originId}" data-dest="${destId}">
+          <button type="button" class="itinerary-transport-summary" data-key="${key}">
+            <i class="ti ${getTransportModeIcon(first.mode)}"></i>
+            <span class="itinerary-transport-summary-text">${first.mode}${metaParts.length ? ' · ' + metaParts.join(' · ') : ''}</span>
+            ${moreCount > 0 ? `<span class="itinerary-transport-more">+${moreCount}</span>` : ''}
+            <i class="ti ti-chevron-down itinerary-transport-chevron"></i>
+          </button>
+          <div class="itinerary-transport-details" id="itinerary-transport-details-${key}" style="display: none;">
+            ${routes.map(r => renderInlineTransportRouteRow(r, canEdit)).join('')}
+            ${canEdit ? `
+              <button type="button" class="btn-itinerary-transport-add-more" data-origin="${originId}" data-dest="${destId}">
+                <i class="ti ti-plus"></i> 新增交通方式
+              </button>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderInlineTransportRouteRow(r, canEdit) {
+      const metaParts = [];
+      if (r.duration_minutes) metaParts.push(`⏱ ${r.duration_minutes} 分`);
+      if (r.cost) metaParts.push(`💰 ${r.cost}`);
+      const hasLinks = r.timetable_url || r.subway_map_category;
+
+      return `
+        <div class="itinerary-transport-route-row" data-id="${r.id}">
+          <div class="itinerary-transport-route-main">
+            <i class="ti ${getTransportModeIcon(r.mode)}"></i>
+            <span class="itinerary-transport-route-mode">${r.mode}</span>
+            ${metaParts.length ? `<span class="itinerary-transport-route-meta">${metaParts.join('　')}</span>` : ''}
+            ${canEdit ? `
+              <span class="itinerary-transport-route-actions">
+                <button type="button" class="btn-itinerary-transport-edit" data-id="${r.id}" title="編輯"><i class="ti ti-pencil"></i></button>
+                <button type="button" class="btn-itinerary-transport-delete" data-id="${r.id}" title="刪除"><i class="ti ti-trash"></i></button>
+              </span>
+            ` : ''}
+          </div>
+          ${r.note ? `<p class="itinerary-transport-route-note">${r.note}</p>` : ''}
+          ${hasLinks ? `
+            <div class="itinerary-transport-route-links">
+              ${r.timetable_url ? `<a href="${r.timetable_url}" target="_blank" rel="noopener noreferrer"><i class="ti ti-clock"></i> 時刻表</a>` : ''}
+              ${r.subway_map_category ? `<button type="button" class="itinerary-transport-subway-link" data-category="${r.subway_map_category}"><i class="ti ti-map-2"></i> ${r.subway_map_category}</button>` : ''}
+            </div>
+          ` : ''}
+        </div>
+      `;
+    }
+
+    // 從行程模式內嵌區塊開啟新增/編輯交通方式 Modal，沿用「交通查詢」子分頁同一個 Modal，
+    // 預填起訖點到該子分頁的下拉選單（submit 時讀取的就是這兩個欄位），關閉時雙方同步刷新
+    function openInlineTransportRouteModal(originId, destId, route = null) {
+      const originSelect = document.getElementById('transport-origin-select');
+      const destSelect = document.getElementById('transport-destination-select');
+      if (originSelect) originSelect.value = originId;
+      if (destSelect) destSelect.value = destId;
+      openTransportRouteModal(route);
+    }
+
+    function findInlineTransportRouteById(routeId) {
+      for (const key in inlineTransportRoutesByPair) {
+        const found = inlineTransportRoutesByPair[key].find(r => String(r.id) === String(routeId));
+        if (found) return found;
+      }
+      return null;
     }
 
     function openWishlistModal() {
@@ -4738,6 +4928,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
           closeTransportRouteModal();
           await queryTransportRoutes();
+          await renderDaySpots(); // 與行程模式內嵌區塊同步刷新
           triggerBuildWebhook();
         } catch (err) {
           alert('儲存失敗：' + err.message);
@@ -4781,6 +4972,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           }
           showToast('已刪除');
           await queryTransportRoutes();
+          await renderDaySpots(); // 與行程模式內嵌區塊同步刷新
         }
       });
 
