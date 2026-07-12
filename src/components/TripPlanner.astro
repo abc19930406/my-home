@@ -654,16 +654,18 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           </div>
 
           <div class="form-group">
-            <label for="subway-upload-category-select">分類</label>
-            <select id="subway-upload-category-select">
-              <option value="">＋ 輸入新分類...</option>
-              <!-- JS 動態插入既有分類 -->
-            </select>
-          </div>
-
-          <div class="form-group" id="subway-upload-category-new-group">
-            <label for="subway-upload-category-new">新分類名稱 <span style="color: var(--color-danger)">*</span></label>
-            <input type="text" id="subway-upload-category-new" placeholder="例如：東京 Metro" autocomplete="off" />
+            <label for="subway-upload-category">分類 <span style="color: var(--color-danger)">*</span></label>
+            <input
+              type="text"
+              id="subway-upload-category"
+              list="subway-category-datalist"
+              required
+              placeholder="輸入或從建議中選擇既有分類，例如：東京 Metro"
+              autocomplete="off"
+            />
+            <datalist id="subway-category-datalist">
+              <!-- JS 動態插入既有分類，供輸入時自動建議 -->
+            </datalist>
           </div>
 
           <div class="form-group">
@@ -2254,15 +2256,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       });
     }
 
-    function populateSubwayCategoryDropdown() {
-      const select = document.getElementById('subway-upload-category-select');
-      if (!select) return;
+    function populateSubwayCategoryDatalist() {
+      const datalist = document.getElementById('subway-category-datalist');
+      if (!datalist) return;
       const categories = [...new Set(subwayMapsCache.map(m => m.category))].sort();
-      let html = '<option value="">＋ 輸入新分類...</option>';
-      categories.forEach(cat => {
-        html += `<option value="${cat}">${cat}</option>`;
-      });
-      select.innerHTML = html;
+      datalist.innerHTML = categories.map(cat => `<option value="${cat}"></option>`).join('');
     }
 
     function openSubwayCategoriesModal() {
@@ -2329,13 +2327,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     function openSubwayUploadModal() {
       const modal = document.getElementById('travel-subway-upload-modal');
       const form = document.getElementById('subway-upload-form');
-      const newGroup = document.getElementById('subway-upload-category-new-group');
       if (!modal) return;
 
       form?.reset();
       resetSubwayUploadImagePreview();
-      populateSubwayCategoryDropdown();
-      if (newGroup) newGroup.style.display = 'block';
+      populateSubwayCategoryDatalist();
 
       modal.classList.add('show');
       document.body.classList.add('modal-open');
@@ -4131,7 +4127,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       const btnSubwayUploadClose = document.getElementById('btn-subway-upload-modal-close');
       const btnSubwayUploadCancel = document.getElementById('btn-subway-upload-cancel');
       const subwayUploadForm = document.getElementById('subway-upload-form');
-      const subwayUploadCategorySelect = document.getElementById('subway-upload-category-select');
       const subwayUploadImageFileInput = document.getElementById('subway-upload-image-file');
       const subwayUploadImageUrlInput = document.getElementById('subway-upload-image-url');
 
@@ -4158,6 +4153,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
             return;
           }
           tripSubwayCategoriesCache.push(data[0]);
+          showToast(`已將「${category}」加入此行程`);
         } else {
           const { data, error } = await supabase
             .from('trip_subway_categories')
@@ -4171,6 +4167,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
             return;
           }
           tripSubwayCategoriesCache = tripSubwayCategoriesCache.filter(c => c.category !== category);
+          showToast(`已將「${category}」從此行程移除`);
         }
         renderSubwayGroups();
       });
@@ -4180,11 +4177,6 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       btnSubwayUploadCancel?.addEventListener('click', closeSubwayUploadModal);
       subwayUploadModal?.addEventListener('click', (e) => {
         if (e.target === subwayUploadModal) closeSubwayUploadModal();
-      });
-
-      subwayUploadCategorySelect?.addEventListener('change', (e) => {
-        const newGroup = document.getElementById('subway-upload-category-new-group');
-        if (newGroup) newGroup.style.display = e.target.value ? 'none' : 'block';
       });
 
       subwayUploadImageFileInput?.addEventListener('change', async (e) => {
@@ -4218,9 +4210,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       subwayUploadForm?.addEventListener('submit', async (e) => {
         e.preventDefault();
         const title = document.getElementById('subway-upload-title').value.trim();
-        const selectedCategory = subwayUploadCategorySelect?.value || '';
-        const newCategory = document.getElementById('subway-upload-category-new').value.trim();
-        const category = selectedCategory || newCategory;
+        const category = document.getElementById('subway-upload-category').value.trim();
         const external_url = document.getElementById('subway-upload-link').value.trim();
         const image_url = subwayUploadImageUrlInput?.value || '';
 
