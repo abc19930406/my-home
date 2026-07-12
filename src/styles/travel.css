@@ -1694,3 +1694,157 @@ body.modal-open {
   font-size: 0.78rem;
   color: var(--travel-text-muted);
 }
+
+.subway-category-group.subway-category-highlight {
+  animation: subwayCategoryFlash 1.5s ease;
+}
+
+@keyframes subwayCategoryFlash {
+  0%, 100% { background-color: transparent; }
+  20% { background-color: var(--travel-secondary); }
+}
+
+/* 交通查詢（V2 階段 6 任務一） */
+.transport-section {
+  padding: 4px 0 40px;
+}
+
+.transport-query-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.btn-transport-swap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--travel-border);
+  background-color: #FFFFFF;
+  color: var(--travel-primary);
+  cursor: pointer;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.btn-transport-swap:hover {
+  background-color: var(--travel-secondary);
+  transform: rotate(180deg);
+}
+
+.transport-route-card {
+  border: 1px solid var(--travel-border);
+  border-radius: 12px;
+  background-color: var(--travel-card-bg);
+  box-shadow: var(--travel-shadow-sm);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.transport-route-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.transport-route-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: var(--travel-visited-bg);
+  color: var(--travel-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.transport-route-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.transport-route-mode {
+  font-weight: 700;
+  color: var(--travel-text);
+  font-size: 0.95rem;
+}
+
+.transport-route-meta {
+  font-size: 0.8rem;
+  color: var(--travel-text-muted);
+  margin-top: 2px;
+}
+
+.transport-route-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.transport-route-actions button {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background-color: var(--travel-visited-bg);
+  color: var(--travel-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+}
+
+.transport-route-actions button:hover {
+  background-color: var(--travel-secondary);
+  color: var(--travel-primary);
+}
+
+.transport-route-details {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--travel-border);
+}
+
+.transport-route-note {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  color: var(--travel-text-muted);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.transport-route-links {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.transport-route-link,
+.transport-route-subway-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--travel-border);
+  background-color: #FFFFFF;
+  color: var(--travel-primary);
+  font-size: 0.8rem;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.transport-route-link:hover,
+.transport-route-subway-link:hover {
+  background-color: var(--travel-secondary);
+}
