@@ -64,6 +64,7 @@ const { section, cards, isLoggedIn = false } = Astro.props;
         {/* 客製：旅行地圖的子選單 */}
         {card.title === "旅行地圖" && (
           <div class="submenu travel-submenu" id="travel-submenu" style="display:none;">
+            <a href="/trip" class="travel-sub-link">🧭 行程與收藏（新版）</a>
             <a href="/travel" class="travel-sub-link">🗺 旅行地圖</a>
             <a href="/japan" class="travel-sub-link">🇯🇵 日本收藏</a>
           </div>
