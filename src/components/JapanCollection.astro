@@ -874,22 +874,27 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       }
 
       let userCheckboxHtml = '';
-      if (!isAdminUser && currentUser && canWishlistItem(item)) {
+      if (!isAdminUser && currentUser) {
         const userWishlistItem = allWishlistItems.find(w => String(w.japan_item_id) === String(item.id) && w.user_id === currentUser.id);
         const isUserWishlisted = !!userWishlistItem;
-        userCheckboxHtml = `
-          <div class="wishlist-checkbox-user ${isUserWishlisted ? 'active' : ''}" data-id="${item.id}" title="加入我的清單">
-            📌
-          </div>
-        `;
-        if (isUserWishlisted) {
-          userCheckboxHtml += `
-            <div class="quantity-adjuster user" data-id="${item.id}" data-role="user">
-              <button class="btn-qty-minus" data-action="qty-minus" data-item-id="${item.id}" data-role="user">-</button>
-              <span>${userWishlistItem.quantity || 1}</span>
-              <button class="btn-qty-plus" data-action="qty-plus" data-item-id="${item.id}" data-role="user">+</button>
+        const canEditThisItem = canWishlistItem(item);
+        // 權限被撤後,即使不能再新增/調整,仍要讓使用者能看到並收回自己先前標過的
+        // (DELETE 政策未變動,永遠允許收回;數量調整器則需要有權限才顯示,避免點了卻被 RLS 擋下)
+        if (canEditThisItem || isUserWishlisted) {
+          userCheckboxHtml = `
+            <div class="wishlist-checkbox-user ${isUserWishlisted ? 'active' : ''}" data-id="${item.id}" title="加入我的清單">
+              📌
             </div>
           `;
+          if (isUserWishlisted && canEditThisItem) {
+            userCheckboxHtml += `
+              <div class="quantity-adjuster user" data-id="${item.id}" data-role="user">
+                <button class="btn-qty-minus" data-action="qty-minus" data-item-id="${item.id}" data-role="user">-</button>
+                <span>${userWishlistItem.quantity || 1}</span>
+                <button class="btn-qty-plus" data-action="qty-plus" data-item-id="${item.id}" data-role="user">+</button>
+              </div>
+            `;
+          }
         }
       }
 
