@@ -270,7 +270,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
       </div>
 
-      <!-- 子分頁面板：資源（優惠券牆，預設隱藏） -->
+      <!-- 子分頁面板：資源（優惠券牆 + 地鐵圖，預設隱藏） -->
       <div id="trip-subtab-pane-resources" class="trip-subtab-pane" style="display: none;">
         <section class="coupons-section">
           <div class="coupons-header">
@@ -281,6 +281,23 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           </div>
           <div id="coupons-grid" class="coupons-grid">
             <div class="empty-state">載入優惠券中...</div>
+          </div>
+        </section>
+
+        <section class="subway-section">
+          <div class="coupons-header">
+            <h3><i class="ti ti-train"></i> 地鐵圖</h3>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <button id="btn-browse-subway-categories" class="btn-browse-subway itinerary-edit-only" style="display: none;">
+                <i class="ti ti-list"></i> 瀏覽全部分類
+              </button>
+              <button id="btn-upload-subway-map" class="btn-add-coupon admin-only" style="display: none;">
+                <i class="ti ti-upload"></i> 上傳地鐵圖
+              </button>
+            </div>
+          </div>
+          <div id="subway-groups-container">
+            <div class="empty-state">請先選擇行程</div>
           </div>
         </section>
       </div>
@@ -600,6 +617,81 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     </div>
   </div>
 
+  <!-- ==========================================
+       彈出視窗 6：瀏覽全部地鐵圖分類（V2 階段 5 任務二）
+       ========================================== -->
+  <div id="travel-subway-categories-modal" class="travel-modal-overlay modal-overlay">
+    <div class="modal-box" style="max-width: 420px;">
+      <div class="modal-header">
+        <h3>🚇 瀏覽全部地鐵圖分類</h3>
+        <button type="button" class="btn-modal-close" id="btn-subway-categories-modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.8rem; color: var(--travel-text-muted); margin: 0 0 12px;">
+          勾選要在目前行程顯示的分類，取消勾選即從此行程移除（不會刪除圖片本身）。
+        </p>
+        <div id="subway-categories-list" style="display: flex; flex-direction: column; gap: 8px;">
+          <!-- JS 動態渲染 -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================
+       彈出視窗 7：上傳地鐵圖（管理員專屬，V2 階段 5 任務二）
+       ========================================== -->
+  <div id="travel-subway-upload-modal" class="travel-modal-overlay modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>＋ 上傳地鐵圖</h3>
+        <button type="button" class="btn-modal-close" id="btn-subway-upload-modal-close">&times;</button>
+      </div>
+      <form id="subway-upload-form">
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="subway-upload-title">名稱 <span style="color: var(--color-danger)">*</span></label>
+            <input type="text" id="subway-upload-title" required placeholder="例如：山手線路線圖" autocomplete="off" />
+          </div>
+
+          <div class="form-group">
+            <label for="subway-upload-category-select">分類</label>
+            <select id="subway-upload-category-select">
+              <option value="">＋ 輸入新分類...</option>
+              <!-- JS 動態插入既有分類 -->
+            </select>
+          </div>
+
+          <div class="form-group" id="subway-upload-category-new-group">
+            <label for="subway-upload-category-new">新分類名稱 <span style="color: var(--color-danger)">*</span></label>
+            <input type="text" id="subway-upload-category-new" placeholder="例如：東京 Metro" autocomplete="off" />
+          </div>
+
+          <div class="form-group">
+            <label for="subway-upload-link">原始連結（選填）</label>
+            <input type="url" id="subway-upload-link" placeholder="https://..." autocomplete="off" />
+          </div>
+
+          <div class="form-group">
+            <label>圖片 <span style="color: var(--color-danger)">*</span></label>
+            <div class="file-upload-wrap">
+              <i class="ti ti-cloud-upload upload-icon"></i>
+              <p class="upload-text">點擊或拖曳圖片至此上傳</p>
+              <input type="file" id="subway-upload-image-file" accept="image/*" />
+            </div>
+            <input type="hidden" id="subway-upload-image-url" />
+            <div class="upload-preview-container" id="subway-upload-image-preview">
+              <!-- JS 動態插入圖片預覽與刪除按鈕 -->
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="btn-subway-upload-cancel">取消</button>
+          <button type="submit" class="btn-primary">上傳</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast 訊息通知 -->
   <div id="toast" class="toast">已成功儲存</div>
 
@@ -658,6 +750,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     let spotTypesCache = [];
     let spotSubtypesCache = [];
     let couponsCache = []; // 「資源」子分頁：優惠券，全站共用不綁 trip_id
+    let subwayMapsCache = []; // 「資源」子分頁：地鐵圖，全域資源庫，全站共用不綁 trip_id（V2 階段 5 任務二）
+    let tripSubwayCategoriesCache = []; // 目前行程關聯的地鐵圖分類（trip_subway_categories）
     let currentTripId = '';
     let selectedCategoryFilter = 'all';
     let selectedSubcategoryFilter = 'all';
@@ -702,8 +796,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       }
     }
 
-    window.addEventListener('trip-changed', () => {
+    window.addEventListener('trip-changed', (e) => {
       updateItineraryEditUI();
+      loadTripSubwayCategories(e.detail?.tripId || currentTripId);
     });
 
     // --- 認證 UI 更新邏輯 (提前綁定以避免 Race Condition) ---
@@ -1779,6 +1874,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       // 「資源」子分頁：優惠券（全站共用，不綁 trip_id，與行程/景點資料無關，獨立載入）
       loadCoupons();
 
+      // 「資源」子分頁：地鐵圖全域資源庫，需先載入完成才能依目前行程篩選要顯示的分類；
+      // 行程專屬的關聯分類由下方 selectTrip() 觸發的 trip-changed 事件載入
+      await loadSubwayMaps();
+
       // 2. 決定預選的行程
       if (tripsCache.length > 0) {
         currentTripId = tripsCache[0].id;
@@ -2064,6 +2163,187 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     const closeCouponModal = () => {
       const couponModal = document.getElementById('travel-coupon-modal');
       couponModal?.classList.remove('show');
+      document.body.classList.remove('modal-open');
+    };
+
+    // --- 「資源」子分頁：地鐵圖（全域資源庫，V2 階段 5 任務二） ---
+    async function loadSubwayMaps() {
+      const { data, error } = await supabase
+        .from('travel_subway_maps')
+        .select('*')
+        .order('category', { ascending: true })
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('載入地鐵圖失敗:', error);
+        subwayMapsCache = [];
+      } else {
+        subwayMapsCache = data || [];
+      }
+    }
+
+    async function loadTripSubwayCategories(tripId) {
+      if (!tripId) {
+        tripSubwayCategoriesCache = [];
+        renderSubwayGroups();
+        return;
+      }
+      const { data, error } = await supabase
+        .from('trip_subway_categories')
+        .select('*')
+        .eq('trip_id', tripId);
+
+      if (error) {
+        console.error('載入行程地鐵圖分類失敗:', error);
+        tripSubwayCategoriesCache = [];
+      } else {
+        tripSubwayCategoriesCache = data || [];
+      }
+      renderSubwayGroups();
+    }
+
+    function renderSubwayGroups() {
+      const container = document.getElementById('subway-groups-container');
+      if (!container) return;
+
+      if (!currentTripId) {
+        container.innerHTML = '<div class="empty-state">請先選擇行程</div>';
+        return;
+      }
+
+      const activeCategories = new Set(tripSubwayCategoriesCache.map(c => c.category));
+      const maps = subwayMapsCache.filter(m => activeCategories.has(m.category));
+
+      if (maps.length === 0) {
+        container.innerHTML = '<div class="empty-state">此行程尚未關聯任何地鐵圖分類</div>';
+        return;
+      }
+
+      const grouped = {};
+      maps.forEach(m => {
+        if (!grouped[m.category]) grouped[m.category] = [];
+        grouped[m.category].push(m);
+      });
+
+      container.innerHTML = Object.keys(grouped).map(category => `
+        <div class="subway-category-group">
+          <h4 class="subway-category-title">${category}</h4>
+          <div class="subway-images-row">
+            ${grouped[category].map(m => `
+              <div class="subway-map-thumb-wrap">
+                <img src="${m.image_url}" alt="${m.title}" class="subway-map-thumb" data-src="${m.image_url}" title="${m.title}" loading="lazy" />
+                ${m.external_url ? `<a href="${m.external_url}" target="_blank" rel="noopener noreferrer" class="subway-map-link" title="開啟原始連結"><i class="ti ti-external-link"></i></a>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+
+      // 點擊放大：沿用既有的 #lightbox（同一份，與景點照片共用，未另建新元件）
+      container.querySelectorAll('.subway-map-thumb').forEach(img => {
+        img.addEventListener('click', () => {
+          const lightbox = document.getElementById('lightbox');
+          const lightboxImg = document.getElementById('lightbox-img');
+          if (lightbox && lightboxImg) {
+            lightboxImg.src = img.dataset.src;
+            lightbox.style.display = 'flex';
+            document.body.classList.add('modal-open');
+          }
+        });
+      });
+    }
+
+    function populateSubwayCategoryDropdown() {
+      const select = document.getElementById('subway-upload-category-select');
+      if (!select) return;
+      const categories = [...new Set(subwayMapsCache.map(m => m.category))].sort();
+      let html = '<option value="">＋ 輸入新分類...</option>';
+      categories.forEach(cat => {
+        html += `<option value="${cat}">${cat}</option>`;
+      });
+      select.innerHTML = html;
+    }
+
+    function openSubwayCategoriesModal() {
+      const modal = document.getElementById('travel-subway-categories-modal');
+      const list = document.getElementById('subway-categories-list');
+      if (!modal || !list || !currentTripId) return;
+
+      const categoryCounts = {};
+      subwayMapsCache.forEach(m => {
+        categoryCounts[m.category] = (categoryCounts[m.category] || 0) + 1;
+      });
+      const activeCategories = new Set(tripSubwayCategoriesCache.map(c => c.category));
+      const categories = Object.keys(categoryCounts).sort();
+
+      if (categories.length === 0) {
+        list.innerHTML = '<div class="empty-state">目前資源庫內尚無任何地鐵圖分類</div>';
+      } else {
+        list.innerHTML = categories.map(cat => `
+          <label class="subway-category-row">
+            <input type="checkbox" class="subway-category-checkbox" data-category="${cat}" ${activeCategories.has(cat) ? 'checked' : ''} />
+            <span class="subway-category-row-name">${cat}</span>
+            <span class="subway-category-row-count">${categoryCounts[cat]} 張</span>
+          </label>
+        `).join('');
+      }
+
+      modal.classList.add('show');
+      document.body.classList.add('modal-open');
+    }
+
+    const closeSubwayCategoriesModal = () => {
+      const modal = document.getElementById('travel-subway-categories-modal');
+      modal?.classList.remove('show');
+      document.body.classList.remove('modal-open');
+    };
+
+    function resetSubwayUploadImagePreview() {
+      const urlInput = document.getElementById('subway-upload-image-url');
+      const preview = document.getElementById('subway-upload-image-preview');
+      if (urlInput) urlInput.value = '';
+      if (preview) preview.innerHTML = '';
+    }
+
+    function renderSubwayUploadImagePreview() {
+      const preview = document.getElementById('subway-upload-image-preview');
+      const urlInput = document.getElementById('subway-upload-image-url');
+      if (!preview) return;
+      const url = urlInput?.value;
+      if (!url) {
+        preview.innerHTML = '';
+        return;
+      }
+      preview.innerHTML = `
+        <div class="upload-preview-item">
+          <img src="${url}" alt="preview" />
+          <button type="button" class="btn-remove-preview" id="btn-subway-upload-remove-image">&times;</button>
+        </div>
+      `;
+      document.getElementById('btn-subway-upload-remove-image')?.addEventListener('click', () => {
+        resetSubwayUploadImagePreview();
+      });
+    }
+
+    function openSubwayUploadModal() {
+      const modal = document.getElementById('travel-subway-upload-modal');
+      const form = document.getElementById('subway-upload-form');
+      const newGroup = document.getElementById('subway-upload-category-new-group');
+      if (!modal) return;
+
+      form?.reset();
+      resetSubwayUploadImagePreview();
+      populateSubwayCategoryDropdown();
+      if (newGroup) newGroup.style.display = 'block';
+
+      modal.classList.add('show');
+      document.body.classList.add('modal-open');
+    }
+
+    const closeSubwayUploadModal = () => {
+      const modal = document.getElementById('travel-subway-upload-modal');
+      modal?.classList.remove('show');
       document.body.classList.remove('modal-open');
     };
 
@@ -3838,6 +4118,144 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         }
       });
 
+      // ==========================================
+      // 13. 「資源」子分頁：地鐵圖（V2 階段 5 任務二）
+      // ==========================================
+      const btnBrowseSubwayCategories = document.getElementById('btn-browse-subway-categories');
+      const btnUploadSubwayMap = document.getElementById('btn-upload-subway-map');
+      const btnSubwayCategoriesClose = document.getElementById('btn-subway-categories-modal-close');
+      const subwayCategoriesModal = document.getElementById('travel-subway-categories-modal');
+      const subwayCategoriesList = document.getElementById('subway-categories-list');
+
+      const subwayUploadModal = document.getElementById('travel-subway-upload-modal');
+      const btnSubwayUploadClose = document.getElementById('btn-subway-upload-modal-close');
+      const btnSubwayUploadCancel = document.getElementById('btn-subway-upload-cancel');
+      const subwayUploadForm = document.getElementById('subway-upload-form');
+      const subwayUploadCategorySelect = document.getElementById('subway-upload-category-select');
+      const subwayUploadImageFileInput = document.getElementById('subway-upload-image-file');
+      const subwayUploadImageUrlInput = document.getElementById('subway-upload-image-url');
+
+      btnBrowseSubwayCategories?.addEventListener('click', openSubwayCategoriesModal);
+      btnSubwayCategoriesClose?.addEventListener('click', closeSubwayCategoriesModal);
+      subwayCategoriesModal?.addEventListener('click', (e) => {
+        if (e.target === subwayCategoriesModal) closeSubwayCategoriesModal();
+      });
+
+      subwayCategoriesList?.addEventListener('change', async (e) => {
+        const checkbox = e.target.closest('.subway-category-checkbox');
+        if (!checkbox || !currentTripId) return;
+        const category = checkbox.dataset.category;
+        const checked = checkbox.checked;
+
+        if (checked) {
+          const { data, error } = await supabase
+            .from('trip_subway_categories')
+            .insert([{ trip_id: currentTripId, category }])
+            .select();
+          if (error || !data || data.length === 0) {
+            checkbox.checked = false;
+            alert('加入失敗：' + (error ? error.message : '沒有權限或資料未寫入'));
+            return;
+          }
+          tripSubwayCategoriesCache.push(data[0]);
+        } else {
+          const { data, error } = await supabase
+            .from('trip_subway_categories')
+            .delete()
+            .eq('trip_id', currentTripId)
+            .eq('category', category)
+            .select();
+          if (error || !data || data.length === 0) {
+            checkbox.checked = true;
+            alert('移除失敗：' + (error ? error.message : '沒有權限或資料不存在'));
+            return;
+          }
+          tripSubwayCategoriesCache = tripSubwayCategoriesCache.filter(c => c.category !== category);
+        }
+        renderSubwayGroups();
+      });
+
+      btnUploadSubwayMap?.addEventListener('click', openSubwayUploadModal);
+      btnSubwayUploadClose?.addEventListener('click', closeSubwayUploadModal);
+      btnSubwayUploadCancel?.addEventListener('click', closeSubwayUploadModal);
+      subwayUploadModal?.addEventListener('click', (e) => {
+        if (e.target === subwayUploadModal) closeSubwayUploadModal();
+      });
+
+      subwayUploadCategorySelect?.addEventListener('change', (e) => {
+        const newGroup = document.getElementById('subway-upload-category-new-group');
+        if (newGroup) newGroup.style.display = e.target.value ? 'none' : 'block';
+      });
+
+      subwayUploadImageFileInput?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) return;
+
+        showToast('正在上傳圖片...');
+
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+
+        try {
+          const { error } = await supabase.storage
+            .from('travel_subway_maps')
+            .upload(fileName, file);
+          if (error) throw error;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('travel_subway_maps')
+            .getPublicUrl(fileName);
+
+          if (subwayUploadImageUrlInput) subwayUploadImageUrlInput.value = publicUrl;
+          renderSubwayUploadImagePreview();
+          showToast('圖片上傳成功！');
+        } catch (err) {
+          alert('圖片上傳失敗：' + err.message);
+        }
+      });
+
+      subwayUploadForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const title = document.getElementById('subway-upload-title').value.trim();
+        const selectedCategory = subwayUploadCategorySelect?.value || '';
+        const newCategory = document.getElementById('subway-upload-category-new').value.trim();
+        const category = selectedCategory || newCategory;
+        const external_url = document.getElementById('subway-upload-link').value.trim();
+        const image_url = subwayUploadImageUrlInput?.value || '';
+
+        if (!title || !category || !image_url) {
+          alert('請填寫名稱、分類，並上傳圖片');
+          return;
+        }
+
+        const payload = {
+          title,
+          category,
+          external_url: external_url || null,
+          image_url
+        };
+
+        try {
+          const { data, error } = await supabase
+            .from('travel_subway_maps')
+            .insert([payload])
+            .select();
+          if (error) throw error;
+          if (!data || data.length === 0) {
+            alert('上傳失敗：沒有權限或資料未寫入');
+            return;
+          }
+          subwayMapsCache.push(data[0]);
+          closeSubwayUploadModal();
+          renderSubwayGroups();
+          showToast('地鐵圖已上傳');
+          triggerBuildWebhook();
+        } catch (err) {
+          alert('上傳失敗：' + err.message);
+        }
+      });
+
       // ESC 鍵關閉所有 Modal
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
@@ -3849,6 +4267,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           closeSpotDetailModal();
           closeCollaboratorsModal();
           closeCouponModal();
+          closeSubwayCategoriesModal();
+          closeSubwayUploadModal();
         }
       });
     };
