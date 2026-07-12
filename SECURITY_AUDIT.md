@@ -53,6 +53,13 @@
 - `travel_subway_maps`:新增 `category`(text, NOT NULL)欄位,全域資源庫依此分組;原 `trip_id` 欄位**停用不刪**(新程式碼不再讀寫,保留至階段 9 評估);SELECT/INSERT 在 TripPlanner.astro(地鐵圖區塊 + 管理員上傳 Modal),RLS 未異動(寫入仍鎖定管理員 email)
 - `trip_subway_categories`(新增,2026-07-13):建表當下即設計 RLS,非事後補修;SELECT 開放(任何人可查詢行程關聯了哪些分類),INSERT/DELETE 重用 `public.can_edit_trip()`(管理員或該行程 `can_edit_itinerary` 協作者),UPDATE 不開放(要改就刪了重加)。⚠️ 前端「瀏覽全部分類」開放給所有人使用,但只有管理員/`can_edit_itinerary` 協作者的勾選會真的寫入此表;其餘身分(朋友、無編輯權協作者、匿名訪客)的勾選僅更新前端本地變數,不觸發任何寫入請求,不受此表 RLS 影響
 
+### spot_transport_routes(新增,2026-07-13,V2 階段 6 任務一,建表當下即設計 RLS)
+
+- SELECT 開放(任何人可查詢已儲存的交通方式);INSERT/UPDATE/DELETE 重用 `public.can_edit_trip((SELECT trip_id FROM spots WHERE id = origin_spot_id))`(管理員或起點所屬行程的 `can_edit_itinerary` 協作者)
+- INSERT/UPDATE 的 `WITH CHECK` 另加跨行程完整性:起點與終點的 `spots.trip_id` 必須相等,防止把 A 行程的景點與 B 行程的景點湊成一筆路線;`trip_id` 為 NULL 的遺留景點因 NULL 比較特性(`NULL = NULL` 恆為 false)自然無法建立路線,是預期行為非漏洞
+- `CHECK(origin_spot_id <> destination_spot_id)` 約束擋下自己到自己的路線;SELECT/INSERT/UPDATE/DELETE 在 TripPlanner.astro(交通查詢子分頁)
+- 使用者已實測驗證:管理員/協作者權限分流正確、跨行程完整性檢查正確擋下、朋友與訪客僅能查詢無編輯入口
+
 ---
 
 ## 二、Code-level 已確認的風險(不需等 RLS 結果即可定性的部分)
@@ -136,6 +143,7 @@ order by tablename, cmd;
 | **cards / status / daily** | 🟢 全表可讀(設計上本就公開:首頁卡片、狀態便條、Polaroid) | 否 | 全表可讀 | 🔴 任何登入帳號可改(cards/status)或 CRUD(daily),非僅管理員 | **LOW**(讀取合理,寫入權限過寬) |
 | **travel_coupons / travel_subway_maps**(✅ 2026-07-13 UI 已上線) | 🟢 全表可讀,UI 使用中 | 否 | 全表可讀 | 🟢 **正確示範**:寫入鎖定 `auth.jwt()->>'email' = 'abc19930406@gmail.com'`,真正限定管理員本人 | UI 已上線,結構與寫入權限正確,未異動 |
 | **trip_subway_categories**(新增,2026-07-13,建表當下即設計) | 否 | 否 | 🟢 全表可讀(任何人可查詢行程關聯了哪些分類) | 🟢 INSERT/DELETE 用 `can_edit_trip()`(管理員或該行程 can_edit_itinerary 協作者),UPDATE 不開放 | 建表當下即收斂,無歷史包袱 |
+| **spot_transport_routes**(新增,2026-07-13,建表當下即設計) | 否 | 否 | 🟢 全表可讀(任何人可查詢已儲存的交通方式) | 🟢 INSERT/UPDATE/DELETE 用 `can_edit_trip(起點所屬行程)`,INSERT/UPDATE 另加跨行程完整性檢查(起訖點須同屬一行程) | 建表當下即收斂,無歷史包袱;使用者已實測驗證跨行程完整性檢查生效 |
 | **trip_collaborators**(新增,2026-07-12,建表當下即設計) | 否 | 否 | 🟢 僅讀得到自己那一列(`lower(user_email)=lower(auth.jwt()->>'email')`),非管理員讀不到別人的授權列 | 🟢 INSERT/UPDATE/DELETE 一律僅 `is_admin()` | 建表當下即收斂,無歷史包袱;`can_edit_itinerary`(見上方 spots/trips/trip_days/day_spots 列)與 `can_edit_wishlist`(見上方 wishlist_items 列)均已於 2026-07-13 生效,V2 階段 4 協作者權限系統結案 |
 
 🔴 嚴重 / 🟡 中等 / 🟢 設計合理或已正確收斂
@@ -143,7 +151,7 @@ order by tablename, cmd;
 ### 明確回答:未登入的陌生人現在能讀到哪些表、寫入哪些表
 
 **能讀(不需要任何帳號,直接呼叫 API 或查看靜態頁面原始碼即可)**:
-~~`posts`(含私人與朋友限定文章的完整內容)~~(✅ 2026-07-11 已修復,現況見下方)、`japan_items`、`japan_categories`、`spots`、`trips`、`trip_days`、`day_spots`、`spot_types`、`spot_subtypes`、`expense_categories`、`income_categories`、`cards`、`status`、`daily`、~~`quotes`~~(僅 public 標記的,✅ 已修復,非 public 現況見下方)、`travel_coupons`、`travel_subway_maps`、`trip_subway_categories`(新增,刻意設計為公開可讀)。
+~~`posts`(含私人與朋友限定文章的完整內容)~~(✅ 2026-07-11 已修復,現況見下方)、`japan_items`、`japan_categories`、`spots`、`trips`、`trip_days`、`day_spots`、`spot_types`、`spot_subtypes`、`expense_categories`、`income_categories`、`cards`、`status`、`daily`、~~`quotes`~~(僅 public 標記的,✅ 已修復,非 public 現況見下方)、`travel_coupons`、`travel_subway_maps`、`trip_subway_categories`、`spot_transport_routes`(皆為新增表,刻意設計為公開可讀)。
 
 **posts 現況(2026-07-11 起)**:匿名者只能讀到 `visibility='public'` 的文章;`friends`/`private` 一律讀不到。
 

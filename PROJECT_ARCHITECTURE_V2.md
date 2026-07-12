@@ -63,7 +63,7 @@
 
 ## 三、「行程」分頁 — 三個子分頁
 
-✅ **子分頁骨架已上線（2026-07-13，V2 階段 5 任務一）**：`TripPlanner.astro` 頂部新增「行程」「資源」子分頁導覽（純前端顯示切換，不重讀資料）；「交通查詢」子分頁尚未建立（階段 6 再加，不放死佔位）。切換子分頁時登入/登出按鈕維持顯示於子分頁列，不隨子分頁切換而消失；切回「行程」時若地圖容器曾被隱藏，僅觸發 Google Maps `resize` 事件修正 tile 渲染並保留原本 center/zoom，不呼叫 `fitBounds`，地圖視野與選取狀態不會被重置。
+✅ **子分頁骨架已上線（2026-07-13，V2 階段 5 任務一；2026-07-13 新增第三個子分頁，V2 階段 6 任務一）**：`TripPlanner.astro` 頂部「行程」「交通查詢」「資源」三個子分頁導覽（純前端顯示切換，不重讀資料），`switchTripSubtab()` 以 `data-subtab` 屬性泛化處理，非寫死兩個分頁的判斷。切換子分頁時登入/登出按鈕維持顯示於子分頁列，不隨子分頁切換而消失；切回「行程」時若地圖容器曾被隱藏，僅觸發 Google Maps `resize` 事件修正 tile 渲染並保留原本 center/zoom，不呼叫 `fitBounds`，地圖視野與選取狀態不會被重置。
 
 ### 3.1 行程（核心，預設顯示）🔶 已遷移上線
 
@@ -80,22 +80,23 @@
 - ✅ Supabase 單一入口架構整合（見 PROJECT_ARCHITECTURE.md）
 - ✅ 登入/登出 UI、權限判斷（含 Race Condition 修正）
 
-- 📋 **景點間內嵌交通方式**（尚未開發）：
+- 📋 **景點間內嵌交通方式**（M2，尚未開發，不在 V2 階段 6 任務一範圍）：
   - 行程模式中，連續兩個景點之間顯示「交通方式」區塊
-  - 可直接新增/編輯這兩點之間的路線（對應 `spot_transport_routes`）
+  - 可直接新增/編輯這兩點之間的路線（對應 `spot_transport_routes`，資料表已於階段 6 任務一建立，此區塊本身待後續任務開發）
   - 點擊可展開查看時刻表連結、注意事項
 
-### 3.2 交通查詢 📋 規劃中
+### 3.2 交通查詢 ✅ 已上線（2026-07-13，V2 階段 6 任務一）
 
 獨立工具，用於行程調整時查詢任意兩點之間的交通方式：
 
-- 選擇「起點」「終點」（從該行程已存景點中選）
-- 列出 `spot_transport_routes` 中已儲存的所有路線選項（方式、時間、費用、注意事項、時刻表連結）
-- 若尚無資料，可觸發 **AI 搜尋**：
-  - AI 根據起點/終點搜尋所有可行交通方式
-  - 結果以勾選列表呈現，含時間、費用、時刻表連結、地鐵圖分類連結、注意事項（如：分前後車廂往不同方向）
-  - 勾選後一次儲存至 `spot_transport_routes`
-- 行程子分頁新增的路線與交通查詢共用同一份資料，雙向同步
+- 選擇「起點」「終點」（下拉選單，選項為目前行程已存景點；監聽 `trip-changed` 事件，切換行程時重新載入）
+- 列出 `spot_transport_routes` 中已儲存的所有路線選項：mode 圖示（依關鍵字比對 電車/巴士/步行/計程車/渡輪，其餘用預設圖示）+ 名稱、時間、費用；展開見備註、時刻表連結（新分頁開啟）、對應地鐵圖分類（點擊跳到「資源」子分頁並捲動定位該分類，若該分類當下未顯示會暫時加入個人篩選以便看到，不寫入資料庫）
+- **⇄ 反向**按鈕一鍵交換起訖點重新查詢；路線具方向性，A→B 與 B→A 是資料庫中的兩筆不同資料，UI 不會互相顯示
+- 管理員與該行程 `can_edit_itinerary` 協作者可新增/編輯/刪除路線選項（Modal，`travel-` 前綴隔離，寫入皆檢查受影響筆數）；朋友/訪客僅能查詢瀏覽，無編輯入口
+- ⚠️ **「AI 搜尋」明確不做**：原規劃「若尚無資料可觸發 AI 搜尋」依賴階段 7-8 才會建置的 AI 後端，本次遞延，UI 未放置任何佔位按鈕
+- 行程子分頁（3.1 的「景點間內嵌交通方式」，M2）與交通查詢共用同一份 `spot_transport_routes` 資料，但 M2 本身尚未開發，目前僅交通查詢子分頁可管理這份資料
+
+`spot_transport_routes` 表（✅ 已建立，2026-07-13）：`id`、`origin_spot_id`/`destination_spot_id`（皆 FK → `spots.id`，`ON DELETE CASCADE`，`CHECK` 不可相同）、`mode`（text NOT NULL）、`duration_minutes`（可空）、`cost`（text 可空，幣別格式自由）、`note`（可空）、`timetable_url`（可空）、`subway_map_category`（可空，對應 `travel_subway_maps.category`，非外鍵，僅字串比對）、`sort_order`、`created_at`。RLS：SELECT 開放；INSERT/UPDATE/DELETE 重用 `can_edit_trip((SELECT trip_id FROM spots WHERE id = origin_spot_id))`；INSERT/UPDATE 的 `WITH CHECK` 另加完整性——起點與終點的 `spots.trip_id` 必須相等，`trip_id` 為 NULL 的遺留景點因 NULL 比較特性（`NULL = NULL` 恆為 false）自然無法建立路線，屬預期行為。
 
 ### 3.3 資源 ✅ 已全部上線（2026-07-13，V2 階段 5 任務一、二）
 
@@ -237,7 +238,7 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | travel_coupons | ✅ 已建立，UI 已上線（2026-07-13） | 優惠券，全站共用 |
 | travel_subway_maps | ✅ 已調整，UI 已上線（2026-07-13） | 地鐵圖，新增 `category` 欄位分組；`trip_id` 停用不刪（留待階段 9） |
 | trip_subway_categories | ✅ 已建立，UI 已上線（2026-07-13） | trip_id + category，行程關聯的地鐵圖分類，RLS 重用 `can_edit_trip()` |
-| spot_transport_routes | 📋 | origin_spot_id + destination_spot_id + 多筆交通方式（mode/duration/cost/note/timetable_url/subway_map_category） |
+| spot_transport_routes | ✅ 已建立，UI 已上線（2026-07-13） | origin_spot_id + destination_spot_id + 多筆交通方式（mode/duration/cost/note/timetable_url/subway_map_category），RLS 重用 `can_edit_trip()` |
 | trip_collaborators | ✅ 已建立（2026-07-12），權限已全數落實（2026-07-13） | trip_id + user_email + can_edit_wishlist + can_edit_itinerary，RLS 已設定，管理員 UI 已上線，兩個權限開關均已在對應表的 RLS 中生效 |
 
 ### 7.2 既有資料表異動
@@ -268,12 +269,12 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | 3 | 收藏分頁整合：japan_items.trip_id、收藏分頁顯示邏輯、一般收藏 vs 行程收藏 | ✅ 已完成（2026-07-12） |
 | 4 | 協作者權限系統：trip_collaborators、雙開關權限、Sandbox 模式（共三個子任務） | ✅ 已完成（任務一：地基與管理員 UI 2026-07-12；任務二：can_edit_itinerary 落實 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 2026-07-13） |
 | 5 | 資源子分頁：優惠券、地鐵圖分類化、trip_subway_categories | ✅ 已完成（任務一：子分頁骨架 + 優惠券牆 2026-07-13；任務二：地鐵圖全域分類庫 2026-07-13） |
-| 6 | 交通查詢子分頁：spot_transport_routes、行程內嵌交通方式 UI | 📋 待開始 |
+| 6 | 交通查詢子分頁：spot_transport_routes、行程內嵌交通方式 UI | 🔶 進行中（任務一：spot_transport_routes 建表 + 交通查詢子分頁 ✅ 2026-07-13；行程內嵌交通方式 UI，M2 📋 待開始） |
 | 7 | AI 助手（只讀）：/api/ai-assistant，讀取行程/收藏資料並回答問題 | 📋 待開始 |
 | 8 | AI 工具逐個開放：add_spot、toggle_wishlist 等寫入工具 | 📋 待開始 |
 | 9 | 程式碼清理與重構：統一 Modal/CSS 命名規則、評估舊頁面下線 | 📋 待開始（待功能全部穩定後執行） |
 
-> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 三個任務、階段 5 兩個任務的實作記錄與盤點回報，見 PROJECT_PROGRESS.md「V2 階段 4」「V2 階段 5」對應章節。
+> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 三個任務、階段 5 兩個任務、階段 6 任務一的實作記錄與驗收對照表，見 PROJECT_PROGRESS.md「V2 階段 4」「V2 階段 5」「V2 階段 6」對應章節。
 
 ---
 

@@ -436,12 +436,41 @@
 
 ---
 
+### ✅ V2 階段 6 任務一：交通查詢子分頁 + spot_transport_routes（2026-07-13，已結案）
+
+- **背景**：「行程」主分頁新增第三個子分頁「交通查詢」，選起訖點查看/管理兩點間已儲存的交通方式；建立新表 `spot_transport_routes` 作為資料基礎，規劃詳見 PROJECT_ARCHITECTURE_V2.md 3.2 節。本任務設計已定案（新表，非既有表調整），不需要執行前盤點
+- **資料庫**：新表 `spot_transport_routes`（`id` uuid PK、`origin_spot_id`/`destination_spot_id` 皆 FK→`spots.id` `ON DELETE CASCADE`、`mode` text NOT NULL、`duration_minutes`/`cost`/`note`/`timetable_url`/`subway_map_category` 皆可空、`sort_order` 預設 0、`created_at`，`CHECK(origin_spot_id <> destination_spot_id)`）；RLS 建表當下即設計：SELECT 開放，INSERT/UPDATE/DELETE 重用 V2 階段 4 任務二的 `can_edit_trip((SELECT trip_id FROM spots WHERE id = origin_spot_id))`，INSERT/UPDATE 的 `WITH CHECK` 另加跨行程完整性——起訖點的 `spots.trip_id` 必須相等，`trip_id` 為 NULL 的遺留景點因 NULL 比較特性自然無法建立路線，屬預期行為
+- **前端（`TripPlanner.astro`）**：
+  - `switchTripSubtab()` 從寫死「行程/資源」二選一，泛化為依 `.trip-subtab-pane` 的 id 與 `.trip-subtab-btn` 的 `data-subtab` 屬性通用處理任意數量子分頁，新增第三個子分頁「交通查詢」不需要重寫切換邏輯
+  - 交通查詢 UI：起點/終點下拉（選項為目前行程景點，監聽 `trip-changed` 重新載入，且切換到此子分頁時也會重新整理一次）、⇄ 反向按鈕一鍵交換起訖點重查；結果卡片列表顯示 mode 圖示（依關鍵字比對電車/巴士/步行/計程車/渡輪，其餘用預設圖示）+ 名稱、時間、費用，展開見備註、時刻表連結（新分頁）、對應地鐵圖分類
+  - 點擊地鐵圖分類會呼叫 `jumpToSubwayCategory()`：切到「資源」子分頁並捲動定位到該分類，若該分類當下未在顯示範圍內（不在行程預設或個人篩選中）會暫時加入個人篩選以便看到，不寫入資料庫，沿用 V2 階段 5 任務二已有的個人篩選機制
+  - 管理員與該行程 `can_edit_itinerary` 協作者可新增/編輯/刪除路線（Modal `travel-transport-route-modal`，`travel-` 前綴隔離，三種關閉路徑收斂到 `closeTransportRouteModal()`，寫入皆檢查受影響筆數）；「新增交通方式」按鈕的顯示條件比 `itinerary-edit-only` 多一層（還需已選起訖點），未使用該 class，獨立由 `updateAddTransportButtonVisibility()` 管理，並掛在 `updateItineraryEditUI()` 尾端一併更新
+  - 「AI 搜尋交通方式」明確不做（依賴階段 7-8 才會建置的 AI 後端），UI 未放置任何佔位按鈕
+- **驗證結果（2026-07-13，使用者實測）**：見下方自我驗收對照表，a-e 全數通過
+- **明確排除**：行程模式內嵌交通方式區塊（M2，3.1 節）未做；「AI 搜尋」未做；未異動任何既有表
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| a. 管理員建立三筆不同交通選項，查詢如實列出、展開細節正常 | 結果卡片列表 + 展開備註/連結 | ✅ |
+| a. 反向查詢為空（方向性驗證，A→B 與 B→A 是兩筆不同資料） | RLS 不限制方向；UI `.eq('origin_spot_id', ...).eq('destination_spot_id', ...)` 精確比對方向 | ✅ |
+| b. 協作者（`can_edit_itinerary`）可增刪改行程 A 的路線 | INSERT/UPDATE/DELETE 用 `can_edit_trip()` | ✅ |
+| b. 協作者對行程 B 的景點 Console 強行寫入 0 筆生效 | `can_edit_trip()` 綁定起點所屬行程，非全域協作者身分 | ✅ |
+| c. 朋友/訪客可查詢瀏覽，無編輯入口 | SELECT 開放；「新增交通方式」與卡片編輯/刪除圖示皆依 `canEditItinerary()` 顯示 | ✅ |
+| d. 跨行程完整性：行程 A 起點 + 行程 B 終點寫入被拒 | INSERT/UPDATE 的 `WITH CHECK` 起訖點 `trip_id` 相等檢查 | ✅ |
+| e. 切換行程後起訖點下拉正確重載 | 監聽 `trip-changed` 呼叫 `populateTransportSpotOptions()` | ✅ |
+| e. Mobile 排版與 Modal 正常 | 沿用既有 `.transport-*` 響應式樣式與 Modal 慣例 | ✅ |
+| `spot_transport_routes` 為新表，`travel_subway_maps.trip_id` 不受影響 | 本任務未異動任何既有表 | ✅ |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
 
 1. ~~**旅行資源子分頁**：優惠券（`travel_coupons`）+ 地鐵圖分類化（`travel_subway_maps` 改全域庫 + `trip_subway_categories` 關聯表）~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 5 任務一」「V2 階段 5 任務二」
-2. **交通查詢子分頁**：`spot_transport_routes` 表 + 行程內嵌交通方式 UI + AI 輔助搜尋
+2. ~~**交通查詢子分頁**：`spot_transport_routes` 表~~ **✅ 2026-07-13 已上線**，詳見上方「V2 階段 6 任務一」；剩餘：行程內嵌交通方式 UI（M2）+ AI 輔助搜尋（遞延階段 7-8）
 3. **協作者權限系統**：~~`trip_collaborators` 表~~ **✅ 2026-07-12 已建立（任務一）**，剩餘兩個子任務待開始——雙開關權限**實際執行**（can_edit_wishlist / can_edit_itinerary 目前只記錄未生效）+ Sandbox 模式
 4. **AI 助手分頁**：`/api/ai-assistant` Serverless API，含 tool use 寫入功能（add_spot / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）
 5. **舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan
@@ -515,7 +544,7 @@
 | travel_coupons | 優惠券，全站共用 | ✅ 已建立，UI 已上線（2026-07-13） |
 | travel_subway_maps | 地鐵圖，全域分類庫（新增 category 欄位，trip_id 停用不刪） | ✅ 已建立，UI 已上線（2026-07-13） |
 | trip_subway_categories | trip_id + category，行程關聯的地鐵圖分類 | ✅ 已建立，UI 已上線（2026-07-13） |
-| spot_transport_routes | 景點間交通方式（origin/destination/mode/duration/cost/note/timetable_url/subway_map_category） | 📋 規劃中 |
+| spot_transport_routes | 景點間交通方式（origin/destination/mode/duration/cost/note/timetable_url/subway_map_category） | ✅ 已建立，UI 已上線（2026-07-13） |
 | trip_collaborators | trip_id + user_email + can_edit_wishlist + can_edit_itinerary | ✅ 已建立（2026-07-12），權限已全數落實（2026-07-13） |
 
 ### Storage Buckets
@@ -552,7 +581,7 @@
 3. ~~階段 3：japan_items 加入 trip_id 篩選邏輯（收藏依行程篩選）~~ **✅ 2026-07-12 已完成**，詳見上方「V2 階段 3：收藏依行程篩選」
 4. ~~**階段 4**：協作者權限系統~~ **✅ 2026-07-13 全部完成**（任務一：trip_collaborators 資料表+管理員管理 UI 2026-07-12；任務二：can_edit_itinerary 落實 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 2026-07-13），詳見上方「V2 階段 4」對應章節
 5. ~~**階段 5**：旅行資源頁面（任務一：子分頁骨架 + 優惠券牆；任務二：地鐵圖全域分類庫）~~ **✅ 2026-07-13 全部完成**，詳見上方「V2 階段 5」對應章節
-6. **階段 6**：交通查詢系統（spot_transport_routes + AI 整理）
+6. **階段 6**：交通查詢系統。任務一（spot_transport_routes + 交通查詢子分頁）**✅ 2026-07-13 已完成**，詳見上方「V2 階段 6 任務一」；剩餘：行程內嵌交通方式 UI（M2）+ AI 輔助整理（遞延階段 7-8）
 7. **階段 7-8**：AI 助手分頁與 Serverless API 串接
 8. /trip 穩定後評估是否移除舊的 /travel 與 /japan 頁面
 9. **階段 9**（全部功能穩定後）：程式碼清理與重構，含 CSS/ID 前綴隔離補齊（衝突熱點稽核中發現、決議延後的項目）；一併處理 V2 階段 4 任務一盤點發現的 `spots.category`/`spots.icon` 遺留欄位（`NOT NULL` 但前端從未寫入，一律吃預設值，已被 `spot_type_id`/`spot_subtype_id` 取代）
