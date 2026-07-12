@@ -79,6 +79,12 @@
   - fitBounds 與 Marker 渲染已拆分，切換開關不會重置地圖視野
 - ✅ Supabase 單一入口架構整合（見 PROJECT_ARCHITECTURE.md）
 - ✅ 登入/登出 UI、權限判斷（含 Race Condition 修正）
+- ✅ **刪除行程**（2026-07-13，僅管理員，非 V2 分階段任務，使用者臨時追加需求）：
+  - 編輯行程 Modal 底部新增「刪除行程」按鈕，只在編輯既有行程時顯示（新增行程時隱藏）
+  - 刪除前 `confirm()` 明確告知：底下每日行程、景點排序、協作者設定、地鐵圖分類關聯會一併永久刪除（`trip_days`/`trip_collaborators`/`trip_subway_categories` 皆為 `trip_id` `ON DELETE CASCADE`）；景點本身不會被刪除，但會退回沒有歸屬行程的狀態
+  - 配套資料庫調整：`spots.trip_id` 外鍵刪除規則由 `CASCADE` 改為 `SET NULL`（比照 `japan_items.trip_id` 既有設計），景點資料本身不受刪除行程影響
+  - ⚠️ **已知限制**：`/trip` 目前沒有瀏覽「沒有歸屬行程」景點的畫面（不同於 `japan_items` 有「一般收藏」篩選），退回一般狀態的景點目前無法從介面看到或管理，只能透過 Supabase Dashboard 直接查詢/改 `trip_id`。已與使用者確認此限制可接受，暫不開發對應瀏覽功能
+  - 🔴 **教訓（已寫入 CLAUDE.md）**：上線當下 SQL 尚未執行、使用者就先測試了刪除，當時外鍵仍是舊的 `CASCADE` 規則，實際刪除了一個測試行程底下的景點資料（免費方案無自動備份，無法復原）。事後確認為測試用資料，不追究，但已確立規則：涉及「資料庫外鍵/RLS 變更」+「會觸發該行為的功能」時，兩者必須明確排序，不能同一則訊息一次帶過
 
 - 📋 **景點間內嵌交通方式**（M2，尚未開發，不在 V2 階段 6 任務一範圍）：
   - 行程模式中，連續兩個景點之間顯示「交通方式」區塊
@@ -249,6 +255,7 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | spot_subtypes | 新增 `is_chain_store` boolean | ✅ 已完成 |
 | japan_items | 新增 `trip_id`（可空，FK → trips，`ON DELETE SET NULL`） | ✅ 已完成（2026-07-12） |
 | travel_subway_maps | 新增 `category`（text, NOT NULL）；`trip_id` 停用不刪（改用 trip_subway_categories 記錄關聯，`trip_id` 本身保留至階段 9 評估） | ✅ 已完成（2026-07-13） |
+| spots | `trip_id` 外鍵刪除規則 `CASCADE` → `SET NULL`（配合刪除行程功能，比照 japan_items 設計） | ✅ 已完成（2026-07-13） |
 
 ### 7.3 Storage Buckets
 
