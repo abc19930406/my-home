@@ -63,6 +63,8 @@
 
 ## 三、「行程」分頁 — 三個子分頁
 
+✅ **子分頁骨架已上線（2026-07-13，V2 階段 5 任務一）**：`TripPlanner.astro` 頂部新增「行程」「資源」子分頁導覽（純前端顯示切換，不重讀資料）；「交通查詢」子分頁尚未建立（階段 6 再加，不放死佔位）。切換子分頁時登入/登出按鈕維持顯示於子分頁列，不隨子分頁切換而消失；切回「行程」時若地圖容器曾被隱藏，僅觸發 Google Maps `resize` 事件修正 tile 渲染並保留原本 center/zoom，不呼叫 `fitBounds`，地圖視野與選取狀態不會被重置。
+
 ### 3.1 行程（核心，預設顯示）🔶 已遷移上線
 
 沿用並擴充原 `/travel` 的核心功能，已搬移至 `TripPlanner.astro` 元件：
@@ -95,13 +97,14 @@
   - 勾選後一次儲存至 `spot_transport_routes`
 - 行程子分頁新增的路線與交通查詢共用同一份資料，雙向同步
 
-### 3.3 資源 📋 規劃中
+### 3.3 資源 🔶 優惠券已上線，地鐵圖規劃中
 
 跨行程共用的**全域資源庫**，不綁定特定 `trip_id`：
 
-**優惠券**（`travel_coupons`，✅ 表已建立，UI 尚未開發）
-- 全站共用，卡片式呈現：圖片、標題、說明、連結
-- 管理員可新增/編輯/刪除
+**優惠券**（`travel_coupons`，✅ 2026-07-13 已上線，V2 階段 5 任務一）
+- 全站共用，卡片式呈現：圖片、標題、說明、連結（點擊開新分頁）
+- 管理員可新增/編輯/刪除（Modal 表單，圖片上傳至 `travel_coupons` bucket，沿用既有 spot 圖片上傳模式）；`admin-only` class 控制編輯入口顯示，寫入操作皆檢查受影響筆數
+- RLS 稽核時已確認正確（SELECT 全開、寫入鎖管理員 email），本次未異動
 
 **地鐵圖**（`travel_subway_maps`，✅ 表已建立，需調整；UI 尚未開發）
 - 全域資源庫，依 `category`（地區/系統名稱，如「東京 Metro」「沖繩巴士」）分組顯示
@@ -227,11 +230,11 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 
 | 資料表 | 狀態 | 說明 |
 |--------|------|------|
-| travel_coupons | ✅ 已建立 | 優惠券，全站共用 |
+| travel_coupons | ✅ 已建立，UI 已上線（2026-07-13） | 優惠券，全站共用 |
 | travel_subway_maps | ✅ 已建立，需調整 | 地鐵圖，移除 trip_id，改用 category 分組 |
 | trip_subway_categories | 📋 | trip_id + category，行程關聯的地鐵圖分類 |
 | spot_transport_routes | 📋 | origin_spot_id + destination_spot_id + 多筆交通方式（mode/duration/cost/note/timetable_url/subway_map_category） |
-| trip_collaborators | ✅ 已建立（2026-07-12） | trip_id + user_email + can_edit_wishlist + can_edit_itinerary，RLS 已設定，管理員 UI 已上線，權限尚未在其他表執行 |
+| trip_collaborators | ✅ 已建立（2026-07-12），權限已全數落實（2026-07-13） | trip_id + user_email + can_edit_wishlist + can_edit_itinerary，RLS 已設定，管理員 UI 已上線，兩個權限開關均已在對應表的 RLS 中生效 |
 
 ### 7.2 既有資料表異動
 
@@ -246,7 +249,7 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 
 | Bucket | 狀態 | 說明 |
 |--------|------|------|
-| travel_coupons | ✅ 已建立 | PUBLIC |
+| travel_coupons | ✅ 已建立，使用中（2026-07-13） | PUBLIC |
 | travel_subway_maps | ✅ 已建立 | PUBLIC |
 
 ---
@@ -260,13 +263,13 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | 2.5 | Supabase 單一入口架構重構 + Race Condition 修正（原規劃外，因應實作過程發現的問題而新增） | 🔶 大致完成，有未解決問題待釐清 |
 | 3 | 收藏分頁整合：japan_items.trip_id、收藏分頁顯示邏輯、一般收藏 vs 行程收藏 | ✅ 已完成（2026-07-12） |
 | 4 | 協作者權限系統：trip_collaborators、雙開關權限、Sandbox 模式（共三個子任務） | ✅ 已完成（任務一：地基與管理員 UI 2026-07-12；任務二：can_edit_itinerary 落實 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 2026-07-13） |
-| 5 | 資源子分頁：優惠券、地鐵圖分類化、trip_subway_categories | 📋 待開始 |
+| 5 | 資源子分頁：優惠券、地鐵圖分類化、trip_subway_categories | 🔶 進行中（任務一：子分頁骨架 + 優惠券牆 ✅ 2026-07-13；地鐵圖分類化 📋 待開始） |
 | 6 | 交通查詢子分頁：spot_transport_routes、行程內嵌交通方式 UI | 📋 待開始 |
 | 7 | AI 助手（只讀）：/api/ai-assistant，讀取行程/收藏資料並回答問題 | 📋 待開始 |
 | 8 | AI 工具逐個開放：add_spot、toggle_wishlist 等寫入工具 | 📋 待開始 |
 | 9 | 程式碼清理與重構：統一 Modal/CSS 命名規則、評估舊頁面下線 | 📋 待開始（待功能全部穩定後執行） |
 
-> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 三個任務的實作記錄與盤點回報，見 PROJECT_PROGRESS.md「V2 階段 4」對應章節。
+> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 三個任務、階段 5 任務一的實作記錄與盤點回報，見 PROJECT_PROGRESS.md「V2 階段 4」「V2 階段 5」對應章節。
 
 ---
 

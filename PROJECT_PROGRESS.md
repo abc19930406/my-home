@@ -406,13 +406,26 @@
 - **驗證結果（2026-07-13，使用者實測，含一輪修復後複測）**：白名單朋友（非協作者）一般收藏品操作與改版前一致、行程收藏品顯示為不可操作 ✅；協作者對行程 A（開 `can_edit_wishlist`）可標可調、行程 B 不可、不在白名單的一般收藏不可 ✅；關閉協作者的 `can_edit_wishlist` 後新增/調整被拒但可刪除已標記的（第一輪測試失敗，定位為前端渲染邏輯問題並修復後複測通過）✅；管理員一切照舊，含「所有人」模式與「N 人想買」統計 ✅；非白名單陌生 Google 帳號的願望清單寫入被拒 ✅；協作者與朋友帳號檢視 `/trip` 看不到 AI 分頁與任何連回主站的連結，管理員照舊 ✅；`/japan`、`/travel` 凍結頁面完全未修改，diff 為零
 - **明確排除**：DELETE 與 SELECT 政策未動；K2 的行程編輯權未動；AI 分頁功能本體未做（仍為佔位，屬階段 7）；一般收藏的白名單機制本身未動
 
+### ✅ V2 階段 5 任務一：「行程」主分頁子分頁化 + 優惠券牆（2026-07-13，已結案）
+
+- **背景**：階段 5 規劃「行程」主分頁底下再分「行程」「交通查詢」「資源」三個子分頁；本任務只建「行程」「資源」兩個子分頁的骨架（「交通查詢」留待階段 6，不放死佔位），並完成「資源」子分頁裡的優惠券區塊，規劃詳見 PROJECT_ARCHITECTURE_V2.md 第三節
+- **執行前盤點**：`travel_coupons` 欄位（`id` uuid、`title` NOT NULL、`description`、`image_url`、`link_url`、`sort_order` 預設 0、`created_at`）與 RLS（`travel_coupons_select_all` SELECT 全開、`travel_coupons_admin_all` ALL 鎖 `auth.jwt()->>'email' = 'abc19930406@gmail.com'`）皆與 SECURITY_AUDIT.md 稽核記錄一致，本次未異動 RLS
+- **前端（`TripPlanner.astro`）**：
+  - 新增子分頁導覽（「行程」「資源」），純前端顯示切換（`switchTripSubtab()`），不重新查詢資料；登入/登出按鈕移至子分頁列，不隨子分頁切換而消失
+  - 切回「行程」子分頁時，若地圖容器曾因子分頁切換被隱藏，僅對 Google Maps 觸發 `resize` 事件並用切換前記下的 `center` 還原視野中心，修正可能的 tile 渲染問題，但**不呼叫 `fitBounds`**，避免重置使用者已調整的地圖視野與選取狀態（吸取先前 fitBounds 與渲染耦合的教訓）
+  - 「資源」子分頁新增優惠券牆：卡片式呈現圖片（無圖時顯示 placeholder）、標題、說明、連結（`target="_blank"`）；管理員可見卡片右上角編輯/刪除圖示（`admin-only` class，沿用既有機制）；新增/編輯用 Modal（`travel-coupon-modal`，`travel-` 前綴隔離，三種關閉路徑收斂到 `closeCouponModal()`）；圖片上傳沿用 `TripPlanner.astro` 既有的 spot 圖片上傳模式（`crypto.randomUUID()` 檔名 + 直接上傳至 `travel_coupons` public bucket 取得公開網址），未引入新套件；新增/更新/刪除皆用 `.select()` 檢查受影響筆數
+  - 資料/渲染/Modal 開關函式（`loadCoupons`/`renderCoupons`/`openCouponModal`/`closeCouponModal` 等）定義在 `initEvents` 外層作用域，因為 `initAuthAndData()` 需要在外層呼叫 `loadCoupons()`——初版誤把這些函式寫在 `initEvents` 內層作用域，導致外層呼叫不到，開發階段自查修正，未流出到驗證階段
+- **首頁連結（`CardSection.astro`，使用者追加請求）**：「旅行地圖」卡片子選單新增「🧭 行程與收藏（新版）」連結至 `/trip`，排序置頂於既有 `/travel`、`/japan` 兩個連結之上
+- **驗證結果（2026-07-13，使用者實測）**：子分頁來回切換，地圖視野、選中行程、篩選狀態皆保持不變 ✅；管理員新增（含圖片）/編輯/刪除優惠券即時反映 ✅；訪客與朋友帳號看得到卡片與連結、無編輯入口，Console 強行寫入 0 筆生效 ✅；Mobile 版面子分頁與卡片排版正常，Modal 開關後可正常捲動 ✅；首頁「旅行地圖」子選單新連結驗證正常 ✅；`/japan`、`/travel` 凍結頁面完全未修改，diff 為零
+- **明確排除**：地鐵圖（`travel_subway_maps` 分類化、`trip_subway_categories`）未做；交通查詢子分頁未做（階段 6）；RLS 未異動
+
 ---
 
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
 
-1. **旅行資源子分頁**：優惠券（`travel_coupons`，表已建立）+ 地鐵圖分類化（`travel_subway_maps` 改全域庫 + `trip_subway_categories` 關聯表）
+1. **旅行資源子分頁**：~~優惠券（`travel_coupons`）~~ **✅ 2026-07-13 已上線**，詳見上方「V2 階段 5 任務一」；剩餘：地鐵圖分類化（`travel_subway_maps` 改全域庫 + `trip_subway_categories` 關聯表）
 2. **交通查詢子分頁**：`spot_transport_routes` 表 + 行程內嵌交通方式 UI + AI 輔助搜尋
 3. **協作者權限系統**：~~`trip_collaborators` 表~~ **✅ 2026-07-12 已建立（任務一）**，剩餘兩個子任務待開始——雙開關權限**實際執行**（can_edit_wishlist / can_edit_itinerary 目前只記錄未生效）+ Sandbox 模式
 4. **AI 助手分頁**：`/api/ai-assistant` Serverless API，含 tool use 寫入功能（add_spot / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）
@@ -484,11 +497,11 @@
 | spot_subtypes | 景點子類型（含 is_chain_store） | ✅ |
 | trip_days | 每日行程（關聯 trips） | ✅ |
 | day_spots | 每天景點安排（關聯 trip_days + spots） | ✅ |
-| travel_coupons | 優惠券，全站共用 | ✅ 已建立 |
+| travel_coupons | 優惠券，全站共用 | ✅ 已建立，UI 已上線（2026-07-13） |
 | travel_subway_maps | 地鐵圖 | ✅ 已建立，📋 待調整為全域分類庫（移除 trip_id） |
 | trip_subway_categories | trip_id + category，行程關聯的地鐵圖分類 | 📋 規劃中 |
 | spot_transport_routes | 景點間交通方式（origin/destination/mode/duration/cost/note/timetable_url/subway_map_category） | 📋 規劃中 |
-| trip_collaborators | trip_id + user_email + can_edit_wishlist + can_edit_itinerary | ✅ 已建立（2026-07-12，RLS 已設定，管理員 UI 已上線，權限尚未在其他表執行） |
+| trip_collaborators | trip_id + user_email + can_edit_wishlist + can_edit_itinerary | ✅ 已建立（2026-07-12），權限已全數落實（2026-07-13） |
 
 ### Storage Buckets
 
@@ -498,7 +511,7 @@
 | post_images | ⚠️ 已停用，PUBLIC，無程式碼引用，孤兒檔案原樣保留 |
 | japan_images | ✅ PUBLIC |
 | travel_images | ✅ PUBLIC |
-| travel_coupons | ✅ PUBLIC |
+| travel_coupons | ✅ PUBLIC，使用中（優惠券圖片，2026-07-13） |
 | travel_subway_maps | ✅ PUBLIC |
 
 ---
@@ -523,7 +536,7 @@
 2. 補做「衝突熱點稽核」修復（commit `2317d2d`）的手動驗證：ESC 鍵、Modal 背景點擊是否都能正確關閉並清除 `modal-open`（原定驗證因發現上述問題而中斷）
 3. ~~階段 3：japan_items 加入 trip_id 篩選邏輯（收藏依行程篩選）~~ **✅ 2026-07-12 已完成**，詳見上方「V2 階段 3：收藏依行程篩選」
 4. ~~**階段 4**：協作者權限系統~~ **✅ 2026-07-13 全部完成**（任務一：trip_collaborators 資料表+管理員管理 UI 2026-07-12；任務二：can_edit_itinerary 落實 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 2026-07-13），詳見上方「V2 階段 4」對應章節
-5. **階段 5**：旅行資源頁面（優惠券 + 地鐵圖分類）
+5. **階段 5**：旅行資源頁面。任務一（子分頁骨架 + 優惠券牆）**✅ 2026-07-13 已完成**，詳見上方「V2 階段 5 任務一」；剩餘：地鐵圖分類化（`travel_subway_maps` 改全域庫 + `trip_subway_categories` 關聯表）
 6. **階段 6**：交通查詢系統（spot_transport_routes + AI 整理）
 7. **階段 7-8**：AI 助手分頁與 Serverless API 串接
 8. /trip 穩定後評估是否移除舊的 /travel 與 /japan 頁面
