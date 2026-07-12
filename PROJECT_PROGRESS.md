@@ -389,6 +389,23 @@
 - **驗證結果（2026-07-13，使用者實測）**：管理員所有行程的所有編輯功能一切照舊 ✅；協作者（對行程 A 開啟 `can_edit_itinerary`）選中行程 A 可見編輯功能，新增景點、加入天數、調整順序、刪除皆成功 ✅；同一協作者切到未授權的行程 B，編輯功能消失，Console 直接寫入 `trip_days`/`spots`/`day_spots` 皆 0 筆生效且前端提示正確 ✅；關閉該協作者的 `can_edit_itinerary` 後續寫入被拒 ✅；非協作者的白名單朋友與未登入訪客頁面瀏覽與既有功能行為不變 ✅；Console 嘗試把行程 A 的景點塞進行程 B 的某一天，被完整性檢查擋下 ✅；`/japan`、`/travel` 凍結頁面完全未修改，diff 為零
 - **明確排除（留待階段 4 任務三）**：`can_edit_wishlist` 未落實，`japan_items` 的 RLS 未讀取此欄位，協作者尚無法調整願望清單；Sandbox 模式未開發；願望清單機制未變動；任務一盤點發現的 `spots.category`/`icon` 遺留欄位問題未修（見待辦清單）
 
+### ✅ V2 階段 4 任務三：落實 can_edit_wishlist + Sandbox 模式（2026-07-13，已結案，階段 4 全部結案）
+
+- **背景**：任務二落實了 `can_edit_itinerary`，本任務落實剩下的 `can_edit_wishlist`（行程收藏品的願望清單由協作者權限管控），並收緊 `wishlist_items` 原本對「任何登入帳號」開放的寫入縫隙；同時完成 Sandbox 模式（非管理員在 `/trip` 看不到 AI 分頁與任何連回主站的入口）
+- **資料庫**：
+  - 新函式 `public.can_wishlist_item(p_item_id bigint)`（`SECURITY DEFINER`，注意 `japan_items.id` 是 `bigint` 非 `uuid`）：管理員恆可；品項 `trip_id IS NULL`（一般收藏）→ 沿用白名單機制回傳 `is_friend()`；品項有 `trip_id`（行程收藏）→ `EXISTS(該行程 trip_collaborators 中 can_edit_wishlist=true 的自己那一列)`
+  - `wishlist_items`（原政策 `Users can manage own wishlist`(INSERT)、`Users can update own wishlist quantity`(UPDATE) 只檢查 `auth.uid()=user_id`，任何登入帳號皆可對任意品項寫入）：INSERT/UPDATE 改為 `auth.uid()=user_id AND can_wishlist_item(japan_item_id)`；**DELETE（`Users can delete own wishlist`）與 SELECT（`Authenticated users can read wishlist`）刻意不動**——就算權限被撤，本人永遠能收回自己標過的願望，不留殘留；SELECT 對所有登入帳號開放是既有設計（「❤️ N 人想買」統計依賴它），本次不動
+- **前端（`JapanCollection.astro`）**：
+  - 新增 `canWishlistItem(item)` 判斷，邏輯與 SQL 函式一致；登入的白名單使用者另外查詢自己的 `trip_collaborators` 授權並快取為 `collaboratorTripPermissions`（此元件自己查一次，不與 `TripPlanner.astro` 共用快取，避免耦合）
+  - 願望清單 📌 圖示的渲染條件從單純 `isAllowedUser` 改為「有權限操作(`canWishlistItem`)或已經標記過(`isUserWishlisted`)任一為真」；不符合任一條件的品項完全不渲染操作 UI（沿用既有訪客看到的樣式，未發明新樣式）
+  - **驗證中發現並修復的問題**：第一版把 📌 圖示完全綁在 `canWishlistItem(item)` 上，權限被撤後圖示直接消失，導致使用者無法透過畫面收回已標記的願望，跟 DELETE 政策「永遠可收回」的設計初衷矛盾（commit `f51c13d`）。修復為：已標記或仍有權限任一為真就顯示 📌；數量調整器則維持只在仍有權限時才顯示，避免點了卻被 RLS 拒絕產生困惑
+- **Sandbox 模式（`trip.astro`）**：
+  - AI 分頁的 Desktop 側欄圖示與 Mobile 選單項新增 `trip-admin-only` class（預設 `display: none`），與既有 `admin-home-link`（返回首頁連結）合併在同一段管理員判斷邏輯中一起顯示
+  - **全站盤點結果**：`trip.astro`/`TripPlanner.astro`/`JapanCollection.astro` 全文搜尋所有 `<a>` 標籤與 `window.location.href` 賦值，僅 2 個「返回首頁」連結（Desktop + Mobile），已由既有 `admin-home-link` 正確控制；其餘 `<a>` 皆為外部連結（Google Maps、使用者筆記網址、探索日本來源網站），與站內導覽無關；`Layout.astro` 未注入任何全站共用導覽列/footer，無其他洩漏管道；`TripPlanner.astro` 登入按鈕有一個 `window.location.href='/login'` fallback（僅 `auth-modal` 元素不存在時觸發，正常不會執行），判斷為所有人皆需要的登入入口，非站內導覽洩漏，不處理
+  - AI 分頁內容本身仍為佔位文字（功能本體屬階段 7）；`switchTab()` 函式技術上可被 Console 直接呼叫繞過按鈕隱藏，但佔位內容無實質資訊，非本階段修補範圍，記錄備查
+- **驗證結果（2026-07-13，使用者實測，含一輪修復後複測）**：白名單朋友（非協作者）一般收藏品操作與改版前一致、行程收藏品顯示為不可操作 ✅；協作者對行程 A（開 `can_edit_wishlist`）可標可調、行程 B 不可、不在白名單的一般收藏不可 ✅；關閉協作者的 `can_edit_wishlist` 後新增/調整被拒但可刪除已標記的（第一輪測試失敗，定位為前端渲染邏輯問題並修復後複測通過）✅；管理員一切照舊，含「所有人」模式與「N 人想買」統計 ✅；非白名單陌生 Google 帳號的願望清單寫入被拒 ✅；協作者與朋友帳號檢視 `/trip` 看不到 AI 分頁與任何連回主站的連結，管理員照舊 ✅；`/japan`、`/travel` 凍結頁面完全未修改，diff 為零
+- **明確排除**：DELETE 與 SELECT 政策未動；K2 的行程編輯權未動；AI 分頁功能本體未做（仍為佔位，屬階段 7）；一般收藏的白名單機制本身未動
+
 ---
 
 ## 二、規劃中功能（尚未開始）
@@ -427,6 +444,7 @@
 11. **trip_days/day_spots**：id 都是 uuid
 12. **wishlist_items RLS**：需要 SELECT、INSERT、UPDATE、DELETE 四個 policy
     - UPDATE policy：`auth.uid() = user_id`（朋友才能更新自己的數量）
+    - 2026-07-13 更新（V2 階段 4 任務三）：INSERT/UPDATE 額外加上 `can_wishlist_item(japan_item_id)` 檢查（一般收藏看白名單、行程收藏看協作者 `can_edit_wishlist`）；DELETE/SELECT 政策未變動
 13. **日本收藏卡片更新**：點擊愛心/數量按鈕用局部 DOM 更新（updateCardFooter），避免全版重渲染造成跳動
 14. **Modal 滾動鎖定**：開啟 Modal 時加 `document.body.classList.add('modal-open')`，關閉時移除，CSS 需有 `body.modal-open { overflow: hidden; }`
 15. **`is:inline` 與 `define:vars` 的 `<script>` 禁用 TypeScript 語法**（2026-07-11 修正，原描述過寬）：這類 script 不經 Vite 打包器，型別標註（`:Type`）、`as Type` 斷言會直接送進瀏覽器造成執行期語法錯誤。一般 `<script>`（非 `is:inline`、非 `define:vars`）會經 Vite/esbuild 打包，**可以**使用 TS 語法，專案內既有大量此類寫法且建置與執行皆正常
@@ -504,7 +522,7 @@
 1. 🔴 **最優先**：「OAuth 登入後 UI 間歇性未切換」Heisenbug（見上方「進行中問題」）。第一輪時序診斷已完成（2026-07-11）：嫌犯一、二均排除，trip.astro auth 管線健康，與 DevTools 開關無因果；診斷碼留在線上，等待真實失敗發生時依取證 SOP 抓 log，定案根因後修復,方能確認階段 2.5 真正收尾。2026-07-11 驗證任務 D 時新增一筆疑似同根因家族的觀察（朋友帳號登入 `/trip` 一度被誤判成管理員，方向與原記錄相反），未確認是否同一問題，下次排查時一併納入
 2. 補做「衝突熱點稽核」修復（commit `2317d2d`）的手動驗證：ESC 鍵、Modal 背景點擊是否都能正確關閉並清除 `modal-open`（原定驗證因發現上述問題而中斷）
 3. ~~階段 3：japan_items 加入 trip_id 篩選邏輯（收藏依行程篩選）~~ **✅ 2026-07-12 已完成**，詳見上方「V2 階段 3：收藏依行程篩選」
-4. **階段 4**：協作者權限系統。任務一（trip_collaborators 資料表+管理員管理 UI）**✅ 2026-07-12 已完成**；任務二（can_edit_itinerary 落實：trips/trip_days/spots/day_spots 的 RLS + 前端編輯 UI 切換）**✅ 2026-07-13 已完成**，詳見上方「V2 階段 4 任務二」；剩餘：**任務三**（japan_items 的 RLS 落實 can_edit_wishlist + Sandbox 模式）
+4. ~~**階段 4**：協作者權限系統~~ **✅ 2026-07-13 全部完成**（任務一：trip_collaborators 資料表+管理員管理 UI 2026-07-12；任務二：can_edit_itinerary 落實 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 2026-07-13），詳見上方「V2 階段 4」對應章節
 5. **階段 5**：旅行資源頁面（優惠券 + 地鐵圖分類）
 6. **階段 6**：交通查詢系統（spot_transport_routes + AI 整理）
 7. **階段 7-8**：AI 助手分頁與 Serverless API 串接

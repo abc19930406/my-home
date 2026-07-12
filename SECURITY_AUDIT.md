@@ -37,7 +37,7 @@
 | **status** | [index.astro:33](src/pages/index.astro:33)(首頁便條紙,設計上本就公開)、[admin.astro:26](src/pages/admin.astro:26)、[JapanCollection.astro:34](src/components/JapanCollection.astro:34)、[japan.astro:35](src/pages/japan.astro:35),皆 prerender=true | SELECT/UPDATE 在 Welcome.astro、JapanCollection.astro、japan.astro、admin.astro |
 | **cards** | [index.astro:12](src/pages/index.astro:12) `SELECT *`,prerender=true(首頁卡片,設計上本就公開) | UPDATE 在 [admin.astro:250](src/pages/admin.astro:250) |
 | **allowed_users** | ✅ 2026-07-11 已修復:無 frontmatter 查詢 | SELECT(白名單比對)在 JapanCollection.astro、TripPlanner.astro、japan.astro;RLS 已收緊為管理員全讀、非管理員僅讀自己那一列,寫入僅管理員 |
-| **wishlist_items** | 無 frontmatter 查詢 | SELECT/INSERT/UPDATE 在 JapanCollection.astro、japan.astro(朋友願望清單) |
+| **wishlist_items**(✅ 2026-07-13 INSERT/UPDATE 已收斂) | 無 frontmatter 查詢 | SELECT/INSERT/UPDATE 在 JapanCollection.astro、japan.astro(朋友願望清單);INSERT/UPDATE 新增 `can_wishlist_item()` 檢查,DELETE/SELECT 未動 |
 | **transactions** | ✅ 2026-07-11 已修復:無 frontmatter 查詢(ledger.astro 無 build-time `.from()`) | SELECT/INSERT/UPDATE/DELETE 全在 [ledger.astro](src/pages/ledger.astro:334)(記帳明細,私人財務資料);RLS 已收緊為僅管理員,`ledger.astro` 頁面本身也新增管理員身分檢查 |
 | **income_categories / expense_categories** | 無 | SELECT 在 ledger.astro |
 | **daily** | 無 frontmatter 查詢(polaroid.astro 無 build-time `.from()`) | SELECT/INSERT/UPDATE/DELETE 在 [polaroid.astro](src/pages/polaroid.astro:187) |
@@ -45,7 +45,7 @@
 | **post_images** | ✅ 2026-07-11 已停用:無資料表查詢,僅 Storage bucket 操作 | 舊 bucket,已無任何程式碼引用(改用下方 `post_media`);原 11 個檔案中僅 1 個被實際使用,已搬遷,其餘孤兒檔案原樣保留未刪 |
 | **post_media**(新增,2026-07-11) | 短文照片/短片/錄音私有 bucket,RLS 詳見 PROJECT_ARCHITECTURE.md「短文照片私有化」「短文媒體支援」 | `storage.from('post_media')` upload/move/createSignedUrl 在 posts/index.astro、posts/[id].astro |
 | **post_media_items**(新增,2026-07-11) | ✅ 建表當下即依 posts 表 SELECT 邏輯設計 RLS(is_admin/is_friend),非事後補修 | 短文的 YouTube 影片、上傳短片、錄音,寫入僅 `is_admin()`,詳見 PROJECT_ARCHITECTURE.md「短文媒體支援」 |
-| **trip_collaborators**(新增,2026-07-12) | 無 frontmatter 查詢 | ✅ 建表當下即設計 RLS(is_admin() OR 讀自己那一列,寫入僅 is_admin()),非事後補修;SELECT/INSERT/UPDATE/DELETE 在 TripPlanner.astro(協作者管理 Modal)。`can_edit_itinerary` 已於 2026-07-13 被 `trips`/`trip_days`/`spots`/`day_spots` 的 RLS 透過 `can_edit_trip()` 函式讀取並生效;`can_edit_wishlist` 尚未生效(留待下一任務),詳見 PROJECT_ARCHITECTURE_V2.md「6.2 協作者」
+| **trip_collaborators**(新增,2026-07-12) | 無 frontmatter 查詢 | ✅ 建表當下即設計 RLS(is_admin() OR 讀自己那一列,寫入僅 is_admin()),非事後補修;SELECT/INSERT/UPDATE/DELETE 在 TripPlanner.astro(協作者管理 Modal)。`can_edit_itinerary` 已於 2026-07-13 被 `trips`/`trip_days`/`spots`/`day_spots` 的 RLS 透過 `can_edit_trip()` 函式讀取並生效;`can_edit_wishlist` 已於同日被 `wishlist_items` 的 RLS 透過 `can_wishlist_item()` 函式讀取並生效,詳見 PROJECT_ARCHITECTURE_V2.md「6.2 協作者」
 
 ### 尚未在程式碼中被引用、但資料庫已建立的表(依 PROJECT_ARCHITECTURE.md)
 
@@ -127,13 +127,13 @@ order by tablename, cmd;
 | **japan_categories**(✅ 2026-07-11 寫入已修復,SELECT 維持公開設計) | 🟡 全表可讀(taxonomy,刻意保留) | 否 | 全表可讀(不變) | ~~🔴 任何登入帳號可 CRUD~~ → 已收斂為僅 `is_admin()` 可寫入 | 寫入已收斂,SELECT 維持設計原狀 |
 | **quotes**(✅ 2026-07-11 已修復) | 🟢 僅 `visibility='public'` | 否 | ~~🟡 任何登入帳號可讀全部語錄~~ | ~~🔴 任何登入帳號可 INSERT/UPDATE/DELETE 任何人的語錄~~ | ~~HIGH~~ → 已收斂為 public/is_admin()/is_friend() 判斷,寫入僅 is_admin() |
 | **allowed_users**(白名單,✅ 2026-07-11 已修復) | 否 | 否 | ~~🔴 任何登入帳號可讀/改/刪整份白名單~~ | ~~同左(ALL)~~ | ~~HIGH~~ → 已收斂為管理員全讀/非管理員僅讀自己那一列,寫入僅 `is_admin()` |
-| **wishlist_items** | 否 | 否 | 🟡 任何登入帳號可讀**所有人的**願望清單(非僅自己) | 🟢 INSERT/UPDATE/DELETE 均鎖定 `auth.uid()=user_id`,只能動自己的 | **MEDIUM** |
+| **wishlist_items**(✅ 2026-07-13 已修復) | 否 | 否 | 🟡 任何登入帳號可讀**所有人的**願望清單(非僅自己,刻意保留,「N 人想買」統計依賴此設計) | ~~🟡 任何登入帳號可對**任意品項**寫入願望清單,只檢查 `auth.uid()=user_id`,未檢查是否真的有權限操作該品項~~ → INSERT/UPDATE 新增 `can_wishlist_item(japan_item_id)` 檢查(一般收藏看白名單 `is_friend()`,行程收藏看 `trip_collaborators.can_edit_wishlist`);DELETE(`auth.uid()=user_id`)刻意不動,權限被撤仍可收回自己標過的,不留殘留 | ~~MEDIUM~~ → 寫入已收斂,SELECT 維持設計原狀 |
 | **spots / trips / trip_days / day_spots**(✅ 2026-07-13 寫入已修復,SELECT 維持公開設計) | 🟡 全表可讀(完整行程、地點、座標,刻意保留) | 否 | 全表可讀(不變) | ~~🔴 任何登入帳號可 CRUD 任何行程/景點~~ → 已收斂:`trips` 一律僅 `is_admin()`;`trip_days`/`spots`/`day_spots` 改用新函式 `can_edit_trip(trip_id)`(管理員,或該行程 `trip_collaborators.can_edit_itinerary=true` 的協作者);`day_spots` 的 INSERT/UPDATE 新增完整性檢查,擋下「把 A 行程景點塞進 B 行程某一天」 | 寫入已收斂,SELECT 維持設計原狀 |
 | **spot_types / spot_subtypes** | 🟡 全表可讀(僅分類名稱) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD | **LOW** |
 | **expense_categories / income_categories** | 🟡 全表可讀(記帳分類名稱,非金額) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD | **LOW** |
 | **cards / status / daily** | 🟢 全表可讀(設計上本就公開:首頁卡片、狀態便條、Polaroid) | 否 | 全表可讀 | 🔴 任何登入帳號可改(cards/status)或 CRUD(daily),非僅管理員 | **LOW**(讀取合理,寫入權限過寬) |
 | **travel_coupons / travel_subway_maps** | 🟢 全表可讀(尚無 UI,表已建但空) | 否 | 全表可讀 | 🟢 **正確示範**:寫入鎖定 `auth.jwt()->>'email' = 'abc19930406@gmail.com'`,真正限定管理員本人 | 目前無資料,結構正確 |
-| **trip_collaborators**(新增,2026-07-12,建表當下即設計) | 否 | 否 | 🟢 僅讀得到自己那一列(`lower(user_email)=lower(auth.jwt()->>'email')`),非管理員讀不到別人的授權列 | 🟢 INSERT/UPDATE/DELETE 一律僅 `is_admin()` | 建表當下即收斂,無歷史包袱;`can_edit_itinerary` 已於 2026-07-13 生效(見上方 spots/trips/trip_days/day_spots 列);`can_edit_wishlist` 仍只是記錄,尚未被 `japan_items` 的 RLS 讀取,不代表協作者已能調整願望清單 |
+| **trip_collaborators**(新增,2026-07-12,建表當下即設計) | 否 | 否 | 🟢 僅讀得到自己那一列(`lower(user_email)=lower(auth.jwt()->>'email')`),非管理員讀不到別人的授權列 | 🟢 INSERT/UPDATE/DELETE 一律僅 `is_admin()` | 建表當下即收斂,無歷史包袱;`can_edit_itinerary`(見上方 spots/trips/trip_days/day_spots 列)與 `can_edit_wishlist`(見上方 wishlist_items 列)均已於 2026-07-13 生效,V2 階段 4 協作者權限系統結案 |
 
 🔴 嚴重 / 🟡 中等 / 🟢 設計合理或已正確收斂
 

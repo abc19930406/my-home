@@ -176,7 +176,7 @@
 - 所有行程、所有收藏品、AI 助手 — 完整存取權限
 - ⚠️ 曾發生權限漏洞：`updateAuthUI` 一度未比對 email，只要有 session 即無條件設為管理員，已修正為嚴格比對 `currentSession.user.email === adminEmail`
 
-### 6.2 協作者（trip_collaborators）🔶 can_edit_itinerary 已落實，can_edit_wishlist 未做（2026-07-13，V2 階段 4 任務一、二）
+### 6.2 協作者（trip_collaborators）✅ 已全數落實（2026-07-13，V2 階段 4 任務一、二、三，階段 4 結案）
 
 表 `trip_collaborators`（已建立）：
 
@@ -202,13 +202,22 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
   - 四張表的 SELECT 政策完全不動（公開展示為刻意設計）
   - **前端（`TripPlanner.astro`）**：新增 `canEditItinerary(tripId)` 判斷（管理員恆真，或協作者在該行程 `can_edit_itinerary=true`）；登入後查詢 `trip_collaborators` 取得自己在各行程的授權並快取；四個編輯進入點（新增景點、地圖點擊新增提示、新增一天、從想去清單選擇）從 `admin-only` 改為新的 `itinerary-edit-only`，由 `updateItineraryEditUI()` 依目前選中行程動態切換；天數排序/刪除、景點卡片編輯/刪除、每日行程項目移動/移除、地圖 InfoWindow 編輯鈕等原本內嵌 `isAdminUser` 的渲染邏輯，一併改用 `canEditItinerary(currentTripId)`；監聽 `trip-changed` 事件在切換行程時重新評估；行程本身建立/改名/刪除、協作者管理、管理類型維持 `admin-only` 不變
   - 授權撤銷生效時機：資料庫層即時（下一次寫入就被拒），前端 UI 允許在重新整理或切換行程時更新，不做即時推播
-- ⚠️ **can_edit_wishlist 尚未落實**：欄位目前只是被記錄，`japan_items` 的 RLS 未讀取此欄位，協作者尚無法透過此機制調整願望清單。Sandbox 模式亦尚未開發。皆為後續任務（本規劃編號的第三個子任務）
-- 協作者登入後屆時將僅看到「行程」「收藏」分頁（依權限決定可否編輯），無「AI」分頁，Sandbox 模式生效（規劃中，未實作）
+- ✅ **can_edit_wishlist 已落實生效（2026-07-13，V2 階段 4 任務三）**：
+  - 新函式 `public.can_wishlist_item(p_item_id bigint)`（`SECURITY DEFINER`，`japan_items.id` 為 `bigint` 非 `uuid`）：管理員恆可；該品項 `trip_id IS NULL`（一般收藏）→ 沿用白名單機制，回傳 `is_friend()`；該品項有 `trip_id`（行程收藏）→ `EXISTS(該行程 trip_collaborators 中 can_edit_wishlist=true 的自己那一列)`
+  - `wishlist_items`：INSERT 的 `WITH CHECK`、UPDATE 的 `USING`/`WITH CHECK` 改為 `auth.uid() = user_id AND can_wishlist_item(japan_item_id)`；**DELETE（`auth.uid() = user_id`）與 SELECT（`authenticated` 可讀）刻意不動**——就算權限被撤，本人永遠能收回自己標過的願望，不留下動不了的殘留；「N 人想買」統計依賴 SELECT 全開
+  - 關閉的縫隙：修復前任何登入帳號（不限白名單）都能對任意品項寫入 `wishlist_items`，只檢查 `auth.uid()=user_id`，未檢查是否真的有權限操作該品項；一般收藏與行程收藏兩套授權機制（白名單 vs 協作者）完全獨立，互不影響
+  - **前端（`JapanCollection.astro`）**：新增 `canWishlistItem(item)` 判斷，邏輯與 SQL 函式一致；登入的白名單使用者另外查詢自己的 `trip_collaborators` 授權並快取（此元件自查一次，不與 `TripPlanner.astro` 共用，避免耦合）；願望清單 📌 圖示渲染條件為「有權限」或「已經標記過」任一為真（即使權限被撤，已標記的仍會顯示以便收回，但**不再顯示數量調整器**，避免點擊觸發 RLS 拒絕造成困惑）；不符合任一條件的品項完全不渲染 📌，沿用既有訪客看到的樣式，未發明新樣式
+- ✅ **Sandbox 模式已實作（2026-07-13，V2 階段 4 任務三）**：
+  - `trip.astro`：AI 分頁的 Desktop 側欄圖示與 Mobile 選單項新增 `trip-admin-only` class（預設 `display: none`），與既有 `admin-home-link`（返回首頁連結）一起，僅管理員登入後才顯示
+  - 已盤點 `trip.astro`、`TripPlanner.astro`、`JapanCollection.astro` 全部連結：僅 2 個「返回首頁」連結（Desktop + Mobile），已由既有 `admin-home-link` 機制正確控制；其餘 `<a>` 標籤皆為外部連結（Google Maps、使用者筆記網址、探索日本來源網站），與站內導覽無關；共用 `Layout.astro` 未注入任何站內導覽列，無其他洩漏管道
+  - AI 分頁內容本身仍為佔位文字（階段 7 才開發功能本體），`switchTab()` 函式技術上可被 Console 呼叫繞過按鈕隱藏直接切換到該分頁，但內容本身無實質資訊，非本階段修補範圍
+- 協作者登入後僅看到「行程」「收藏」分頁（依權限決定可否編輯），無「AI」分頁，Sandbox 模式已生效
 
 ### 6.3 一般收藏（trip_id IS NULL）
 
 - 沿用現有 `allowed_users` 白名單機制（不分行程的「一般收藏」願望清單）
 - 與 `trip_collaborators` 為兩套獨立機制，互不影響
+- ✅ 2026-07-13：`can_wishlist_item()` 函式已將此白名單判斷（`is_friend()`）與行程收藏的協作者判斷整合進同一個函式，但兩套機制的判斷條件本身仍完全獨立（品項 `trip_id` 決定走哪一套），互不影響
 
 ---
 
@@ -250,14 +259,14 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | 2 | 行程子分頁遷移：地圖、行程模式、連鎖店功能遷移至 TripPlanner.astro | ✅ 已完成 |
 | 2.5 | Supabase 單一入口架構重構 + Race Condition 修正（原規劃外，因應實作過程發現的問題而新增） | 🔶 大致完成，有未解決問題待釐清 |
 | 3 | 收藏分頁整合：japan_items.trip_id、收藏分頁顯示邏輯、一般收藏 vs 行程收藏 | ✅ 已完成（2026-07-12） |
-| 4 | 協作者權限系統：trip_collaborators、雙開關權限、Sandbox 模式（共三個子任務） | 🔶 進行中（任務一：地基與管理員 UI ✅ 2026-07-12；任務二：can_edit_itinerary 落實 ✅ 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 📋 待開始） |
+| 4 | 協作者權限系統：trip_collaborators、雙開關權限、Sandbox 模式（共三個子任務） | ✅ 已完成（任務一：地基與管理員 UI 2026-07-12；任務二：can_edit_itinerary 落實 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 2026-07-13） |
 | 5 | 資源子分頁：優惠券、地鐵圖分類化、trip_subway_categories | 📋 待開始 |
 | 6 | 交通查詢子分頁：spot_transport_routes、行程內嵌交通方式 UI | 📋 待開始 |
 | 7 | AI 助手（只讀）：/api/ai-assistant，讀取行程/收藏資料並回答問題 | 📋 待開始 |
 | 8 | AI 工具逐個開放：add_spot、toggle_wishlist 等寫入工具 | 📋 待開始 |
 | 9 | 程式碼清理與重構：統一 Modal/CSS 命名規則、評估舊頁面下線 | 📋 待開始（待功能全部穩定後執行） |
 
-> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 任務一、任務二的實作記錄與盤點回報，見 PROJECT_PROGRESS.md「V2 階段 4」對應章節。
+> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 三個任務的實作記錄與盤點回報，見 PROJECT_PROGRESS.md「V2 階段 4」對應章節。
 
 ---
 
