@@ -288,7 +288,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           <div class="coupons-header">
             <h3><i class="ti ti-train"></i> 地鐵圖</h3>
             <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-              <button id="btn-browse-subway-categories" class="btn-browse-subway itinerary-edit-only" style="display: none;">
+              <button id="btn-browse-subway-categories" class="btn-browse-subway">
                 <i class="ti ti-list"></i> 瀏覽全部分類
               </button>
               <button id="btn-upload-subway-map" class="btn-add-coupon admin-only" style="display: none;">
@@ -627,8 +627,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         <button type="button" class="btn-modal-close" id="btn-subway-categories-modal-close">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="font-size: 0.8rem; color: var(--travel-text-muted); margin: 0 0 12px;">
-          勾選要在目前行程顯示的分類，取消勾選即從此行程移除（不會刪除圖片本身）。
+        <p id="subway-categories-modal-hint" style="font-size: 0.8rem; color: var(--travel-text-muted); margin: 0 0 12px;">
+          <!-- JS 依身分動態填入 -->
         </p>
         <div id="subway-categories-list" style="display: flex; flex-direction: column; gap: 8px;">
           <!-- JS 動態渲染 -->
@@ -753,7 +753,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     let spotSubtypesCache = [];
     let couponsCache = []; // 「資源」子分頁：優惠券，全站共用不綁 trip_id
     let subwayMapsCache = []; // 「資源」子分頁：地鐵圖，全域資源庫，全站共用不綁 trip_id（V2 階段 5 任務二）
-    let tripSubwayCategoriesCache = []; // 目前行程關聯的地鐵圖分類（trip_subway_categories）
+    let tripSubwayCategoriesCache = []; // 目前行程關聯的地鐵圖分類（trip_subway_categories，管理員/協作者設定的預設值）
+    // 非管理員/非 can_edit_itinerary 協作者的「個人篩選」：只影響自己畫面，不寫入資料庫，切換行程時重置為 null（回到預設）
+    let personalSubwayCategorySelection = null;
     let currentTripId = '';
     let selectedCategoryFilter = 'all';
     let selectedSubcategoryFilter = 'all';
@@ -2186,6 +2188,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     }
 
     async function loadTripSubwayCategories(tripId) {
+      // 切換行程時，個人篩選（若有）重置為預設（回到該行程管理員設定的分類）
+      personalSubwayCategorySelection = null;
+
       if (!tripId) {
         tripSubwayCategoriesCache = [];
         renderSubwayGroups();
@@ -2205,6 +2210,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       renderSubwayGroups();
     }
 
+    // 目前實際要顯示的分類集合：個人篩選存在就用個人篩選（僅影響自己畫面），否則用行程預設（trip_subway_categories）
+    function getActiveSubwayCategories() {
+      if (personalSubwayCategorySelection) return personalSubwayCategorySelection;
+      return new Set(tripSubwayCategoriesCache.map(c => c.category));
+    }
+
     function renderSubwayGroups() {
       const container = document.getElementById('subway-groups-container');
       if (!container) return;
@@ -2214,7 +2225,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         return;
       }
 
-      const activeCategories = new Set(tripSubwayCategoriesCache.map(c => c.category));
+      const activeCategories = getActiveSubwayCategories();
       const maps = subwayMapsCache.filter(m => activeCategories.has(m.category));
 
       if (maps.length === 0) {
@@ -2266,13 +2277,21 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     function openSubwayCategoriesModal() {
       const modal = document.getElementById('travel-subway-categories-modal');
       const list = document.getElementById('subway-categories-list');
+      const hint = document.getElementById('subway-categories-modal-hint');
       if (!modal || !list || !currentTripId) return;
+
+      const canManageDefault = canEditItinerary(currentTripId);
+      if (hint) {
+        hint.textContent = canManageDefault
+          ? '勾選要在目前行程顯示的分類，取消勾選即從此行程移除（不會刪除圖片本身，所有人都會看到這個預設）。'
+          : '勾選你想看的分類，只會套用在你目前的瀏覽，不會影響其他人看到的內容，切換行程或重新整理後會恢復預設。';
+      }
 
       const categoryCounts = {};
       subwayMapsCache.forEach(m => {
         categoryCounts[m.category] = (categoryCounts[m.category] || 0) + 1;
       });
-      const activeCategories = new Set(tripSubwayCategoriesCache.map(c => c.category));
+      const activeCategories = getActiveSubwayCategories();
       const categories = Object.keys(categoryCounts).sort();
 
       if (categories.length === 0) {
@@ -4141,6 +4160,20 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         if (!checkbox || !currentTripId) return;
         const category = checkbox.dataset.category;
         const checked = checkbox.checked;
+
+        // 非管理員/非 can_edit_itinerary 協作者：只更新個人篩選（本地變數），不寫入資料庫，不影響其他人
+        if (!canEditItinerary(currentTripId)) {
+          if (!personalSubwayCategorySelection) {
+            personalSubwayCategorySelection = new Set(tripSubwayCategoriesCache.map(c => c.category));
+          }
+          if (checked) {
+            personalSubwayCategorySelection.add(category);
+          } else {
+            personalSubwayCategorySelection.delete(category);
+          }
+          renderSubwayGroups();
+          return;
+        }
 
         if (checked) {
           const { data, error } = await supabase
