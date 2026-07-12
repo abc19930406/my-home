@@ -33,7 +33,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? "";
           <i class="ti ti-heart"></i>
           收藏
         </button>
-        <button class="nav-btn" data-target="ai">
+        <button
+          class="nav-btn trip-admin-only"
+          data-target="ai"
+          style="display: none;"
+        >
           <i class="ti ti-sparkles"></i>
           AI
         </button>
@@ -62,7 +66,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? "";
       <button class="mobile-nav-btn" data-target="japan">
         <i class="ti ti-heart"></i> 收藏
       </button>
-      <button class="mobile-nav-btn" data-target="ai">
+      <button
+        class="mobile-nav-btn trip-admin-only"
+        data-target="ai"
+        style="display: none;"
+      >
         <i class="ti ti-sparkles"></i> AI助手
       </button>
     </div>
@@ -194,10 +202,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? "";
 
       if (initialSession && initialSession.user.email === adminEmail) {
         isAdminUser = true;
-        // 顯示所有 "返回首頁" 連結
-        document.querySelectorAll(".admin-home-link").forEach((el) => {
-          el.style.display = "flex";
-        });
+        // 顯示所有 "返回首頁" 連結，以及僅管理員可見的功能（目前為 AI 分頁入口）
+        // Sandbox 模式：非管理員（協作者/朋友/訪客）一律不顯示
+        document
+          .querySelectorAll(".admin-home-link, .trip-admin-only")
+          .forEach((el) => {
+            el.style.display = "flex";
+          });
       }
 
       // [DEBUG-HEISENBUG] 即將手動廣播 INITIAL_SESSION(嫌犯二觀測點)

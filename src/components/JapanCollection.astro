@@ -412,6 +412,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   let isAllowedUser = false;
   let currentUser = null;
   let tripsCache = [];
+  // trip_id -> { can_edit_wishlist, can_edit_itinerary }（V2 階段 4 任務三：協作者的行程收藏願望清單權限）
+  // 本元件自己查一次，不與 TripPlanner.astro 共用快取
+  let collaboratorTripPermissions = {};
   // 收藏依行程篩選：'all'(全部,預設) / 'general'(僅一般收藏) / 某個行程的 id(該行程＋一般收藏)
   // 獨立於「行程」分頁目前選中的行程，任何人(管理員、朋友、訪客)皆可使用
   let selectedTripFilterId = 'all';
@@ -424,6 +427,32 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     setTimeout(() => {
       toast.classList.remove('show');
     }, 2000);
+  }
+
+  // 是否可操作此品項的願望清單愛心/數量：管理員恆可；一般收藏品(trip_id 為空)看白名單；
+  // 行程收藏品看該行程 trip_collaborators 的 can_edit_wishlist
+  function canWishlistItem(item) {
+    if (isAdminUser) return true;
+    if (!item) return false;
+    if (!item.trip_id) return isAllowedUser;
+    const perm = collaboratorTripPermissions[item.trip_id];
+    return !!(perm && perm.can_edit_wishlist);
+  }
+
+  async function loadCollaboratorPermissions(email) {
+    try {
+      const { data, error } = await supabase
+        .from('trip_collaborators')
+        .select('trip_id, can_edit_wishlist, can_edit_itinerary')
+        .ilike('user_email', email);
+      if (error) throw error;
+      const map = {};
+      (data || []).forEach(row => { map[row.trip_id] = row; });
+      collaboratorTripPermissions = map;
+    } catch (err) {
+      console.warn('⚠️ trip_collaborators 查詢失敗（協作者權限）：', err);
+      collaboratorTripPermissions = {};
+    }
   }
 
   // --- 讀取資料庫快取與驗證 ---
@@ -448,6 +477,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       if (currentUser.email === adminEmail) {
         isAdminUser = true;
         isAllowedUser = true;
+        collaboratorTripPermissions = {};
         const { data: users } = await supabase.from('allowed_users').select('*');
         allowedUsersCache = users || [];
       } else {
@@ -459,6 +489,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
         if (allowedUser) {
           isAllowedUser = true;
+          // 協作者權限查詢：與白名單機制各自獨立，行程收藏品的願望清單依此判斷
+          await loadCollaboratorPermissions(currentUser.email);
         } else {
           alert('此功能僅限受邀用戶使用。');
           await supabase.auth.signOut();
@@ -842,7 +874,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       }
 
       let userCheckboxHtml = '';
-      if (isAllowedUser && currentUser && !isAdminUser) {
+      if (!isAdminUser && currentUser && canWishlistItem(item)) {
         const userWishlistItem = allWishlistItems.find(w => String(w.japan_item_id) === String(item.id) && w.user_id === currentUser.id);
         const isUserWishlisted = !!userWishlistItem;
         userCheckboxHtml = `
