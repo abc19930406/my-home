@@ -423,6 +423,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           </div>
         </div>
         <div class="modal-footer">
+          <button type="button" class="btn-danger" id="btn-trip-delete" style="display: none;">刪除行程</button>
           <button type="button" class="btn-secondary" id="btn-trip-cancel">取消</button>
           <button type="submit" class="btn-primary">儲存行程</button>
         </div>
@@ -3317,6 +3318,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
       const tripModalTitle = document.getElementById('trip-modal-title');
 
+      const btnTripDelete = document.getElementById('btn-trip-delete');
+
       btnAddTrip?.addEventListener('click', () => {
         tripForm.reset();
         document.getElementById('form-trip-id').value = '';
@@ -3326,6 +3329,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           opt.classList.remove('selected');
           if (opt.dataset.emoji === '🌸') opt.classList.add('selected');
         });
+        if (btnTripDelete) btnTripDelete.style.display = 'none';
         tripModal?.classList.add('show');
         document.body.classList.add('modal-open');
       });
@@ -3335,10 +3339,11 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         if (!currentTripId) return;
         const trip = tripsCache.find(t => String(t.id) === String(currentTripId));
         if (!trip) return;
-        
+
         tripForm.reset();
         document.getElementById('form-trip-id').value = trip.id;
         if (tripModalTitle) tripModalTitle.textContent = '✏️ 編輯行程';
+        if (btnTripDelete) btnTripDelete.style.display = 'inline-block';
         
         document.getElementById('trip-name').value = trip.name || '';
         document.getElementById('trip-description').value = trip.description || '';
@@ -3446,6 +3451,75 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           triggerBuildWebhook();
         } catch (err) {
           alert('行程儲存失敗：' + err.message);
+        }
+      });
+
+      // 刪除行程（僅管理員；spots.trip_id 為 ON DELETE SET NULL，景點不會被刪除，
+      // 但會退回沒有歸屬行程的狀態，目前 /trip 沒有瀏覽未歸屬景點的畫面）
+      btnTripDelete?.addEventListener('click', async () => {
+        const tripId = document.getElementById('form-trip-id').value;
+        if (!tripId) return;
+        const trip = tripsCache.find(t => String(t.id) === String(tripId));
+        const tripName = trip ? trip.name : '這個行程';
+
+        const confirmed = confirm(
+          `確定要刪除「${tripName}」嗎？此操作無法復原：\n\n` +
+          `・底下的每日行程、景點排序、協作者設定、地鐵圖分類關聯都會一併永久刪除\n` +
+          `・底下的景點本身不會被刪除，但會變成沒有歸屬行程的一般景點，之後在此頁面看不到它們`
+        );
+        if (!confirmed) return;
+
+        try {
+          const { data, error } = await supabase
+            .from('trips')
+            .delete()
+            .eq('id', tripId)
+            .select();
+          if (error) throw error;
+          if (!data || data.length === 0) {
+            alert('刪除失敗：沒有權限或資料不存在');
+            return;
+          }
+
+          tripsCache = tripsCache.filter(t => String(t.id) !== String(tripId));
+          closeTripModal();
+
+          // 重新繪製行程滾動條
+          let tabsHtml = '';
+          tripsCache.forEach(t => {
+            tabsHtml += `
+              <button class="trip-tab" data-trip-id="${t.id}" data-trip-name="${t.name}" data-trip-desc="${t.description || ''}">
+                <span>${t.emoji}</span> ${t.name}
+              </button>
+            `;
+          });
+          const listEl = document.getElementById('trips-tab-list');
+          if (listEl) listEl.innerHTML = tabsHtml;
+
+          showToast('行程已刪除');
+
+          if (tripsCache.length > 0) {
+            selectTrip(tripsCache[0].id);
+          } else {
+            currentTripId = '';
+            window.currentTripId = '';
+            clearMapMarkers();
+            clearItineraryMap();
+            const container = document.getElementById('spots-cards-container');
+            if (container) {
+              container.innerHTML = `
+                <div class="empty-state">
+                  目前沒有行程，請點選「新增行程」開始建立。
+                </div>
+              `;
+            }
+            const titleEl = document.getElementById('current-trip-title');
+            if (titleEl) titleEl.textContent = '景點清單';
+          }
+
+          triggerBuildWebhook();
+        } catch (err) {
+          alert('刪除行程失敗：' + err.message);
         }
       });
 

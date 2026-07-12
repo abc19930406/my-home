@@ -870,6 +870,24 @@
   box-shadow: 0 2px 6px rgba(139, 115, 85, 0.15);
   transition: all 0.2s ease;
 }
+.btn-danger {
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border: 1px solid var(--color-danger);
+  background-color: transparent;
+  color: var(--color-danger);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-right: auto;
+}
+.btn-danger:hover {
+  background-color: var(--color-danger);
+  color: #FFFFFF;
+}
+
 .btn-primary:hover {
   background-color: var(--travel-primary-hover);
   box-shadow: 0 4px 12px rgba(139, 115, 85, 0.25);
