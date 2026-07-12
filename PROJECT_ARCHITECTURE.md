@@ -296,11 +296,11 @@ if (!session) {
 | spot_subtypes | 景點子類型（關聯 spot_types，含 is_chain_store） |
 | trip_days | 每日行程（關聯 trips） |
 | day_spots | 每天景點安排（關聯 trip_days + spots） |
-| travel_coupons | 優惠券，全站共用 |
-| travel_subway_maps | 地鐵圖（📋 規劃調整為全域分類庫） |
-| trip_subway_categories | 📋 規劃中，行程關聯地鐵圖分類 |
-| spot_transport_routes | 📋 規劃中，景點間交通方式 |
-| trip_collaborators | 📋 規劃中，行程協作者權限 |
+| travel_coupons | 優惠券，全站共用（✅ UI 已上線） |
+| travel_subway_maps | 地鐵圖，全域分類庫（✅ 已調整，新增 category 欄位；trip_id 停用不刪，留待階段 9） |
+| trip_subway_categories | ✅ 已上線，行程關聯地鐵圖分類 |
+| spot_transport_routes | ✅ 已上線，景點間交通方式（含行程模式內嵌區塊） |
+| trip_collaborators | ✅ 已上線，行程協作者權限（can_edit_wishlist、can_edit_itinerary 皆已在對應表 RLS 生效） |
 
 > 完整的 /trip 整合頁面資料庫異動細節，請見 PROJECT_ARCHITECTURE_V2.md 第七節。
 

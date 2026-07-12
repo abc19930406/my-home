@@ -105,9 +105,9 @@
 
 ---
 
-### 🔶 /trip 整合頁面（階段 1、2 已完成，階段 2.5 有未解決問題待釐清）
+### 🔶 /trip 整合頁面（階段 1、2、3、4、5、6 已完成，階段 2.5 有未解決問題待釐清，階段 7-9 未開始）
 
-將 `/travel` 與 `/japan` 整合為單一頁面 `/trip`，含 Desktop/Mobile 雙版面、AI 助手分頁（規劃中）、協作者權限系統（規劃中）。詳細架構規劃見 **PROJECT_ARCHITECTURE_V2.md**。
+將 `/travel` 與 `/japan` 整合為單一頁面 `/trip`，含 Desktop/Mobile 雙版面、AI 助手分頁（規劃中，階段 7-8）、協作者權限系統（✅ 已全數落實，V2 階段 4）。詳細架構規劃見 **PROJECT_ARCHITECTURE_V2.md**。
 
 #### 已完成項目
 
@@ -525,10 +525,10 @@
 
 1. ~~**旅行資源子分頁**：優惠券（`travel_coupons`）+ 地鐵圖分類化（`travel_subway_maps` 改全域庫 + `trip_subway_categories` 關聯表）~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 5 任務一」「V2 階段 5 任務二」
 2. ~~**交通查詢子分頁**：`spot_transport_routes` 表 + 行程內嵌交通方式 UI（M2）~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 6 任務一」「V2 階段 6 任務二」；剩餘：AI 輔助搜尋（遞延階段 7-8）
-3. **協作者權限系統**：~~`trip_collaborators` 表~~ **✅ 2026-07-12 已建立（任務一）**，剩餘兩個子任務待開始——雙開關權限**實際執行**（can_edit_wishlist / can_edit_itinerary 目前只記錄未生效）+ Sandbox 模式
-4. **AI 助手分頁**：`/api/ai-assistant` Serverless API，含 tool use 寫入功能（add_spot / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）
-5. **舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan
-6. **程式碼清理階段**（獨立規劃，待全部功能穩定後執行）：統一 Modal 開關/CSS class 命名規則、移除殘留冗餘邏輯
+~~3. **協作者權限系統**：`trip_collaborators` 表 + 雙開關權限（can_edit_wishlist / can_edit_itinerary）+ Sandbox 模式~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 4」相關章節
+3. **AI 助手分頁**：`/api/ai-assistant` Serverless API，含 tool use 寫入功能（add_spot / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）
+4. **舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan
+5. **程式碼清理階段**（獨立規劃，待全部功能穩定後執行）：統一 Modal 開關/CSS class 命名規則、移除殘留冗餘邏輯
 
 ### 其他規劃中功能
 - 讀書筆記、食記、年度回顧、作品集、書籤收藏、習慣打卡

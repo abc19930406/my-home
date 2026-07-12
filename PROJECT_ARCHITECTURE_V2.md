@@ -34,8 +34,8 @@
 
 ### 2.1 三大主分頁
 
-- **行程** 🔶：地圖、每日行程已上線；交通查詢、資源（優惠券/地鐵圖）規劃中
-- **收藏** 🔶：日本收藏品瀏覽、願望清單、數量調整、依行程篩選皆已上線
+- **行程** ✅：地圖、每日行程、交通查詢、資源（優惠券/地鐵圖）皆已上線
+- **收藏** ✅：日本收藏品瀏覽、願望清單、數量調整、依行程篩選皆已上線
 - **AI** 📋：固定對話視窗（僅管理員可見），目前為佔位內容
 
 ### 2.2 Desktop 版面 ✅
@@ -52,12 +52,12 @@
 - 不使用底部固定分頁列，避免與 AI 對話輸入框搶位置
 - 選單展開機制：已從 `position: absolute` 改為 `position: fixed`（修正截斷問題）
 
-### 2.4 Sandbox 模式（非管理員）📋
+### 2.4 Sandbox 模式（非管理員）✅ 已實作（V2 階段 4 任務三）
 
 - 完全不顯示連回網站其他頁面（首頁、短文、語錄等）的連結
 - 不顯示「返回首頁」按鈕
 - 整個頁面對協作者而言是獨立工具，無法離開到主站其他地方
-- 目前管理員判斷邏輯已實作（admin-home-link 顯示控制），完整 Sandbox 模式待 trip_collaborators 權限系統一併開發
+- `trip.astro` 判斷 `isAdminUser` 後，僅管理員會被加回 `.admin-home-link`、`.trip-admin-only` 兩個 class 元素的顯示（`display: flex`）；非管理員（協作者/朋友/訪客）預設一律隱藏，不需額外針對每個角色寫判斷
 
 ---
 
@@ -65,7 +65,7 @@
 
 ✅ **子分頁骨架已上線（2026-07-13，V2 階段 5 任務一；2026-07-13 新增第三個子分頁，V2 階段 6 任務一）**：`TripPlanner.astro` 頂部「行程」「交通查詢」「資源」三個子分頁導覽（純前端顯示切換，不重讀資料），`switchTripSubtab()` 以 `data-subtab` 屬性泛化處理，非寫死兩個分頁的判斷。切換子分頁時登入/登出按鈕維持顯示於子分頁列，不隨子分頁切換而消失；切回「行程」時若地圖容器曾被隱藏，僅觸發 Google Maps `resize` 事件修正 tile 渲染並保留原本 center/zoom，不呼叫 `fitBounds`，地圖視野與選取狀態不會被重置。
 
-### 3.1 行程（核心，預設顯示）🔶 已遷移上線
+### 3.1 行程（核心，預設顯示）✅ 已遷移上線
 
 沿用並擴充原 `/travel` 的核心功能，已搬移至 `TripPlanner.astro` 元件：
 
@@ -102,7 +102,7 @@
 - **⇄ 反向**按鈕一鍵交換起訖點重新查詢；路線具方向性，A→B 與 B→A 是資料庫中的兩筆不同資料，UI 不會互相顯示
 - 管理員與該行程 `can_edit_itinerary` 協作者可新增/編輯/刪除路線選項（Modal，`travel-` 前綴隔離，寫入皆檢查受影響筆數）；朋友/訪客僅能查詢瀏覽，無編輯入口
 - ⚠️ **「AI 搜尋」明確不做**：原規劃「若尚無資料可觸發 AI 搜尋」依賴階段 7-8 才會建置的 AI 後端，本次遞延，UI 未放置任何佔位按鈕
-- 行程子分頁（3.1 的「景點間內嵌交通方式」，M2）與交通查詢共用同一份 `spot_transport_routes` 資料，但 M2 本身尚未開發，目前僅交通查詢子分頁可管理這份資料
+- 行程子分頁（3.1 的「景點間內嵌交通方式」，M2，✅ 已上線）與交通查詢共用同一份 `spot_transport_routes` 資料；兩處互相刷新，交通查詢子分頁與行程子分頁皆可新增/編輯/刪除路線
 
 `spot_transport_routes` 表（✅ 已建立，2026-07-13）：`id`、`origin_spot_id`/`destination_spot_id`（皆 FK → `spots.id`，`ON DELETE CASCADE`，`CHECK` 不可相同）、`mode`（text NOT NULL）、`duration_minutes`（可空）、`cost`（text 可空，幣別格式自由）、`note`（可空）、`timetable_url`（可空）、`subway_map_category`（可空，對應 `travel_subway_maps.category`，非外鍵，僅字串比對）、`sort_order`、`created_at`。RLS：SELECT 開放；INSERT/UPDATE/DELETE 重用 `can_edit_trip((SELECT trip_id FROM spots WHERE id = origin_spot_id))`；INSERT/UPDATE 的 `WITH CHECK` 另加完整性——起點與終點的 `spots.trip_id` 必須相等，`trip_id` 為 NULL 的遺留景點因 NULL 比較特性（`NULL = NULL` 恆為 false）自然無法建立路線，屬預期行為。
 
@@ -129,7 +129,7 @@
 
 ---
 
-## 四、「收藏」分頁 🔶 已遷移上線（依行程篩選 ✅ 已上線，2026-07-12）
+## 四、「收藏」分頁 ✅ 已遷移上線（依行程篩選 ✅ 已上線，2026-07-12）
 
 沿用並擴充原 `/japan` 收藏功能，已搬移至 `JapanCollection.astro` 元件：
 
