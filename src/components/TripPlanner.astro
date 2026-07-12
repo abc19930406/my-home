@@ -277,20 +277,20 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       <div id="trip-subtab-pane-transport" class="trip-subtab-pane" style="display: none;">
         <section class="transport-section">
           <div class="transport-query-bar">
-            <div class="form-group" style="flex: 1; margin-bottom: 0;">
-              <label for="transport-origin-select">起點</label>
-              <select id="transport-origin-select">
-                <option value="">請選擇景點</option>
-              </select>
+            <div class="form-group" style="flex: 1; margin-bottom: 0; position: relative;">
+              <label for="transport-origin-search">起點</label>
+              <input type="text" id="transport-origin-search" placeholder="搜尋景點名稱..." autocomplete="off" />
+              <input type="hidden" id="transport-origin-select" />
+              <div id="transport-origin-dropdown" class="search-dropdown" style="display: none;"></div>
             </div>
             <button type="button" id="btn-transport-swap" class="btn-transport-swap" title="反向查詢">
               <i class="ti ti-arrows-left-right"></i>
             </button>
-            <div class="form-group" style="flex: 1; margin-bottom: 0;">
-              <label for="transport-destination-select">終點</label>
-              <select id="transport-destination-select">
-                <option value="">請選擇景點</option>
-              </select>
+            <div class="form-group" style="flex: 1; margin-bottom: 0; position: relative;">
+              <label for="transport-destination-search">終點</label>
+              <input type="text" id="transport-destination-search" placeholder="搜尋景點名稱..." autocomplete="off" />
+              <input type="hidden" id="transport-destination-select" />
+              <div id="transport-destination-dropdown" class="search-dropdown" style="display: none;"></div>
             </div>
           </div>
 
@@ -2551,22 +2551,57 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     function populateTransportSpotOptions() {
       const originSelect = document.getElementById('transport-origin-select');
       const destSelect = document.getElementById('transport-destination-select');
+      const originSearch = document.getElementById('transport-origin-search');
+      const destSearch = document.getElementById('transport-destination-search');
       if (!originSelect || !destSelect) return;
 
       const prevOrigin = originSelect.value;
       const prevDest = destSelect.value;
-
       const tripSpots = spotsCache.filter(s => String(s.trip_id) === String(currentTripId));
-      const optionsHtml = '<option value="">請選擇景點</option>' +
-        tripSpots.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
-      originSelect.innerHTML = optionsHtml;
-      destSelect.innerHTML = optionsHtml;
 
-      // 嘗試保留原本選擇（若該景點仍屬於目前行程）
-      if (tripSpots.some(s => String(s.id) === String(prevOrigin))) originSelect.value = prevOrigin;
-      if (tripSpots.some(s => String(s.id) === String(prevDest))) destSelect.value = prevDest;
+      // 嘗試保留原本選擇（若該景點仍屬於目前行程），否則清空
+      const originSpot = tripSpots.find(s => String(s.id) === String(prevOrigin));
+      const destSpot = tripSpots.find(s => String(s.id) === String(prevDest));
+      originSelect.value = originSpot ? originSpot.id : '';
+      destSelect.value = destSpot ? destSpot.id : '';
+      if (originSearch) originSearch.value = originSpot ? originSpot.name : '';
+      if (destSearch) destSearch.value = destSpot ? destSpot.name : '';
 
       queryTransportRoutes();
+    }
+
+    // 依關鍵字取得目前行程中符合的景點（供起訖點搜尋下拉使用）
+    function getTransportSpotMatches(keyword) {
+      const tripSpots = spotsCache.filter(s => String(s.trip_id) === String(currentTripId));
+      const kw = (keyword || '').trim().toLowerCase();
+      const matches = kw ? tripSpots.filter(s => (s.name || '').toLowerCase().includes(kw)) : tripSpots;
+      return matches.slice(0, 20);
+    }
+
+    function renderTransportSpotDropdown(dropdownEl, matches, onPick) {
+      if (!dropdownEl) return;
+      if (matches.length === 0) {
+        dropdownEl.innerHTML = '<div class="search-result-item" style="cursor: default; color: var(--travel-text-muted);">找不到符合的景點</div>';
+      } else {
+        dropdownEl.innerHTML = matches.map(s => `
+          <div class="search-result-item" data-id="${s.id}">
+            <div class="search-result-name">${s.name}</div>
+          </div>
+        `).join('');
+        dropdownEl.querySelectorAll('.search-result-item[data-id]').forEach(item => {
+          item.addEventListener('click', () => onPick(item.dataset.id));
+        });
+      }
+      dropdownEl.style.display = 'block';
+    }
+
+    // 依實際選取狀態校正搜尋框顯示文字（未確實選取景點時，還原為上次有效選擇或清空）
+    function syncTransportSearchDisplay(role) {
+      const hidden = document.getElementById(role === 'origin' ? 'transport-origin-select' : 'transport-destination-select');
+      const searchInput = document.getElementById(role === 'origin' ? 'transport-origin-search' : 'transport-destination-search');
+      if (!hidden || !searchInput) return;
+      const spot = spotsCache.find(s => String(s.id) === String(hidden.value));
+      searchInput.value = spot ? spot.name : '';
     }
 
     function updateAddTransportButtonVisibility() {
@@ -3073,6 +3108,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       const destSelect = document.getElementById('transport-destination-select');
       if (originSelect) originSelect.value = originId;
       if (destSelect) destSelect.value = destId;
+      syncTransportSearchDisplay('origin');
+      syncTransportSearchDisplay('destination');
       openTransportRouteModal(route);
     }
 
@@ -4846,6 +4883,10 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       // ==========================================
       const transportOriginSelect = document.getElementById('transport-origin-select');
       const transportDestSelect = document.getElementById('transport-destination-select');
+      const transportOriginSearch = document.getElementById('transport-origin-search');
+      const transportDestSearch = document.getElementById('transport-destination-search');
+      const transportOriginDropdown = document.getElementById('transport-origin-dropdown');
+      const transportDestDropdown = document.getElementById('transport-destination-dropdown');
       const btnTransportSwap = document.getElementById('btn-transport-swap');
       const btnAddTransportRoute = document.getElementById('btn-add-transport-route');
       const transportResultsList = document.getElementById('transport-results-list');
@@ -4855,14 +4896,54 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       const btnTransportRouteCancel = document.getElementById('btn-transport-route-cancel');
       const transportRouteForm = document.getElementById('transport-route-form');
 
-      transportOriginSelect?.addEventListener('change', queryTransportRoutes);
-      transportDestSelect?.addEventListener('change', queryTransportRoutes);
+      // 起訖點搜尋：輸入時篩選目前行程的景點，點擊建議項目才算真正選定
+      function pickTransportSpot(role, spotId) {
+        const hidden = role === 'origin' ? transportOriginSelect : transportDestSelect;
+        const dropdown = role === 'origin' ? transportOriginDropdown : transportDestDropdown;
+        const spot = spotsCache.find(s => String(s.id) === String(spotId));
+        if (!hidden || !spot) return;
+        hidden.value = spot.id;
+        syncTransportSearchDisplay(role);
+        if (dropdown) dropdown.style.display = 'none';
+        queryTransportRoutes();
+      }
+
+      transportOriginSearch?.addEventListener('input', (e) => {
+        renderTransportSpotDropdown(transportOriginDropdown, getTransportSpotMatches(e.target.value), (id) => pickTransportSpot('origin', id));
+      });
+      transportOriginSearch?.addEventListener('focus', (e) => {
+        renderTransportSpotDropdown(transportOriginDropdown, getTransportSpotMatches(e.target.value), (id) => pickTransportSpot('origin', id));
+      });
+      transportOriginSearch?.addEventListener('blur', () => {
+        setTimeout(() => syncTransportSearchDisplay('origin'), 150);
+      });
+
+      transportDestSearch?.addEventListener('input', (e) => {
+        renderTransportSpotDropdown(transportDestDropdown, getTransportSpotMatches(e.target.value), (id) => pickTransportSpot('destination', id));
+      });
+      transportDestSearch?.addEventListener('focus', (e) => {
+        renderTransportSpotDropdown(transportDestDropdown, getTransportSpotMatches(e.target.value), (id) => pickTransportSpot('destination', id));
+      });
+      transportDestSearch?.addEventListener('blur', () => {
+        setTimeout(() => syncTransportSearchDisplay('destination'), 150);
+      });
+
+      document.addEventListener('click', (e) => {
+        if (transportOriginDropdown && !e.target.closest('#transport-origin-search') && !e.target.closest('#transport-origin-dropdown')) {
+          transportOriginDropdown.style.display = 'none';
+        }
+        if (transportDestDropdown && !e.target.closest('#transport-destination-search') && !e.target.closest('#transport-destination-dropdown')) {
+          transportDestDropdown.style.display = 'none';
+        }
+      });
 
       btnTransportSwap?.addEventListener('click', () => {
         if (!transportOriginSelect || !transportDestSelect) return;
         const tmp = transportOriginSelect.value;
         transportOriginSelect.value = transportDestSelect.value;
         transportDestSelect.value = tmp;
+        syncTransportSearchDisplay('origin');
+        syncTransportSearchDisplay('destination');
         queryTransportRoutes();
       });
 
