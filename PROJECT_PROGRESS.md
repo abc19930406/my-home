@@ -419,13 +419,28 @@
 - **驗證結果（2026-07-13，使用者實測）**：子分頁來回切換，地圖視野、選中行程、篩選狀態皆保持不變 ✅；管理員新增（含圖片）/編輯/刪除優惠券即時反映 ✅；訪客與朋友帳號看得到卡片與連結、無編輯入口，Console 強行寫入 0 筆生效 ✅；Mobile 版面子分頁與卡片排版正常，Modal 開關後可正常捲動 ✅；首頁「旅行地圖」子選單新連結驗證正常 ✅；`/japan`、`/travel` 凍結頁面完全未修改，diff 為零
 - **明確排除**：地鐵圖（`travel_subway_maps` 分類化、`trip_subway_categories`）未做；交通查詢子分頁未做（階段 6）；RLS 未異動
 
+### ✅ V2 階段 5 任務二：地鐵圖改為跨行程共用的全域資源庫（2026-07-13，已結案，階段 5 全部結案）
+
+- **背景**：任務一完成子分頁骨架與優惠券牆後，本任務把地鐵圖從原本規劃的單一行程綁定，改為依 `category`（如「東京」「大阪」）分組的全域資源庫，每個行程透過關聯表選用要顯示的分類，避免同一張圖被不同行程重複上傳，規劃詳見 PROJECT_ARCHITECTURE_V2.md 3.3 節
+- **執行前盤點**：`travel_subway_maps` 欄位（`id` uuid、`trip_id` uuid 可空、`title` NOT NULL、`image_url`、`external_url`、`sort_order` 預設 0、`created_at`）與 RLS（`travel_subway_maps_select_all` SELECT 全開、`travel_subway_maps_admin_all` ALL 鎖管理員 email）皆與 SECURITY_AUDIT.md 稽核記錄一致；資料筆數為 0（符合預期，此表 UI 從未開發過），直接照設計動工，未觸發「筆數 > 0 先停下回報」的排除條件
+- **資料庫**：
+  - `travel_subway_maps` 新增 `category`（text，NOT NULL）欄位；原 `trip_id` 欄位**停用不刪**——新程式碼不再讀寫，保留至階段 9 評估是否清理，這是刻意決定不是遺漏；寫入 RLS 維持管理員限定，本次未異動
+  - 新表 `trip_subway_categories`（`id` uuid PK、`trip_id` FK→trips `ON DELETE CASCADE`、`category` text NOT NULL、`UNIQUE(trip_id, category)`）；RLS 建表當下即設計：SELECT 開放，INSERT/DELETE 重用 V2 階段 4 任務二的 `can_edit_trip()` 函式（管理員或該行程 `can_edit_itinerary` 協作者），UPDATE 不開放（要改就刪了重加）
+- **前端（`TripPlanner.astro`）**：「資源」子分頁優惠券下方新增地鐵圖區塊，預設依目前行程關聯的分類分組顯示圖片，點圖沿用既有 `#lightbox`（與景點照片共用同一份燈箱元件，未另建新元件）放大檢視；管理員專屬「上傳地鐵圖」Modal（圖片 + 名稱 + 分類 + 選填原始連結，上傳至 `travel_subway_maps` bucket，沿用既有 spot/優惠券圖片上傳模式）；監聽 `trip-changed` 事件，切換行程時重新查詢該行程關聯的分類，全域地鐵圖清單本身只在頁面初次載入時抓取一次，不隨行程切換重抓；「AI 幫我找圖」明確遞延至階段 7（依賴階段 7 才會建置的 AI 後端），本次僅實作手動上傳
+- **驗證中發現並修復的問題（本次任務範圍內，已修正非僅記錄）**：
+  1. **分類欄位雙控制項設計造成誤解**：第一版「上傳地鐵圖」的分類欄位做成「下拉選單（選既有分類）/文字框（輸入新分類，依下拉選單值動態顯示或隱藏）」，使用者驗收時反映即使從下拉選單選了既有分類，仍誤以為「新分類名稱」是必填，體驗混淆（用瀏覽器直接測試過切換邏輯本身沒有錯，純粹是雙欄位設計不夠直覺）。改為單一輸入框 + `<datalist>` 自動建議既有分類，選現有或打新分類都在同一欄位完成（commit `f82b4ee`）
+  2. **「瀏覽全部分類」開放對象與原規劃不同**：原規劃「此功能對管理員與該行程 `can_edit_itinerary` 協作者顯示，與 RLS 一致」。使用者驗收時提出調整：希望朋友/訪客/協作者都能瀏覽並勾選要看哪些分類的相關資訊。因為勾選動作原本會直接寫入 `trip_subway_categories`（全站共用、永久生效），若無條件開放給任何人（含未登入訪客）寫入，會讓匿名訪客永久竄改其他人看到的行程預設內容，於是先用 `AskUserQuestion` 向使用者確認開放範圍，使用者選擇「個人篩選（推薦）」——按鈕改為所有人可見，但勾選行為依身分分流：管理員/`can_edit_itinerary` 協作者的勾選依舊寫入資料庫（設定行程對所有人的預設）；其餘所有人（朋友、無編輯權協作者、匿名訪客）的勾選只更新前端本地變數 `personalSubwayCategorySelection`，不寫入資料庫、不影響其他人，切換行程或重新整理會重置回該行程的預設分類，Modal 內說明文字依身分顯示不同版本（commit `8cb9614`）
+- **驗證結果（2026-07-13，使用者實測，含二輪調整後複測）**：管理員上傳兩張不同分類的圖、行程各自關聯不同分類、切換行程只看到自己關聯的、「瀏覽全部分類」兩個行程都能選用同一分類 ✅；協作者（`can_edit_itinerary`）可為有權限的行程加/移分類、對無權限行程不行 ✅；朋友與訪客看得到目前行程的地鐵圖與放大、開放後可個人篩選且不寫入資料庫（瀏覽器實測確認勾選無任何寫入請求、無錯誤）✅；燈箱三種關閉方式後頁面捲動正常、Mobile 排版正常 ✅；`travel_subway_maps.trip_id` 欄位確認未被刪除 ✅；`/japan`、`/travel` 凍結頁面完全未修改，diff 為零
+- **明確排除**：「AI 幫我找圖」未做（依賴階段 7 AI 後端）；`trip_id` 欄位未刪除（留待階段 9）；交通查詢子分頁未做（階段 6）
+- **本任務的文件同步曾經遺漏**：commit `f358a68`、`f82b4ee`、`8cb9614` 上線後，三份文件（本檔、PROJECT_ARCHITECTURE_V2.md、SECURITY_AUDIT.md）一開始未同步更新，直到使用者主動指出才補做。已將「文件同步與程式碼屬同一任務範圍，文件未更新前不得回報任務完成」寫入 CLAUDE.md 部署規則區，作為後續任務的硬性檢查點
+
 ---
 
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
 
-1. **旅行資源子分頁**：~~優惠券（`travel_coupons`）~~ **✅ 2026-07-13 已上線**，詳見上方「V2 階段 5 任務一」；剩餘：地鐵圖分類化（`travel_subway_maps` 改全域庫 + `trip_subway_categories` 關聯表）
+1. ~~**旅行資源子分頁**：優惠券（`travel_coupons`）+ 地鐵圖分類化（`travel_subway_maps` 改全域庫 + `trip_subway_categories` 關聯表）~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 5 任務一」「V2 階段 5 任務二」
 2. **交通查詢子分頁**：`spot_transport_routes` 表 + 行程內嵌交通方式 UI + AI 輔助搜尋
 3. **協作者權限系統**：~~`trip_collaborators` 表~~ **✅ 2026-07-12 已建立（任務一）**，剩餘兩個子任務待開始——雙開關權限**實際執行**（can_edit_wishlist / can_edit_itinerary 目前只記錄未生效）+ Sandbox 模式
 4. **AI 助手分頁**：`/api/ai-assistant` Serverless API，含 tool use 寫入功能（add_spot / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）
@@ -498,8 +513,8 @@
 | trip_days | 每日行程（關聯 trips） | ✅ |
 | day_spots | 每天景點安排（關聯 trip_days + spots） | ✅ |
 | travel_coupons | 優惠券，全站共用 | ✅ 已建立，UI 已上線（2026-07-13） |
-| travel_subway_maps | 地鐵圖 | ✅ 已建立，📋 待調整為全域分類庫（移除 trip_id） |
-| trip_subway_categories | trip_id + category，行程關聯的地鐵圖分類 | 📋 規劃中 |
+| travel_subway_maps | 地鐵圖，全域分類庫（新增 category 欄位，trip_id 停用不刪） | ✅ 已建立，UI 已上線（2026-07-13） |
+| trip_subway_categories | trip_id + category，行程關聯的地鐵圖分類 | ✅ 已建立，UI 已上線（2026-07-13） |
 | spot_transport_routes | 景點間交通方式（origin/destination/mode/duration/cost/note/timetable_url/subway_map_category） | 📋 規劃中 |
 | trip_collaborators | trip_id + user_email + can_edit_wishlist + can_edit_itinerary | ✅ 已建立（2026-07-12），權限已全數落實（2026-07-13） |
 
@@ -512,7 +527,7 @@
 | japan_images | ✅ PUBLIC |
 | travel_images | ✅ PUBLIC |
 | travel_coupons | ✅ PUBLIC，使用中（優惠券圖片，2026-07-13） |
-| travel_subway_maps | ✅ PUBLIC |
+| travel_subway_maps | ✅ PUBLIC，使用中（地鐵圖圖片，2026-07-13） |
 
 ---
 
@@ -536,7 +551,7 @@
 2. 補做「衝突熱點稽核」修復（commit `2317d2d`）的手動驗證：ESC 鍵、Modal 背景點擊是否都能正確關閉並清除 `modal-open`（原定驗證因發現上述問題而中斷）
 3. ~~階段 3：japan_items 加入 trip_id 篩選邏輯（收藏依行程篩選）~~ **✅ 2026-07-12 已完成**，詳見上方「V2 階段 3：收藏依行程篩選」
 4. ~~**階段 4**：協作者權限系統~~ **✅ 2026-07-13 全部完成**（任務一：trip_collaborators 資料表+管理員管理 UI 2026-07-12；任務二：can_edit_itinerary 落實 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 2026-07-13），詳見上方「V2 階段 4」對應章節
-5. **階段 5**：旅行資源頁面。任務一（子分頁骨架 + 優惠券牆）**✅ 2026-07-13 已完成**，詳見上方「V2 階段 5 任務一」；剩餘：地鐵圖分類化（`travel_subway_maps` 改全域庫 + `trip_subway_categories` 關聯表）
+5. ~~**階段 5**：旅行資源頁面（任務一：子分頁骨架 + 優惠券牆；任務二：地鐵圖全域分類庫）~~ **✅ 2026-07-13 全部完成**，詳見上方「V2 階段 5」對應章節
 6. **階段 6**：交通查詢系統（spot_transport_routes + AI 整理）
 7. **階段 7-8**：AI 助手分頁與 Serverless API 串接
 8. /trip 穩定後評估是否移除舊的 /travel 與 /japan 頁面

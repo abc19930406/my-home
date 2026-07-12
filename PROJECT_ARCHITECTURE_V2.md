@@ -97,7 +97,7 @@
   - 勾選後一次儲存至 `spot_transport_routes`
 - 行程子分頁新增的路線與交通查詢共用同一份資料，雙向同步
 
-### 3.3 資源 🔶 優惠券已上線，地鐵圖規劃中
+### 3.3 資源 ✅ 已全部上線（2026-07-13，V2 階段 5 任務一、二）
 
 跨行程共用的**全域資源庫**，不綁定特定 `trip_id`：
 
@@ -106,13 +106,17 @@
 - 管理員可新增/編輯/刪除（Modal 表單，圖片上傳至 `travel_coupons` bucket，沿用既有 spot 圖片上傳模式）；`admin-only` class 控制編輯入口顯示，寫入操作皆檢查受影響筆數
 - RLS 稽核時已確認正確（SELECT 全開、寫入鎖管理員 email），本次未異動
 
-**地鐵圖**（`travel_subway_maps`，✅ 表已建立，需調整；UI 尚未開發）
-- 全域資源庫，依 `category`（地區/系統名稱，如「東京 Metro」「沖繩巴士」）分組顯示
-- 移除原本的 `trip_id` 綁定（改為下方關聯表）
-- 每個行程可透過 `trip_subway_categories` 關聯表選擇「這次行程要顯示哪些分類」
-  - 預設顯示該行程已關聯的分類
-  - 可展開「瀏覽全部分類」，選用其他行程曾上傳的資源（避免重複上傳）
-- 新增地鐵圖時提供「AI 幫我找圖」（依分類名稱搜尋官方路線圖並上傳）或「手動上傳」
+**地鐵圖**（`travel_subway_maps` + `trip_subway_categories`，✅ 2026-07-13 已上線，V2 階段 5 任務二）
+- `travel_subway_maps` 新增 `category`（text，NOT NULL）欄位，全域資源庫依此分組顯示；原 `trip_id` 欄位**停用不刪**（新程式碼不再讀寫，保留至階段 9 評估是否清理，此為刻意決定，不是遺漏）
+- 新表 `trip_subway_categories`（`trip_id` + `category`，`UNIQUE(trip_id, category)`）記錄行程關聯了哪些分類；RLS：SELECT 開放、INSERT/DELETE 重用 `can_edit_trip()`（V2 階段 4 任務二建立），UPDATE 不開放（要改就刪了重加）
+- 「資源」子分頁優惠券下方新增地鐵圖區塊：預設依目前行程關聯的分類分組顯示圖片，點圖沿用既有 `#lightbox`（與景點照片共用）放大檢視
+- 「瀏覽全部分類」：⚠️ **與原規劃不同**——原規劃僅管理員與 `can_edit_itinerary` 協作者可見。開發驗收時使用者提出調整：**開放給所有人使用**（含朋友帳號、未登入訪客），比照 V2 階段 3「收藏依行程篩選」的精神。但寫入行為依身分分流：
+  - 管理員或該行程 `can_edit_itinerary` 協作者：勾選會寫入 `trip_subway_categories`，變更該行程對**所有人**的預設顯示分類
+  - 其餘所有人（一般協作者、白名單朋友、未登入訪客）：勾選只更新前端本地變數（`personalSubwayCategorySelection`），**不寫入資料庫、不影響其他人**，切換行程或重新整理會重置回該行程的預設分類；Modal 內說明文字依身分顯示不同版本
+- 管理員專屬「上傳地鐵圖」：圖片 + 名稱 + 分類（單一輸入框 + `<datalist>` 自動建議既有分類，可直接選用或輸入新分類）+ 選填原始連結；上傳至 `travel_subway_maps` bucket，沿用既有 spot/優惠券圖片上傳模式
+  - ⚠️ **與原規劃不同**：分類欄位第一版做成「下拉選單（選既有）/文字框（輸入新分類）」雙欄位切換設計，使用者驗收時反映選了既有分類仍誤以為要填新分類名稱，體驗混淆；改為單一輸入框 + `<datalist>`，選現有或打新分類都在同一欄位完成
+  - 監聽 `trip-changed` 事件，切換行程時重新查詢該行程關聯的分類（`loadTripSubwayCategories()`），全域地鐵圖清單本身只在頁面初次載入時抓取一次，不隨行程切換重抓
+- 「AI 幫我找圖」**明確遞延至階段 7**（依賴階段 7 才會建置的 AI 後端），本次僅實作手動上傳
 
 ---
 
@@ -231,8 +235,8 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | 資料表 | 狀態 | 說明 |
 |--------|------|------|
 | travel_coupons | ✅ 已建立，UI 已上線（2026-07-13） | 優惠券，全站共用 |
-| travel_subway_maps | ✅ 已建立，需調整 | 地鐵圖，移除 trip_id，改用 category 分組 |
-| trip_subway_categories | 📋 | trip_id + category，行程關聯的地鐵圖分類 |
+| travel_subway_maps | ✅ 已調整，UI 已上線（2026-07-13） | 地鐵圖，新增 `category` 欄位分組；`trip_id` 停用不刪（留待階段 9） |
+| trip_subway_categories | ✅ 已建立，UI 已上線（2026-07-13） | trip_id + category，行程關聯的地鐵圖分類，RLS 重用 `can_edit_trip()` |
 | spot_transport_routes | 📋 | origin_spot_id + destination_spot_id + 多筆交通方式（mode/duration/cost/note/timetable_url/subway_map_category） |
 | trip_collaborators | ✅ 已建立（2026-07-12），權限已全數落實（2026-07-13） | trip_id + user_email + can_edit_wishlist + can_edit_itinerary，RLS 已設定，管理員 UI 已上線，兩個權限開關均已在對應表的 RLS 中生效 |
 
@@ -243,14 +247,14 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | spot_types | 新增 `is_chain_store` boolean | ✅ 已完成 |
 | spot_subtypes | 新增 `is_chain_store` boolean | ✅ 已完成 |
 | japan_items | 新增 `trip_id`（可空，FK → trips，`ON DELETE SET NULL`） | ✅ 已完成（2026-07-12） |
-| travel_subway_maps | 移除/不再使用 `trip_id`（改用 trip_subway_categories） | 📋 |
+| travel_subway_maps | 新增 `category`（text, NOT NULL）；`trip_id` 停用不刪（改用 trip_subway_categories 記錄關聯，`trip_id` 本身保留至階段 9 評估） | ✅ 已完成（2026-07-13） |
 
 ### 7.3 Storage Buckets
 
 | Bucket | 狀態 | 說明 |
 |--------|------|------|
 | travel_coupons | ✅ 已建立，使用中（2026-07-13） | PUBLIC |
-| travel_subway_maps | ✅ 已建立 | PUBLIC |
+| travel_subway_maps | ✅ 已建立，使用中（2026-07-13） | PUBLIC |
 
 ---
 
@@ -263,13 +267,13 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | 2.5 | Supabase 單一入口架構重構 + Race Condition 修正（原規劃外，因應實作過程發現的問題而新增） | 🔶 大致完成，有未解決問題待釐清 |
 | 3 | 收藏分頁整合：japan_items.trip_id、收藏分頁顯示邏輯、一般收藏 vs 行程收藏 | ✅ 已完成（2026-07-12） |
 | 4 | 協作者權限系統：trip_collaborators、雙開關權限、Sandbox 模式（共三個子任務） | ✅ 已完成（任務一：地基與管理員 UI 2026-07-12；任務二：can_edit_itinerary 落實 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 2026-07-13） |
-| 5 | 資源子分頁：優惠券、地鐵圖分類化、trip_subway_categories | 🔶 進行中（任務一：子分頁骨架 + 優惠券牆 ✅ 2026-07-13；地鐵圖分類化 📋 待開始） |
+| 5 | 資源子分頁：優惠券、地鐵圖分類化、trip_subway_categories | ✅ 已完成（任務一：子分頁骨架 + 優惠券牆 2026-07-13；任務二：地鐵圖全域分類庫 2026-07-13） |
 | 6 | 交通查詢子分頁：spot_transport_routes、行程內嵌交通方式 UI | 📋 待開始 |
 | 7 | AI 助手（只讀）：/api/ai-assistant，讀取行程/收藏資料並回答問題 | 📋 待開始 |
 | 8 | AI 工具逐個開放：add_spot、toggle_wishlist 等寫入工具 | 📋 待開始 |
 | 9 | 程式碼清理與重構：統一 Modal/CSS 命名規則、評估舊頁面下線 | 📋 待開始（待功能全部穩定後執行） |
 
-> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 三個任務、階段 5 任務一的實作記錄與盤點回報，見 PROJECT_PROGRESS.md「V2 階段 4」「V2 階段 5」對應章節。
+> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 三個任務、階段 5 兩個任務的實作記錄與盤點回報，見 PROJECT_PROGRESS.md「V2 階段 4」「V2 階段 5」對應章節。
 
 ---
 
@@ -278,7 +282,7 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 ### 資料庫
 - `spot_types` / `spot_subtypes` 新增 `is_chain_store`，連鎖店地圖標記縮小變淡
 - 「顯示連鎖店」篩選開關，地圖視野不受切換影響
-- `travel_coupons`、`travel_subway_maps` 資料表與 Storage bucket 建立（地鐵圖部分待第五階段調整為全域分類庫）
+- `travel_coupons`、`travel_subway_maps` 資料表與 Storage bucket 建立；`travel_subway_maps` 已於 V2 階段 5 任務二調整為全域分類庫（新增 `category` 欄位，`trip_id` 停用不刪），新表 `trip_subway_categories` 記錄行程關聯
 - `japan_items` 新增 `trip_id`（2026-07-12，V2 階段 3，見第四節）
 
 ### /trip 頁面實作

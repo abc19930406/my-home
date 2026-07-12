@@ -30,6 +30,7 @@
 - 驗證測試必須等 Vercel Deployments 出現新的 Ready 部署(commit SHA 相符)後才進行
 - Vercel build Success ≠ 前端無誤,最終以使用者本人瀏覽器實測為準
 - 不可只回報「測試通過」;診斷階段先不改程式碼、只回報資訊
+- **任務的文件同步與程式碼屬同一任務範圍,文件未更新前不得回報任務完成**:曾發生 V2 階段 5 任務二(地鐵圖分類庫,commit `f358a68`、`f82b4ee`、`8cb9614`)程式碼已上線、使用者也驗收通過,但 PROJECT_ARCHITECTURE_V2.md、PROJECT_PROGRESS.md、SECURITY_AUDIT.md 三份文件完全沒有同步更新,直到使用者主動指出才補做。驗收通過後的「更新文件 → commit → push」是任務的必要步驟,不是可延後的收尾雜務;任務進行到最後仍需明確檢查這一步是否已完成
 
 ## 硬性技術規則(完整細節與原因見 PROJECT_ARCHITECTURE.md)
 
