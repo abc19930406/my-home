@@ -482,12 +482,40 @@
 
 ---
 
+### ✅ V2 階段 6 任務二：行程模式內嵌交通方式（M2）（2026-07-13，已結案，階段 6 全部結案）
+
+- **背景**：任務一完成獨立的「交通查詢」子分頁後，本任務把交通方式資訊內嵌進行程模式本身——同一天相鄰兩個景點之間直接顯示交通區塊，與交通查詢子分頁共用同一份 `spot_transport_routes` 資料、雙向同步，規劃詳見 PROJECT_ARCHITECTURE_V2.md 3.1 節。不需要新 SQL
+- **最大風險點與排除過程**：任務指示點名「交通區塊不得干擾既有的景點拖曳排序功能」為最高風險。實作前先讀 `moveSpotOrder()` 原始碼確認其為**純陣列運算**（`daySpotsCache.findIndex` 找位置、交換兩筆 `order_index`、`Array.sort` 重排、呼叫 `renderDaySpots()` 重繪），完全不依賴 DOM 節點順序、`nextElementSibling` 或 `nth-child` CSS，也確認 travel.css 沒有任何 `.itinerary-spot-item:nth-child` 選擇器。因此交通區塊以獨立 sibling 元素插入景點卡片之間，於陣列運算層面與 DOM 樣式層面皆不構成干擾，此風險點在實作前即以程式碼閱讀方式排除，非事後補救
+- **前端（`TripPlanner.astro`）**：
+  - `renderDaySpots()` 改為 `async`：先依「目前顯示順序」計算所有相鄰景點配對（陣列運算，不查資料庫），再用一次 `origin_spot_id IN (...)` 批次查詢取代逐對查詢，取回後在前端依確切 origin+destination 過濾成每對的路線清單（`inlineTransportRoutesByPair`），配對每次重繪都重新計算，資料庫本身不因排序異動任何路線資料
+  - 交通區塊樣式：虛線左框、淡色背景，故意不用實心卡片樣式，避免搶走景點卡片的視覺主體
+  - 已有路線：收合狀態顯示第一筆 mode + 時間，點擊展開全部選項，含備註、時刻表連結、地鐵圖分類（點擊呼叫既有的 `jumpToSubwayCategory()` 跳轉並定位，沿用 V2 階段 5 任務二的機制不重寫）
+  - 無路線：只有 `canEditItinerary(currentTripId)` 為真時才顯示「+ 交通方式」，無編輯權者完全不顯示任何東西（不留視覺痕跡）
+  - 新增/編輯：`openInlineTransportRouteModal(originId, destId, route)` 開啟前把交通查詢子分頁的起訖點欄位（`transport-origin-select`/`transport-destination-select`）設為預填值，再呼叫既有的 `openTransportRouteModal()`——因為該 Modal 的 submit handler 讀取的正是這兩個欄位，此設計讓內嵌入口與交通查詢子分頁**共用同一套送出邏輯**，不需要另外重寫；submit 成功後同時呼叫 `queryTransportRoutes()`（更新交通查詢子分頁）與 `renderDaySpots()`（更新內嵌區塊），達成雙向同步；標準查詢子分頁的刪除也同樣補上 `renderDaySpots()` 呼叫
+- **驗證結果（2026-07-13，使用者實測）**：見下方自我驗收對照表，a-e 全數通過，其中 b（排序不受干擾）為最高優先項目
+- **明確排除**：AI 搜尋交通方式未做（遞延階段 7-8）；交通查詢子分頁本身邏輯未變動（除共用 Modal 的預填參數）；未新增 SQL
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| a. 有路線的相鄰景點間顯示收合區塊，展開細節正確 | `renderInlineTransportBlock()` + `renderInlineTransportRouteRow()` | ✅ |
+| a. 內嵌新增的路線在交通查詢子分頁立即可見（反之亦然） | submit/delete 成功後同時呼叫 `queryTransportRoutes()` + `renderDaySpots()` | ✅ |
+| b.（最高優先）拖曳排序功能與改版前完全一致 | `moveSpotOrder()` 純陣列運算，不依賴 DOM 順序，實作前已讀碼確認 | ✅ |
+| b. 排序後交通區塊依新相鄰關係重新配對 | 配對於每次 `renderDaySpots()` 依目前陣列順序即時重算 | ✅ |
+| c. 刪除中間景點後，前後兩景點間顯示新配對區塊 | 同上，配對即時重算不依賴既有路線資料 | ✅ |
+| d. 協作者於授權行程可用「+ 交通方式」 | `canEditItinerary(currentTripId)` 判斷 | ✅ |
+| d. 朋友/訪客看不到新增入口，已有路線可展開瀏覽 | 同上；展開/瀏覽不受 `canEditItinerary` 限制 | ✅ |
+| e. Mobile 排版與展開收合順暢 | 沿用既有響應式版面與全站 Modal/展開慣例 | ✅ |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
 
 1. ~~**旅行資源子分頁**：優惠券（`travel_coupons`）+ 地鐵圖分類化（`travel_subway_maps` 改全域庫 + `trip_subway_categories` 關聯表）~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 5 任務一」「V2 階段 5 任務二」
-2. ~~**交通查詢子分頁**：`spot_transport_routes` 表~~ **✅ 2026-07-13 已上線**，詳見上方「V2 階段 6 任務一」；剩餘：行程內嵌交通方式 UI（M2）+ AI 輔助搜尋（遞延階段 7-8）
+2. ~~**交通查詢子分頁**：`spot_transport_routes` 表 + 行程內嵌交通方式 UI（M2）~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 6 任務一」「V2 階段 6 任務二」；剩餘：AI 輔助搜尋（遞延階段 7-8）
 3. **協作者權限系統**：~~`trip_collaborators` 表~~ **✅ 2026-07-12 已建立（任務一）**，剩餘兩個子任務待開始——雙開關權限**實際執行**（can_edit_wishlist / can_edit_itinerary 目前只記錄未生效）+ Sandbox 模式
 4. **AI 助手分頁**：`/api/ai-assistant` Serverless API，含 tool use 寫入功能（add_spot / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）
 5. **舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan
@@ -598,7 +626,7 @@
 3. ~~階段 3：japan_items 加入 trip_id 篩選邏輯（收藏依行程篩選）~~ **✅ 2026-07-12 已完成**，詳見上方「V2 階段 3：收藏依行程篩選」
 4. ~~**階段 4**：協作者權限系統~~ **✅ 2026-07-13 全部完成**（任務一：trip_collaborators 資料表+管理員管理 UI 2026-07-12；任務二：can_edit_itinerary 落實 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 2026-07-13），詳見上方「V2 階段 4」對應章節
 5. ~~**階段 5**：旅行資源頁面（任務一：子分頁骨架 + 優惠券牆；任務二：地鐵圖全域分類庫）~~ **✅ 2026-07-13 全部完成**，詳見上方「V2 階段 5」對應章節
-6. **階段 6**：交通查詢系統。任務一（spot_transport_routes + 交通查詢子分頁）**✅ 2026-07-13 已完成**，詳見上方「V2 階段 6 任務一」；剩餘：行程內嵌交通方式 UI（M2）+ AI 輔助整理（遞延階段 7-8）
+6. ~~**階段 6**：交通查詢系統（任務一：spot_transport_routes + 交通查詢子分頁；任務二：行程內嵌交通方式 M2）~~ **✅ 2026-07-13 全部完成**，詳見上方「V2 階段 6」對應章節；AI 輔助整理遞延階段 7-8
 7. **階段 7-8**：AI 助手分頁與 Serverless API 串接
 8. /trip 穩定後評估是否移除舊的 /travel 與 /japan 頁面
 9. **階段 9**（全部功能穩定後）：程式碼清理與重構，含 CSS/ID 前綴隔離補齊（衝突熱點稽核中發現、決議延後的項目）；一併處理 V2 階段 4 任務一盤點發現的 `spots.category`/`spots.icon` 遺留欄位（`NOT NULL` 但前端從未寫入，一律吃預設值，已被 `spot_type_id`/`spot_subtype_id` 取代）
