@@ -1381,3 +1381,206 @@ body.modal-open {
   pointer-events: none;
   background-color: #f5f5f5;
 }
+
+/* ==========================================
+   「行程」主分頁子分頁：行程 / 資源（V2 階段 5 任務一）
+   ========================================== */
+.trip-subtab-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 2px solid var(--travel-border);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.trip-subtab-nav {
+  display: flex;
+  gap: 4px;
+}
+
+.trip-subtab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 18px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  color: var(--travel-text-muted);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+
+.trip-subtab-btn:hover {
+  color: var(--travel-primary);
+}
+
+.trip-subtab-btn.active {
+  color: var(--travel-primary);
+  border-bottom-color: var(--travel-primary);
+}
+
+.trip-subtab-pane {
+  display: none;
+}
+
+.trip-subtab-pane.active {
+  display: block;
+}
+
+/* 優惠券牆 */
+.coupons-section {
+  padding: 4px 0 40px;
+}
+
+.coupons-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.coupons-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--travel-text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-add-coupon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: none;
+  background-color: var(--travel-primary);
+  color: var(--travel-bg);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn-add-coupon:hover {
+  background-color: var(--travel-primary-hover);
+}
+
+.coupons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.coupon-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--travel-card-bg);
+  border: 1px solid var(--travel-border);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--travel-shadow-sm);
+}
+
+.coupon-card-image {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  display: block;
+  background-color: var(--travel-visited-bg);
+}
+
+.coupon-card-image-placeholder {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--travel-visited-bg);
+  color: var(--travel-text-muted);
+  font-size: 1.8rem;
+}
+
+.coupon-card-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.coupon-card-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--travel-text);
+}
+
+.coupon-card-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--travel-text-muted);
+  line-height: 1.5;
+  flex: 1;
+  white-space: pre-wrap;
+}
+
+.coupon-card-link {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 12px;
+  background-color: var(--travel-primary);
+  color: var(--travel-bg);
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.coupon-card-link:hover {
+  background-color: var(--travel-primary-hover);
+}
+
+.coupon-card-admin-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  z-index: 1;
+}
+
+.coupon-card-admin-actions button {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background-color: rgba(255, 255, 255, 0.92);
+  color: var(--travel-text);
+  box-shadow: var(--travel-shadow-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+}
+
+.coupon-card-admin-actions button:hover {
+  background-color: #FFFFFF;
+  color: var(--travel-primary);
+}

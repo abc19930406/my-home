@@ -92,46 +92,22 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 
   <div class="travel-body">
     <div class="travel-container">
-      
 
-
-      <!-- 2. 行程切換列 (橫向滾動) -->
-      <section class="trips-scroll-container">
-        <div class="trips-list" id="trips-tab-list">
-          <!-- JS 動態或 HTML 靜態生成 -->
-          {trips.map((trip, idx) => (
-            <button 
-              class={`trip-tab ${idx === 0 ? 'active' : ''}`} 
-              data-trip-id={trip.id}
-              data-trip-name={trip.name}
-              data-trip-desc={trip.description || ''}
-            >
-              <span>{trip.emoji}</span> {trip.name}
-            </button>
-          ))}
-        </div>
-        
-        <!-- ＋ 新增行程 (預設隱藏，登入後由 JS 顯示) -->
-        <button id="btn-add-trip" class="btn-dashed-add-trip admin-only" style="display: none;">
-          <i class="ti ti-plus"></i> 新增行程
-        </button>
-      </section>
-
-      <!-- 2.5 行程模式切換列 -->
-      <section class="mode-toggle-container" style="justify-content: space-between; align-items: center;">
-        <div style="display: flex; gap: 12px;">
-          <button id="btn-mode-map" class="mode-btn active">
-            <i class="ti ti-map-2"></i> 地圖模式
+      <!-- 0. 「行程」主分頁內的子分頁：行程 / 資源 -->
+      <section class="trip-subtab-bar">
+        <nav class="trip-subtab-nav">
+          <button id="btn-subtab-itinerary" class="trip-subtab-btn active" data-subtab="itinerary">
+            <i class="ti ti-map-2"></i> 行程
           </button>
-          <button id="btn-mode-itinerary" class="mode-btn">
-            <i class="ti ti-calendar"></i> 行程模式
+          <button id="btn-subtab-resources" class="trip-subtab-btn" data-subtab="resources">
+            <i class="ti ti-ticket"></i> 資源
           </button>
-        </div>
+        </nav>
         <div class="top-right-auth-container" style="position: static; margin-left: auto;">
           <div id="top-auth-guest" style="display: none;">
-            <button 
-              type="button" 
-              id="btn-top-login" 
+            <button
+              type="button"
+              id="btn-top-login"
               class="btn-top-auth"
               onclick="
                 const m = document.getElementById('auth-modal');
@@ -146,12 +122,49 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         </div>
       </section>
 
+      <!-- 子分頁面板：行程（既有全部內容，預設顯示） -->
+      <div id="trip-subtab-pane-itinerary" class="trip-subtab-pane active">
+
+      <!-- 2. 行程切換列 (橫向滾動) -->
+      <section class="trips-scroll-container">
+        <div class="trips-list" id="trips-tab-list">
+          <!-- JS 動態或 HTML 靜態生成 -->
+          {trips.map((trip, idx) => (
+            <button
+              class={`trip-tab ${idx === 0 ? 'active' : ''}`}
+              data-trip-id={trip.id}
+              data-trip-name={trip.name}
+              data-trip-desc={trip.description || ''}
+            >
+              <span>{trip.emoji}</span> {trip.name}
+            </button>
+          ))}
+        </div>
+
+        <!-- ＋ 新增行程 (預設隱藏，登入後由 JS 顯示) -->
+        <button id="btn-add-trip" class="btn-dashed-add-trip admin-only" style="display: none;">
+          <i class="ti ti-plus"></i> 新增行程
+        </button>
+      </section>
+
+      <!-- 2.5 行程模式切換列 -->
+      <section class="mode-toggle-container">
+        <div style="display: flex; gap: 12px;">
+          <button id="btn-mode-map" class="mode-btn active">
+            <i class="ti ti-map-2"></i> 地圖模式
+          </button>
+          <button id="btn-mode-itinerary" class="mode-btn">
+            <i class="ti ti-calendar"></i> 行程模式
+          </button>
+        </div>
+      </section>
+
       <!-- 2.5 搜尋列 -->
       <section class="travel-search-bar" style="position: relative;">
-        <input 
-          type="text" 
-          id="travel-search-input" 
-          placeholder="搜尋想去的景點、餐廳、住宿... (例如：清水寺)" 
+        <input
+          type="text"
+          id="travel-search-input"
+          placeholder="搜尋想去的景點、餐廳、住宿... (例如：清水寺)"
           autocomplete="off"
         />
         <button id="travel-search-btn" class="search-btn">搜尋</button>
@@ -164,16 +177,16 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           <!-- 左側：搜尋框與類型標籤 -->
           <div class="filter-left" style="gap: 12px;">
             <div style="position: relative; display: inline-flex; align-items: center; min-width: 180px;">
-              <input 
-                type="text" 
-                id="saved-spots-search" 
-                placeholder="🔍 搜尋已儲存景點..." 
+              <input
+                type="text"
+                id="saved-spots-search"
+                placeholder="🔍 搜尋已儲存景點..."
                 style="width: 100%; padding: 6px 28px 6px 14px; border-radius: 16px; border: 1px solid var(--travel-border); font-size: 0.85rem; font-family: inherit; color: var(--travel-text); background: #FFFFFF; outline: none; box-shadow: var(--travel-shadow-sm); transition: border-color 0.2s;"
                 autocomplete="off"
               />
               <button id="btn-clear-saved-search" style="position: absolute; right: 8px; background: none; border: none; font-size: 14px; color: #999; cursor: pointer; display: none; padding: 0;">✕</button>
             </div>
-            
+
             <div id="category-filter-group" style="display: flex; gap: 8px; flex-wrap: wrap;">
               <button class="filter-btn active" data-category="all">全部</button>
               <!-- JS 動態產生其他按鈕 -->
@@ -187,12 +200,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
             </label>
             <button class="filter-btn status-btn active" id="filter-status-want" data-status="want">想去</button>
             <button class="filter-btn status-btn" id="filter-status-visited" data-status="visited">已去</button>
-            
+
             <!-- ＋ 新增景點 (預設隱藏，登入後由 JS 顯示) -->
             <button id="btn-open-spot-modal" class="btn-add-spot itinerary-edit-only" style="display: none;">
               <i class="ti ti-plus"></i> 新增景點
             </button>
-            
+
             <!-- ⚙️ 管理類型 (預設隱藏，登入後由 JS 顯示) -->
             <button id="btn-manage-types" class="btn-manage-types admin-only" style="display: none; background: transparent; border: 1px dashed var(--travel-border); color: var(--travel-text-muted); padding: 4px 12px; border-radius: 16px; font-size: 0.85rem; cursor: pointer;">
               <i class="ti ti-settings"></i> 管理類型
@@ -255,7 +268,22 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         </div>
       </section>
 
+      </div>
 
+      <!-- 子分頁面板：資源（優惠券牆，預設隱藏） -->
+      <div id="trip-subtab-pane-resources" class="trip-subtab-pane" style="display: none;">
+        <section class="coupons-section">
+          <div class="coupons-header">
+            <h3><i class="ti ti-ticket"></i> 優惠券</h3>
+            <button id="btn-add-coupon" class="btn-add-coupon admin-only" style="display: none;">
+              <i class="ti ti-plus"></i> 新增優惠券
+            </button>
+          </div>
+          <div id="coupons-grid" class="coupons-grid">
+            <div class="empty-state">載入優惠券中...</div>
+          </div>
+        </section>
+      </div>
 
     </div>
   </div>
@@ -519,6 +547,59 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     </div>
   </div>
 
+  <!-- ==========================================
+       彈出視窗 5：新增/編輯優惠券 Modal（V2 階段 5 任務一）
+       ========================================== -->
+  <div id="travel-coupon-modal" class="travel-modal-overlay modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 id="coupon-modal-title">＋ 新增優惠券</h3>
+        <button type="button" class="btn-modal-close" id="btn-coupon-modal-close">&times;</button>
+      </div>
+      <form id="coupon-form">
+        <div class="modal-body">
+          <input type="hidden" id="form-coupon-id" />
+
+          <!-- 標題 -->
+          <div class="form-group">
+            <label for="coupon-title">標題 <span style="color: var(--color-danger)">*</span></label>
+            <input type="text" id="coupon-title" required placeholder="例如：唐吉訶德 5% off 優惠券" autocomplete="off" />
+          </div>
+
+          <!-- 說明 -->
+          <div class="form-group">
+            <label for="coupon-description">說明</label>
+            <textarea id="coupon-description" rows="3" placeholder="使用方式、適用門市、期限等..."></textarea>
+          </div>
+
+          <!-- 連結 -->
+          <div class="form-group">
+            <label for="coupon-link">連結網址</label>
+            <input type="url" id="coupon-link" placeholder="https://..." autocomplete="off" />
+          </div>
+
+          <!-- 圖片上傳 -->
+          <div class="form-group">
+            <label>圖片</label>
+            <div class="file-upload-wrap">
+              <i class="ti ti-cloud-upload upload-icon"></i>
+              <p class="upload-text">點擊或拖曳圖片至此上傳</p>
+              <input type="file" id="coupon-image-file" accept="image/*" />
+            </div>
+            <input type="hidden" id="coupon-image-url" />
+            <div class="upload-preview-container" id="coupon-image-preview">
+              <!-- JS 動態插入圖片預覽與刪除按鈕 -->
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="btn-coupon-cancel">取消</button>
+          <button type="submit" class="btn-primary">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast 訊息通知 -->
   <div id="toast" class="toast">已成功儲存</div>
 
@@ -576,6 +657,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     let spotsCache = [];
     let spotTypesCache = [];
     let spotSubtypesCache = [];
+    let couponsCache = []; // 「資源」子分頁：優惠券，全站共用不綁 trip_id
     let currentTripId = '';
     let selectedCategoryFilter = 'all';
     let selectedSubcategoryFilter = 'all';
@@ -1690,9 +1772,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
       spotsCache = spots || [];
       spotTypesCache = spotTypes || [];
       spotSubtypesCache = spotSubtypes || [];
-      
+
       renderCategoryFilters();
       renderSpotCategoryOptions();
+
+      // 「資源」子分頁：優惠券（全站共用，不綁 trip_id，與行程/景點資料無關，獨立載入）
+      loadCoupons();
 
       // 2. 決定預選的行程
       if (tripsCache.length > 0) {
@@ -1734,9 +1819,14 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
     function initItineraryEvents() {
       const btnMap = document.getElementById('btn-mode-map');
       const btnItinerary = document.getElementById('btn-mode-itinerary');
-      
+
       btnMap?.addEventListener('click', () => toggleMode('map'));
       btnItinerary?.addEventListener('click', () => toggleMode('itinerary'));
+
+      const btnSubtabItinerary = document.getElementById('btn-subtab-itinerary');
+      const btnSubtabResources = document.getElementById('btn-subtab-resources');
+      btnSubtabItinerary?.addEventListener('click', () => switchTripSubtab('itinerary'));
+      btnSubtabResources?.addEventListener('click', () => switchTripSubtab('resources'));
 
       const btnAddDay = document.getElementById('btn-add-day');
       btnAddDay?.addEventListener('click', addTripDay);
@@ -1830,6 +1920,152 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         });
       });
     }
+
+    // --- 「行程」主分頁內子分頁切換：行程 / 資源（純前端顯示切換，不重讀資料、不重置地圖狀態） ---
+    function switchTripSubtab(name) {
+      const paneItinerary = document.getElementById('trip-subtab-pane-itinerary');
+      const paneResources = document.getElementById('trip-subtab-pane-resources');
+      const btnItinerary = document.getElementById('btn-subtab-itinerary');
+      const btnResources = document.getElementById('btn-subtab-resources');
+      if (!paneItinerary || !paneResources) return;
+
+      if (name === 'resources') {
+        paneItinerary.style.display = 'none';
+        paneResources.style.display = 'block';
+        btnItinerary?.classList.remove('active');
+        btnResources?.classList.add('active');
+      } else {
+        paneResources.style.display = 'none';
+        paneItinerary.style.display = 'block';
+        btnResources?.classList.remove('active');
+        btnItinerary?.classList.add('active');
+
+        // 地圖容器剛從 display:none 恢復可見，觸發 resize 修正 tile 渲染，
+        // 但保持原本視野中心/縮放不變（不呼叫 fitBounds，避免重置使用者原本的地圖視野）
+        if (googleMap && window.google?.maps) {
+          const center = googleMap.getCenter();
+          window.google.maps.event.trigger(googleMap, 'resize');
+          if (center) googleMap.setCenter(center);
+        }
+      }
+    }
+
+    // --- 「資源」子分頁：優惠券資料/渲染/Modal 開關（全站共用，不綁 trip_id） ---
+    async function loadCoupons() {
+      const { data, error } = await supabase
+        .from('travel_coupons')
+        .select('*')
+        .order('sort_order', { ascending: true })
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('載入優惠券失敗:', error);
+        couponsCache = [];
+      } else {
+        couponsCache = data || [];
+      }
+      renderCoupons();
+    }
+
+    function renderCoupons() {
+      const couponsGrid = document.getElementById('coupons-grid');
+      if (!couponsGrid) return;
+      if (couponsCache.length === 0) {
+        couponsGrid.innerHTML = '<div class="empty-state">目前尚無優惠券</div>';
+        return;
+      }
+
+      couponsGrid.innerHTML = couponsCache.map(c => {
+        const imageHtml = c.image_url
+          ? `<img src="${c.image_url}" alt="${c.title}" class="coupon-card-image" loading="lazy" />`
+          : `<div class="coupon-card-image-placeholder"><i class="ti ti-ticket"></i></div>`;
+        const descHtml = c.description ? `<p class="coupon-card-desc">${c.description}</p>` : '';
+        const linkHtml = c.link_url
+          ? `<a href="${c.link_url}" target="_blank" rel="noopener noreferrer" class="coupon-card-link">前往查看 <i class="ti ti-external-link"></i></a>`
+          : '';
+        return `
+          <div class="coupon-card" data-id="${c.id}">
+            <div class="coupon-card-admin-actions admin-only" style="display: none;">
+              <button type="button" class="btn-coupon-edit" data-id="${c.id}" title="編輯"><i class="ti ti-pencil"></i></button>
+              <button type="button" class="btn-coupon-delete" data-id="${c.id}" title="刪除"><i class="ti ti-trash"></i></button>
+            </div>
+            ${imageHtml}
+            <div class="coupon-card-body">
+              <h4 class="coupon-card-title">${c.title}</h4>
+              ${descHtml}
+              ${linkHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // 依目前登入身分套用 admin-only 顯示狀態（新卡片預設 display:none，需比照全站慣例補跑一次）
+      if (isAdminUser) {
+        couponsGrid.querySelectorAll('.admin-only').forEach(el => {
+          el.style.display = 'flex';
+        });
+      }
+    }
+
+    function resetCouponImagePreview() {
+      const urlInput = document.getElementById('coupon-image-url');
+      const preview = document.getElementById('coupon-image-preview');
+      if (urlInput) urlInput.value = '';
+      if (preview) preview.innerHTML = '';
+    }
+
+    function renderCouponImagePreview() {
+      const preview = document.getElementById('coupon-image-preview');
+      const urlInput = document.getElementById('coupon-image-url');
+      if (!preview) return;
+      const url = urlInput?.value;
+      if (!url) {
+        preview.innerHTML = '';
+        return;
+      }
+      preview.innerHTML = `
+        <div class="upload-preview-item">
+          <img src="${url}" alt="preview" />
+          <button type="button" class="btn-remove-preview" id="btn-coupon-remove-image">&times;</button>
+        </div>
+      `;
+      document.getElementById('btn-coupon-remove-image')?.addEventListener('click', () => {
+        resetCouponImagePreview();
+      });
+    }
+
+    function openCouponModal(coupon = null) {
+      const couponModal = document.getElementById('travel-coupon-modal');
+      const couponForm = document.getElementById('coupon-form');
+      const couponModalTitle = document.getElementById('coupon-modal-title');
+      const urlInput = document.getElementById('coupon-image-url');
+      if (!couponModal) return;
+
+      couponForm?.reset();
+      resetCouponImagePreview();
+      document.getElementById('form-coupon-id').value = '';
+
+      if (coupon) {
+        if (couponModalTitle) couponModalTitle.textContent = '✏️ 編輯優惠券';
+        document.getElementById('form-coupon-id').value = coupon.id;
+        document.getElementById('coupon-title').value = coupon.title || '';
+        document.getElementById('coupon-description').value = coupon.description || '';
+        document.getElementById('coupon-link').value = coupon.link_url || '';
+        if (urlInput) urlInput.value = coupon.image_url || '';
+        renderCouponImagePreview();
+      } else {
+        if (couponModalTitle) couponModalTitle.textContent = '＋ 新增優惠券';
+      }
+
+      couponModal.classList.add('show');
+      document.body.classList.add('modal-open');
+    }
+
+    const closeCouponModal = () => {
+      const couponModal = document.getElementById('travel-coupon-modal');
+      couponModal?.classList.remove('show');
+      document.body.classList.remove('modal-open');
+    };
 
     async function toggleMode(mode) {
       if (currentMode === mode) return;
@@ -3464,6 +3700,144 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
         showToast('已更新權限');
       });
 
+      // ==========================================
+      // 12. 「資源」子分頁：優惠券（V2 階段 5 任務一，全站共用，不綁 trip_id）
+      // 資料/渲染/Modal 開關函式定義在外層作用域（見 loadCoupons/renderCoupons/
+      // openCouponModal/closeCouponModal），initAuthAndData() 需要呼叫 loadCoupons()
+      // ==========================================
+      const couponModal = document.getElementById('travel-coupon-modal');
+      const btnAddCoupon = document.getElementById('btn-add-coupon');
+      const btnCouponClose = document.getElementById('btn-coupon-modal-close');
+      const btnCouponCancel = document.getElementById('btn-coupon-cancel');
+      const couponForm = document.getElementById('coupon-form');
+      const couponsGrid = document.getElementById('coupons-grid');
+      const couponImageFileInput = document.getElementById('coupon-image-file');
+      const couponImageUrlInput = document.getElementById('coupon-image-url');
+
+      couponImageFileInput?.addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!file.type.startsWith('image/')) return;
+
+        showToast('正在上傳圖片...');
+
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${crypto.randomUUID()}.${fileExt}`;
+
+        try {
+          const { error } = await supabase.storage
+            .from('travel_coupons')
+            .upload(fileName, file);
+          if (error) throw error;
+
+          const { data: { publicUrl } } = supabase.storage
+            .from('travel_coupons')
+            .getPublicUrl(fileName);
+
+          if (couponImageUrlInput) couponImageUrlInput.value = publicUrl;
+          renderCouponImagePreview();
+          showToast('圖片上傳成功！');
+        } catch (err) {
+          alert('圖片上傳失敗：' + err.message);
+        }
+      });
+
+      btnAddCoupon?.addEventListener('click', () => openCouponModal());
+      btnCouponClose?.addEventListener('click', closeCouponModal);
+      btnCouponCancel?.addEventListener('click', closeCouponModal);
+      couponModal?.addEventListener('click', (e) => {
+        if (e.target === couponModal) closeCouponModal();
+      });
+
+      couponForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const couponId = document.getElementById('form-coupon-id').value;
+        const title = document.getElementById('coupon-title').value.trim();
+        const description = document.getElementById('coupon-description').value.trim();
+        const link_url = document.getElementById('coupon-link').value.trim();
+        const image_url = couponImageUrlInput?.value || '';
+
+        if (!title) return;
+
+        const payload = {
+          title,
+          description: description || null,
+          link_url: link_url || null,
+          image_url: image_url || null
+        };
+
+        try {
+          if (couponId) {
+            const { data, error } = await supabase
+              .from('travel_coupons')
+              .update(payload)
+              .eq('id', couponId)
+              .select();
+            if (error) throw error;
+            if (!data || data.length === 0) {
+              alert('更新失敗：沒有權限或資料不存在');
+              return;
+            }
+            couponsCache = couponsCache.map(c => String(c.id) === String(couponId) ? data[0] : c);
+            showToast('優惠券已更新');
+          } else {
+            const { data, error } = await supabase
+              .from('travel_coupons')
+              .insert([payload])
+              .select();
+            if (error) throw error;
+            if (!data || data.length === 0) {
+              alert('新增失敗：沒有權限或資料未寫入');
+              return;
+            }
+            couponsCache.unshift(data[0]);
+            showToast('優惠券已新增');
+          }
+
+          closeCouponModal();
+          renderCoupons();
+          triggerBuildWebhook();
+        } catch (err) {
+          alert('儲存失敗：' + err.message);
+        }
+      });
+
+      couponsGrid?.addEventListener('click', async (e) => {
+        if (!isAdminUser) return;
+
+        const editBtn = e.target.closest('.btn-coupon-edit');
+        if (editBtn) {
+          const coupon = couponsCache.find(c => String(c.id) === String(editBtn.dataset.id));
+          if (coupon) openCouponModal(coupon);
+          return;
+        }
+
+        const deleteBtn = e.target.closest('.btn-coupon-delete');
+        if (deleteBtn) {
+          const id = deleteBtn.dataset.id;
+          if (!confirm('確定要刪除這張優惠券嗎？')) return;
+
+          const { data, error } = await supabase
+            .from('travel_coupons')
+            .delete()
+            .eq('id', id)
+            .select();
+
+          if (error) {
+            alert('刪除失敗：' + error.message);
+            return;
+          }
+          if (!data || data.length === 0) {
+            alert('刪除失敗：沒有權限或資料不存在');
+            return;
+          }
+          couponsCache = couponsCache.filter(c => String(c.id) !== String(id));
+          renderCoupons();
+          showToast('優惠券已刪除');
+          triggerBuildWebhook();
+        }
+      });
+
       // ESC 鍵關閉所有 Modal
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
@@ -3474,6 +3848,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           closeWishlistModal();
           closeSpotDetailModal();
           closeCollaboratorsModal();
+          closeCouponModal();
         }
       });
     };
