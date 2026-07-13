@@ -105,15 +105,15 @@
 
 ---
 
-### 🔶 /trip 整合頁面（階段 1、2、3、4、5、6 已完成，階段 2.5 有未解決問題待釐清，階段 7-9 未開始）
+### 🔶 /trip 整合頁面（階段 1、2、3、4、5、6、7 已完成，階段 2.5 有未解決問題待釐清，階段 8-9 未開始）
 
-將 `/travel` 與 `/japan` 整合為單一頁面 `/trip`，含 Desktop/Mobile 雙版面、AI 助手分頁（規劃中，階段 7-8）、協作者權限系統（✅ 已全數落實，V2 階段 4）。詳細架構規劃見 **PROJECT_ARCHITECTURE_V2.md**。
+將 `/travel` 與 `/japan` 整合為單一頁面 `/trip`，含 Desktop/Mobile 雙版面、AI 助手分頁（唯讀版 ✅ 已上線，V2 階段 7；寫入工具規劃中，階段 8）、協作者權限系統（✅ 已全數落實，V2 階段 4）。詳細架構規劃見 **PROJECT_ARCHITECTURE_V2.md**。
 
 #### 已完成項目
 
 - **頁面骨架**（trip.astro）：
   - Desktop / Mobile 雙版面（依裝置寬度切換完全不同版面模板）
-  - 三分頁切換：行程 / 收藏 / AI（AI 分頁尚為佔位）
+  - 三分頁切換：行程 / 收藏 / AI（AI 分頁唯讀版已上線，見「V2 階段 7」）
   - 管理員判斷（admin-home-link 僅管理員顯示）
   - 返回首頁按鈕：Desktop 左上角、Mobile 選單展開列表最上方
   - Mobile 選單展開機制：改用 `position: fixed`（原 `absolute` 會被截斷）
@@ -519,6 +519,38 @@
 
 ---
 
+### ✅ V2 階段 7：AI 助手唯讀版（2026-07-13，已結案）
+
+- **背景**：`/trip` AI 分頁原為佔位文字（詳見 PROJECT_ARCHITECTURE_V2.md 第五節），本階段實作唯讀版——僅管理員可用的對話助手，能讀取目前選中行程與收藏資料回答問題，不提供任何寫入工具
+- **後端（`src/pages/api/ai-assistant.ts`，`prerender = false`）**：
+  - 身分驗證完全比照既有 `/api/trigger-deploy` 模式：前端帶 Supabase access token（`Authorization: Bearer`），後端 `supabase.auth.getUser(token)` 驗證後比對後端環境變數 `ADMIN_EMAIL`（沿用既有過渡期 fallback `PUBLIC_ADMIN_EMAIL`），不符一律 401，不信任前端任何身分宣告
+  - 查詢 context 一律用「請求者的 token」建立的 client 讓 RLS 生效，**不使用 service role**
+  - 呼叫 Anthropic API 直接用原生 `fetch`（比照 `src/pages/api/explore.ts` 呼叫外部 API 的既有寫法），**未安裝 `@anthropic-ai/sdk`**，不觸碰「安裝依賴套件」安全紅線；model `claude-sonnet-4-6`，`max_tokens: 2048`，非串流，`AbortController` 30 秒逾時
+  - Context 組成：`trips`（名稱/emoji）、`trip_days`+`day_spots`+`spots`（依天數排序的景點名稱/備註/類型/子類型/是否連鎖店）、`spot_transport_routes`（該行程景點間路線）、`japan_items`（`trip_id` 等於該行程或為 NULL）+`wishlist_items`（供判斷願望清單數量問題）；只留必要欄位，不含 images 陣列與座標
+  - system prompt 明確要求：以繁中回答、只依提供資料回答、資料裡沒有的一律誠實說沒有、回答精簡
+- **前端（新元件 `src/components/AiAssistant.astro`）**：
+  - Token 取自 `window.__latestAuthState` 快照（單一入口規則，不自行呼叫 `getSession()`）；tripId 取自 `window.currentTripId` 並監聽 `trip-changed`，套用與 auth 快照相同的 Race Condition 雙保險（監聽器提前綁定 + 綁定後立即檢查快照補跑），避免 `TripPlanner.astro` 掛載時搶先廣播的第一次 `trip-changed` 被錯過
+  - 訊息氣泡列表（可捲動）+ 底部輸入框，元素 `ai-` 前綴隔離；送出後鎖定輸入框顯示等待動畫；401/500/504 分別顯示對應中文錯誤提示
+  - 對話歷史存於記憶體陣列，每次送出前只保留最近 20 則（超過丟最舊，控制成本），不做持久化，重新整理即重置
+  - `trip.astro` 的 `#tab-ai` 佔位內容改為 `<AiAssistant />`，比照 `#tab-trip`/`#tab-japan` 既有的 `style="padding:0"` 寫法
+- **已知限制（非本階段修補範圍）**：`.trip-main-content` 依賴 `body.trip-page` class 才會有 `height:100vh`+`overflow:hidden` 版面鎖定，但 `Layout.astro` 從未把此 class 加到 `<body>` 上，是全站既有、與本次改動無關的落差，導致 AI 對話框是「隨內容增高、捲動整個分頁」而非「固定視窗高度」，功能不受影響，詳見 PROJECT_ARCHITECTURE_V2.md 5.3 節
+- **提交節奏**：分兩輪 commit+push（後端 API 一輪、前端 UI 一輪），皆已推送並確認成功
+- **明確排除**：任何寫入工具（tools 參數不出現）、串流、桌面浮動視窗，皆遞延至階段 8 或後續優化
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| d. 未帶 Authorization header 呼叫 API | 回 401 | ✅（本機 curl 驗證） |
+| d. 帶假造/無效 token 呼叫 API | `getUser` 驗證失敗，回 401 | ✅（本機 curl 驗證） |
+| e. 前端原始碼與已提交檔案搜尋不到 `ANTHROPIC_API_KEY` 的值 | 金鑰只讀取自後端 `import.meta.env.ANTHROPIC_API_KEY`，`git grep` 確認只出現在 `src/pages/api/ai-assistant.ts` | ✅ |
+| c（程式碼面）401 判斷邏輯無遺漏 | email 嚴格比對 `adminEmail`，不符一律拒絕 | ✅（程式碼審查） |
+| a. 管理員提問與實際行程/收藏資料相符，資料庫沒有的如實說沒有 | 待管理員本人登入瀏覽器實測 | ⏳ 待使用者驗證 |
+| b. 切換行程後提問，context 跟著換 | 待管理員本人登入瀏覽器實測 | ⏳ 待使用者驗證 |
+| c（實測）朋友帳號看不到 AI 分頁入口 | Sandbox 既有機制，理論上已生效 | ⏳ 待使用者驗證 |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
@@ -526,7 +558,7 @@
 1. ~~**旅行資源子分頁**：優惠券（`travel_coupons`）+ 地鐵圖分類化（`travel_subway_maps` 改全域庫 + `trip_subway_categories` 關聯表）~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 5 任務一」「V2 階段 5 任務二」
 2. ~~**交通查詢子分頁**：`spot_transport_routes` 表 + 行程內嵌交通方式 UI（M2）~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 6 任務一」「V2 階段 6 任務二」；剩餘：AI 輔助搜尋（遞延階段 7-8）
 ~~3. **協作者權限系統**：`trip_collaborators` 表 + 雙開關權限（can_edit_wishlist / can_edit_itinerary）+ Sandbox 模式~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 4」相關章節
-3. **AI 助手分頁**：`/api/ai-assistant` Serverless API，含 tool use 寫入功能（add_spot / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）
+3. ~~**AI 助手分頁（唯讀版）**：`/api/ai-assistant` Serverless API，讀取行程/收藏資料回答問題~~ **✅ 2026-07-13 已上線**，詳見上方「V2 階段 7」；剩餘：tool use 寫入功能（add_spot / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item），遞延階段 8
 4. **舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan
 5. **程式碼清理階段**（獨立規劃，待全部功能穩定後執行）：統一 Modal 開關/CSS class 命名規則、移除殘留冗餘邏輯
 
@@ -625,6 +657,7 @@
 | SERPAPI_KEY | 探索日本搜尋 | 後端專用 |
 | PUBLIC_GOOGLE_MAPS_KEY | 旅行地圖 Google Maps | 前端可見 |
 | PUBLIC_ADMIN_EMAIL | 管理者 email 判斷 | 前端可見 |
+| ANTHROPIC_API_KEY | /api/ai-assistant 呼叫 Anthropic API（2026-07-13 新增） | 後端專用 |
 
 ---
 
@@ -636,9 +669,10 @@
 4. ~~**階段 4**：協作者權限系統~~ **✅ 2026-07-13 全部完成**（任務一：trip_collaborators 資料表+管理員管理 UI 2026-07-12；任務二：can_edit_itinerary 落實 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 2026-07-13），詳見上方「V2 階段 4」對應章節
 5. ~~**階段 5**：旅行資源頁面（任務一：子分頁骨架 + 優惠券牆；任務二：地鐵圖全域分類庫）~~ **✅ 2026-07-13 全部完成**，詳見上方「V2 階段 5」對應章節
 6. ~~**階段 6**：交通查詢系統（任務一：spot_transport_routes + 交通查詢子分頁；任務二：行程內嵌交通方式 M2）~~ **✅ 2026-07-13 全部完成**，詳見上方「V2 階段 6」對應章節；AI 輔助整理遞延階段 7-8
-7. **階段 7-8**：AI 助手分頁與 Serverless API 串接
-8. /trip 穩定後評估是否移除舊的 /travel 與 /japan 頁面
-9. **階段 9**（全部功能穩定後）：程式碼清理與重構，含 CSS/ID 前綴隔離補齊（衝突熱點稽核中發現、決議延後的項目）；一併處理 V2 階段 4 任務一盤點發現的 `spots.category`/`spots.icon` 遺留欄位（`NOT NULL` 但前端從未寫入，一律吃預設值，已被 `spot_type_id`/`spot_subtype_id` 取代）
+7. ~~**階段 7**：AI 助手分頁（唯讀版）與 /api/ai-assistant 串接~~ **✅ 2026-07-13 已完成，程式碼面驗收(d/e/c)通過**，詳見上方「V2 階段 7」；a/b/c 的瀏覽器實測項目待管理員本人操作
+8. **階段 8**：AI 工具逐個開放（add_spot / toggle_wishlist 等寫入工具）
+9. /trip 穩定後評估是否移除舊的 /travel 與 /japan 頁面
+10. **階段 9**（全部功能穩定後）：程式碼清理與重構，含 CSS/ID 前綴隔離補齊（衝突熱點稽核中發現、決議延後的項目）；一併處理 V2 階段 4 任務一盤點發現的 `spots.category`/`spots.icon` 遺留欄位（`NOT NULL` 但前端從未寫入，一律吃預設值，已被 `spot_type_id`/`spot_subtype_id` 取代）；一併評估是否補上 `body.trip-page` class（V2 階段 7 發現的既有落差，見 PROJECT_ARCHITECTURE_V2.md 5.3 節）
 
 ---
 

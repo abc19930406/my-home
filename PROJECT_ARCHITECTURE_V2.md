@@ -36,7 +36,7 @@
 
 - **行程** ✅：地圖、每日行程、交通查詢、資源（優惠券/地鐵圖）皆已上線
 - **收藏** ✅：日本收藏品瀏覽、願望清單、數量調整、依行程篩選皆已上線
-- **AI** 📋：固定對話視窗（僅管理員可見），目前為佔位內容
+- **AI** ✅：固定對話視窗（僅管理員可見），唯讀版已上線，可回答目前行程/收藏相關問題，尚無寫入工具
 
 ### 2.2 Desktop 版面 ✅
 
@@ -150,19 +150,23 @@
 
 ---
 
-## 五、「AI」分頁 📋 規劃中（尚未開發）
+## 五、「AI」分頁 ✅ 唯讀版已上線（2026-07-13，V2 階段 7）
 
-固定對話視窗，**僅管理員可見與使用**。
+固定對話視窗，**僅管理員可見與使用**，本階段純唯讀，AI 不能修改任何資料（無 tools 參數）。
 
-### 5.1 架構
+### 5.1 架構 ✅ 已上線
 
-- 新增 Serverless API：`src/pages/api/ai-assistant.ts`（`prerender = false`）
-- 後端驗證管理員 session 後，呼叫 Anthropic API
-- Context 傳入：目前選中行程的 `trips`/`trip_days`/`day_spots`/`spots`/`spot_transport_routes`，以及相關 `japan_items`
+- `src/pages/api/ai-assistant.ts`（`prerender = false`）：
+  - 身分驗證完全比照 `/api/trigger-deploy`——前端帶 Supabase access token（`Authorization: Bearer`），後端 `supabase.auth.getUser(token)` 驗證後比對後端環境變數 `ADMIN_EMAIL`（過渡期 fallback `PUBLIC_ADMIN_EMAIL`），不符一律 401
+  - 查詢 context 一律用「請求者的 token」建立的 client（RLS 生效），**不使用 service role**
+  - 呼叫 Anthropic API 直接用原生 `fetch`（未安裝 `@anthropic-ai/sdk`，比照 `src/pages/api/explore.ts` 呼叫外部 API 的既有寫法），model `claude-sonnet-4-6`，`max_tokens: 2048`，非串流，30 秒逾時
+  - Context 組成（只留必要欄位，不含 images 陣列與座標）：目前選中行程的 `trips`（名稱/emoji）、`trip_days`+`day_spots`+`spots`（依天數排序的景點名稱/備註/類型/子類型/是否連鎖店）、`spot_transport_routes`（該行程景點之間的路線）、`japan_items`（`trip_id` 等於該行程或為 NULL）+`wishlist_items`（供 AI 判斷願望清單數量相關問題）
+  - API 金鑰存於後端環境變數 `ANTHROPIC_API_KEY`，不出現在任何前端程式碼
+- 前端元件 `src/components/AiAssistant.astro`：token 取自 `window.__latestAuthState` 快照、tripId 取自 `window.currentTripId` +監聽 `trip-changed`（套用與 auth 快照相同的 Race Condition 雙保險），對話歷史存於記憶體陣列，前端固定只送出最近 20 則（超過丟最舊，控制成本），不做持久化
 
-### 5.2 Tool Use（逐步開放）
+### 5.2 Tool Use（逐步開放）📋 遞延至階段 8
 
-初期工具清單：
+初期工具清單(本階段**明確不實作**，規劃保留供階段 8 參考)：
 
 | 工具 | 對應操作 |
 |------|---------|
@@ -177,10 +181,11 @@
 
 每次 AI 執行寫入操作後，於對話框顯示明確的完成訊息（例如：「已將『熊本城』加入 Day 3 行程」）。
 
-### 5.3 介面
+### 5.3 介面 ✅ 已上線(唯讀對話,無工具)
 
-- Desktop：對話框可常駐於主畫面一角（展開/收合）
-- Mobile：切到「AI」分頁時為全螢幕對話介面，底部固定輸入框
+- 訊息氣泡列表(可捲動)+ 底部輸入框，元素 `ai-` 前綴隔離；送出後鎖定輸入框顯示等待動畫，錯誤(401/500/504)顯示明確中文提示
+- ⚠️ **與原規劃不同**:桌面「常駐一角展開/收合」的浮動視窗設計本階段遞延，目前與行程/收藏分頁一樣是切換到 AI 分頁才看到對話框(非常駐)；Mobile 沿用既有分頁切換，無額外全螢幕特化
+- ⚠️ **已知限制**:`.trip-main-content` 依賴 `body.trip-page` 這個 class 才會有 `height:100vh`+`overflow:hidden` 的版面鎖定(定義於 `trip.css`)，但 `Layout.astro` 從未實際把這個 class 加到 `<body>` 上，是全站既有、與本次改動無關的既有落差。實際效果是 `.trip-main-content` 高度隨內容自動增高(行程/收藏分頁本來就是這樣運作)，AI 對話框因此也是「隨對話內容增高，捲動整個分頁」而非「固定視窗高度、只在訊息區內捲動」。功能不受影響，但未完全達到當初「底部固定輸入框」的視覺效果，留待階段 9 一併評估是否修正 `body` class 缺漏(影響全站 /trip，非僅 AI 分頁，不在本階段範圍內處理)
 
 ---
 
@@ -226,7 +231,7 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 - ✅ **Sandbox 模式已實作（2026-07-13，V2 階段 4 任務三）**：
   - `trip.astro`：AI 分頁的 Desktop 側欄圖示與 Mobile 選單項新增 `trip-admin-only` class（預設 `display: none`），與既有 `admin-home-link`（返回首頁連結）一起，僅管理員登入後才顯示
   - 已盤點 `trip.astro`、`TripPlanner.astro`、`JapanCollection.astro` 全部連結：僅 2 個「返回首頁」連結（Desktop + Mobile），已由既有 `admin-home-link` 機制正確控制；其餘 `<a>` 標籤皆為外部連結（Google Maps、使用者筆記網址、探索日本來源網站），與站內導覽無關；共用 `Layout.astro` 未注入任何站內導覽列，無其他洩漏管道
-  - AI 分頁內容本身仍為佔位文字（階段 7 才開發功能本體），`switchTab()` 函式技術上可被 Console 呼叫繞過按鈕隱藏直接切換到該分頁，但內容本身無實質資訊，非本階段修補範圍
+  - 2026-07-13 更新（V2 階段 7）：AI 分頁內容已改為真正的對話 UI，`switchTab()` 函式技術上仍可被 Console 呼叫繞過按鈕隱藏直接切換到該分頁並看到輸入框，但送出訊息會呼叫 `/api/ai-assistant`，後端仍會依 token 驗證身分，非管理員一律 401，不會取得任何資料——前端分頁隱藏只是 UX 層，真正的權限把關在後端，不因此產生資安缺口
 - 協作者登入後僅看到「行程」「收藏」分頁（依權限決定可否編輯），無「AI」分頁，Sandbox 模式已生效
 
 ### 6.3 一般收藏（trip_id IS NULL）
@@ -279,11 +284,11 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | 4 | 協作者權限系統：trip_collaborators、雙開關權限、Sandbox 模式（共三個子任務） | ✅ 已完成（任務一：地基與管理員 UI 2026-07-12；任務二：can_edit_itinerary 落實 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 2026-07-13） |
 | 5 | 資源子分頁：優惠券、地鐵圖分類化、trip_subway_categories | ✅ 已完成（任務一：子分頁骨架 + 優惠券牆 2026-07-13；任務二：地鐵圖全域分類庫 2026-07-13） |
 | 6 | 交通查詢子分頁：spot_transport_routes、行程內嵌交通方式 UI | ✅ 已完成（任務一：spot_transport_routes 建表 + 交通查詢子分頁 2026-07-13；任務二：行程內嵌交通方式 UI，M2 2026-07-13） |
-| 7 | AI 助手（只讀）：/api/ai-assistant，讀取行程/收藏資料並回答問題 | 📋 待開始 |
+| 7 | AI 助手（只讀）：/api/ai-assistant，讀取行程/收藏資料並回答問題 | ✅ 已完成（2026-07-13） |
 | 8 | AI 工具逐個開放：add_spot、toggle_wishlist 等寫入工具 | 📋 待開始 |
 | 9 | 程式碼清理與重構：統一 Modal/CSS 命名規則、評估舊頁面下線 | 📋 待開始（待功能全部穩定後執行） |
 
-> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 三個任務、階段 5 兩個任務、階段 6 兩個任務的實作記錄與驗收對照表，見 PROJECT_PROGRESS.md「V2 階段 4」「V2 階段 5」「V2 階段 6」對應章節。
+> 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 三個任務、階段 5 兩個任務、階段 6 兩個任務、階段 7 的實作記錄與驗收對照表，見 PROJECT_PROGRESS.md「V2 階段 4」「V2 階段 5」「V2 階段 6」「V2 階段 7」對應章節。
 
 ---
 

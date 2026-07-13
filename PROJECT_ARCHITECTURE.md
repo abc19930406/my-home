@@ -374,6 +374,13 @@ if (!session) {
 - **規則**：hook 網址**不得**再以任何形式進入前端（`PUBLIC_` 前綴環境變數、define:vars、window 全域皆禁止）
 - /trip 子元件（TripPlanner / JapanCollection）依單一入口規則不呼叫 `getSession`，token 改從 `window.__latestAuthState` 快照唯讀取得
 
+### Anthropic API（/trip AI 助手，2026-07-13 新增，V2 階段 7）
+- 後端 Serverless Function：src/pages/api/ai-assistant.ts，直接用原生 `fetch` 呼叫 `https://api.anthropic.com/v1/messages`（未安裝 `@anthropic-ai/sdk`）
+- Key 存於 Vercel 後端環境變數 `ANTHROPIC_API_KEY`（不加 `PUBLIC_` 前綴，絕不進前端）
+- Model：`claude-sonnet-4-6`，`max_tokens: 2048`，非串流，30 秒逾時
+- 身分驗證與 `/api/trigger-deploy` 同一套模式（見上方「Vercel Deploy Hook」章節）；查詢 Supabase context 一律用請求者 token 建立的 client 讓 RLS 生效，不使用 service role
+- 完整架構細節見 PROJECT_ARCHITECTURE_V2.md 第五節
+
 ### Google Custom Search JSON API
 - ⚠️ 已於 2025 年對新用戶永久關閉，請勿嘗試申請，改用 SerpApi
 
@@ -390,6 +397,7 @@ if (!session) {
 | SERPAPI_KEY | 探索日本搜尋 | 後端 |
 | PUBLIC_GOOGLE_MAPS_KEY | Google Maps API Key | 前端 |
 | PUBLIC_ADMIN_EMAIL | 管理者 email 判斷 | 前端 |
+| ANTHROPIC_API_KEY | /api/ai-assistant 呼叫 Anthropic API（2026-07-13 新增，V2 階段 7） | 後端 |
 
 ---
 
