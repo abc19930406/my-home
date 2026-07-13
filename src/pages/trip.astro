@@ -3,6 +3,7 @@ export const prerender = true;
 import Layout from "../layouts/Layout.astro";
 import TripPlanner from "../components/TripPlanner.astro";
 import JapanCollection from "../components/JapanCollection.astro";
+import AiAssistant from "../components/AiAssistant.astro";
 import "../styles/trip.css";
 
 // Admin email from env for client-side comparison
@@ -87,8 +88,8 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? "";
         <JapanCollection />
       </div>
 
-      <div id="tab-ai" class="tab-pane">
-        <h1>AI 助手（開發中）</h1>
+      <div id="tab-ai" class="tab-pane" style="padding: 0;">
+        <AiAssistant />
       </div>
     </main>
   </div>

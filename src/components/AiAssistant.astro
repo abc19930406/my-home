@@ -1,0 +1,138 @@
+---
+import '../styles/ai-assistant.css';
+---
+
+<div class="ai-container">
+  <div class="ai-header">
+    <h1>AI 助手</h1>
+    <p>僅根據目前選中行程與收藏資料回答,唯讀,不會修改任何資料</p>
+  </div>
+  <div class="ai-messages" id="ai-messages">
+    <div class="ai-empty" id="ai-empty-hint">問我關於這個行程或收藏的問題,例如「Day 2 有哪些景點」</div>
+  </div>
+  <div class="ai-error" id="ai-error" style="display: none;"></div>
+  <form class="ai-input-bar" id="ai-input-form">
+    <input
+      type="text"
+      id="ai-input"
+      placeholder="輸入問題…"
+      autocomplete="off"
+    />
+    <button type="submit" class="ai-send-btn" id="ai-send-btn">送出</button>
+  </form>
+</div>
+
+<script>
+  (function () {
+    const MAX_HISTORY = 20;
+    /** @type {{role: 'user' | 'assistant', content: string}[]} */
+    let messages = [];
+    let currentTripId = '';
+    let sending = false;
+
+    // 依單一入口規則:trip-changed 由 TripPlanner.astro 廣播,監聽器提前綁定
+    // 並於綁定後立即檢查 window.currentTripId 快照,避免錯過掛載前已發生的第一次廣播
+    window.addEventListener('trip-changed', (e) => {
+      currentTripId = e.detail?.tripId || '';
+    });
+    if (window.currentTripId) {
+      currentTripId = window.currentTripId;
+    }
+
+    const messagesEl = document.getElementById('ai-messages');
+    const emptyHintEl = document.getElementById('ai-empty-hint');
+    const formEl = document.getElementById('ai-input-form');
+    const inputEl = document.getElementById('ai-input');
+    const sendBtn = document.getElementById('ai-send-btn');
+    const errorEl = document.getElementById('ai-error');
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function renderMessages() {
+      if (!messagesEl) return;
+      if (messages.length === 0 && !sending) {
+        if (emptyHintEl) messagesEl.innerHTML = emptyHintEl.outerHTML;
+        return;
+      }
+      let html = messages
+        .map(
+          (m) =>
+            `<div class="ai-bubble ai-bubble-${m.role}">${escapeHtml(m.content)}</div>`,
+        )
+        .join('');
+      if (sending) {
+        html += `<div class="ai-bubble ai-bubble-assistant ai-typing"><span></span><span></span><span></span></div>`;
+      }
+      messagesEl.innerHTML = html;
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function showError(msg) {
+      if (!errorEl) return;
+      errorEl.textContent = msg;
+      errorEl.style.display = msg ? 'block' : 'none';
+    }
+
+    formEl?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (sending || !inputEl || !sendBtn) return;
+      const text = inputEl.value.trim();
+      if (!text) return;
+
+      showError('');
+
+      const token = window.__latestAuthState?.session?.access_token;
+      if (!token) {
+        showError('僅管理員可使用 AI 助手,請確認登入狀態');
+        return;
+      }
+
+      messages.push({ role: 'user', content: text });
+      if (messages.length > MAX_HISTORY) {
+        messages = messages.slice(messages.length - MAX_HISTORY);
+      }
+      inputEl.value = '';
+      sending = true;
+      inputEl.disabled = true;
+      sendBtn.disabled = true;
+      renderMessages();
+
+      try {
+        const res = await fetch('/api/ai-assistant', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + token,
+          },
+          body: JSON.stringify({ messages, tripId: currentTripId }),
+        });
+
+        if (res.status === 401) {
+          showError('僅管理員可使用 AI 助手,請確認登入狀態');
+        } else if (res.status === 504) {
+          showError('AI 助手回應逾時,請稍後再試');
+        } else if (!res.ok) {
+          showError('AI 助手暫時無法回應,請稍後再試');
+        } else {
+          const data = await res.json();
+          messages.push({ role: 'assistant', content: data.reply || '(無回應內容)' });
+          if (messages.length > MAX_HISTORY) {
+            messages = messages.slice(messages.length - MAX_HISTORY);
+          }
+        }
+      } catch (err) {
+        showError('AI 助手暫時無法回應,請確認網路連線');
+      } finally {
+        sending = false;
+        inputEl.disabled = false;
+        sendBtn.disabled = false;
+        renderMessages();
+        inputEl.focus();
+      }
+    });
+  })();
+</script>
