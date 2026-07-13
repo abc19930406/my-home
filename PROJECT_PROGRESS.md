@@ -105,7 +105,7 @@
 
 ---
 
-### 🔶 /trip 整合頁面（階段 1、2、3、4、5、6、7 已完成，階段 2.5 有未解決問題待釐清，階段 8-9 未開始）
+### 🔶 /trip 整合頁面（階段 1、2、3、4、5、6、7 已完成，階段 8 第一批程式碼完成待實測，階段 2.5 有未解決問題待釐清，階段 9 未開始）
 
 將 `/travel` 與 `/japan` 整合為單一頁面 `/trip`，含 Desktop/Mobile 雙版面、AI 助手分頁（唯讀版 ✅ 已上線，V2 階段 7；寫入工具規劃中，階段 8）、協作者權限系統（✅ 已全數落實，V2 階段 4）。詳細架構規劃見 **PROJECT_ARCHITECTURE_V2.md**。
 
@@ -554,6 +554,37 @@
 
 ---
 
+### 🔶 V2 階段 8 第一批：AI 助手開放行程類寫入工具（2026-07-13，程式碼已完成，待使用者實測）
+
+- **背景**：V2 階段 7 的 AI 助手為純唯讀，本批開放四個「行程類」寫入工具，讓 AI 能直接依對話指令修改行程資料；delete 類與收藏類工具明確排除在本批之外，架構詳見 PROJECT_ARCHITECTURE_V2.md 5.2 節
+- **Context 擴充**：`buildTripContext()` 的 `spots`/`days` 改為同時攜帶 `spot_id`/`day_id`（stage 7 為精簡只留名稱，本批工具需要精確定位，避免同名景點造成模糊比對）
+- **四個工具（`src/pages/api/ai-assistant.ts`）**：
+  - `add_spot`：`name`+`address` 必填，後端呼叫 Google Geocoding API（重用既有 `PUBLIC_GOOGLE_MAPS_KEY`，未新增環境變數）換算 `lat`/`lng`/`place_id`；可選 `day_number`+`position`（1-based）同時排入某天，內部與 `reorder_day_spots` 共用同一個「整批重新編號 order_index」的 helper（`applyDaySpotOrder`）
+  - `update_spot`：只更新有提供的欄位；改 `address` 會重新 geocode；執行前確認 `spot_id` 確實屬於目前 `tripId`（完整性檢查，防止模型幻覺 ID 誤寫其他行程）
+  - `reorder_day_spots`：輸入的 `ordered_spot_ids` 必須與該天目前實際的 spot_id 集合完全一致（數量、成員都要對得上），對不上直接回工具錯誤，不做部分執行
+  - `add_transport_route`：欄位對齊 V2 階段 6 任務一建立的 `spot_transport_routes` 表（`TripPlanner.astro` 既有 payload 寫法），執行前確認起訖點皆屬於目前行程
+- **Anthropic tool-use 迴圈**：`stop_reason === 'tool_use'` 時執行工具、把 `tool_result`（含 `is_error`）附回訊息陣列再呼叫，上限 10 輪；超過上限仍未拿到最終文字，回報「操作過於複雜，請拆小」。每輪呼叫沿用既有 30 秒逾時
+- **權限與安全**：寫入沿用查詢 context 同一支「請求者 token 的 client」，不使用 service role；由於本階段僅管理員能呼叫此 API（既有 401 gate 未變），RLS 的 `is_admin()` 一律放行，協作者權限完全不受影響
+- **失敗如實回報**：每個工具執行後檢查受影響筆數，0 筆一律視為失敗（`{success:false, error}`），不得對 AI 或使用者謊報成功
+- **前端未改動**：`AiAssistant.astro` 維持原樣，工具完全在後端執行，對話 UI 只顯示模型回覆的文字
+- **本地驗證**：型別檢查（`astro check`）通過；`curl` 確認未帶/假 token 皆回 401（改動未破壞既有身分驗證）；`git grep` 確認 `ANTHROPIC_API_KEY` 只出現在後端檔案，`PUBLIC_GOOGLE_MAPS_KEY` 沿用既有前端變數未新增機密
+- ⚠️ **已知風險**：10 輪迴圈 × 每輪最多 30 秒逾時，理論上限可能達數分鐘；若 Vercel 方案的 serverless function 逾時上限（Hobby 方案固定 10 秒）比這短，複雜多工具操作可能被 Vercel 中途砍斷而非我們自己回報「操作過於複雜」，這不是本次改動能解決的，待實測後視情況再討論對策
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| 型別檢查無新增錯誤 | `astro check` | ✅ |
+| 未帶/假 token 回 401 | 既有身分驗證未被破壞 | ✅（本機 curl 驗證） |
+| 金鑰未外洩 | `git grep` 確認 `ANTHROPIC_API_KEY` 只在後端；`PUBLIC_GOOGLE_MAPS_KEY` 為既有前端變數，未新增機密 | ✅ |
+| a.「幫我把清水寺加進 Day 1」→ 景點真實出現在行程，AI 回覆明確描述；行程分頁重整後可見 | `add_spot`（含 day_number/position） | ⏳ 待使用者實測 |
+| b. 「把 Day 1 的順序倒過來」→ 順序真實改變 | `reorder_day_spots` | ⏳ 待使用者實測 |
+| c. 「新增京都站到清水寺的巴士 20 分鐘」→ 交通查詢可見 | `add_transport_route` | ⏳ 待使用者實測 |
+| d. 修改景點備註 → 生效 | `update_spot` | ⏳ 待使用者實測 |
+| e. 對照 a-d 每項，資料庫實際狀態與 AI 宣稱一致（重整頁面驗證，不信對話文字） | 全部工具的 0 筆受影響檢查 | ⏳ 待使用者實測 |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
@@ -673,7 +704,7 @@
 5. ~~**階段 5**：旅行資源頁面（任務一：子分頁骨架 + 優惠券牆；任務二：地鐵圖全域分類庫）~~ **✅ 2026-07-13 全部完成**，詳見上方「V2 階段 5」對應章節
 6. ~~**階段 6**：交通查詢系統（任務一：spot_transport_routes + 交通查詢子分頁；任務二：行程內嵌交通方式 M2）~~ **✅ 2026-07-13 全部完成**，詳見上方「V2 階段 6」對應章節；AI 輔助整理遞延階段 7-8
 7. ~~**階段 7**：AI 助手分頁（唯讀版）與 /api/ai-assistant 串接~~ **✅ 2026-07-13 全部完成，a-e 驗收項目全數通過**，詳見上方「V2 階段 7」
-8. **階段 8**：AI 工具逐個開放（add_spot / toggle_wishlist 等寫入工具）
+8. **階段 8**：AI 工具逐個開放（add_spot / toggle_wishlist 等寫入工具）—— 🔶 第一批(行程類四工具:add_spot/update_spot/reorder_day_spots/add_transport_route)程式碼已完成、本機驗證通過,詳見上方「V2 階段 8 第一批」,a-e 瀏覽器實測待你操作;收藏類與 delete 類工具待後續批次
 9. /trip 穩定後評估是否移除舊的 /travel 與 /japan 頁面
 10. **階段 9**（全部功能穩定後）：程式碼清理與重構，含 CSS/ID 前綴隔離補齊（衝突熱點稽核中發現、決議延後的項目）；一併處理 V2 階段 4 任務一盤點發現的 `spots.category`/`spots.icon` 遺留欄位（`NOT NULL` 但前端從未寫入，一律吃預設值，已被 `spot_type_id`/`spot_subtype_id` 取代）；一併評估是否補上 `body.trip-page` class（V2 階段 7 發現的既有落差，見 PROJECT_ARCHITECTURE_V2.md 5.3 節）
 

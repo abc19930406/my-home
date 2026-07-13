@@ -150,9 +150,9 @@
 
 ---
 
-## 五、「AI」分頁 ✅ 唯讀版已上線（2026-07-13，V2 階段 7）
+## 五、「AI」分頁 ✅ 唯讀版已上線（V2 階段 7），行程類寫入工具已上線（V2 階段 8 第一批，2026-07-13）
 
-固定對話視窗，**僅管理員可見與使用**，本階段純唯讀，AI 不能修改任何資料（無 tools 參數）。
+固定對話視窗，**僅管理員可見與使用**。V2 階段 7 為純唯讀；V2 階段 8 第一批開放四個行程類寫入工具（見 5.2 節），收藏類與刪除類工具仍遞延後續批次。
 
 ### 5.1 架構 ✅ 已上線
 
@@ -164,22 +164,30 @@
   - API 金鑰存於後端環境變數 `ANTHROPIC_API_KEY`，不出現在任何前端程式碼
 - 前端元件 `src/components/AiAssistant.astro`：token 取自 `window.__latestAuthState` 快照、tripId 取自 `window.currentTripId` +監聽 `trip-changed`（套用與 auth 快照相同的 Race Condition 雙保險），對話歷史存於記憶體陣列，前端固定只送出最近 20 則（超過丟最舊，控制成本），不做持久化
 
-### 5.2 Tool Use（逐步開放）📋 遞延至階段 8
+### 5.2 Tool Use（逐步開放）
 
-初期工具清單(本階段**明確不實作**，規劃保留供階段 8 參考)：
+| 工具 | 對應操作 | 狀態 |
+|------|---------|------|
+| `add_spot` | 新增景點至 spots，可選同時指定加入某天（day_number + 1-based position） | ✅ 已上線（2026-07-13，V2 階段 8 第一批） |
+| `update_spot` | 修改景點資訊（名稱、地址、類型、開放時間、價格、備註、狀態） | ✅ 已上線 |
+| `reorder_day_spots` | 調整某天景點順序（整批傳入新順序，不可增減成員） | ✅ 已上線 |
+| `add_transport_route` | 新增 A→B 交通方式至 spot_transport_routes | ✅ 已上線 |
+| `delete_spot` | 刪除景點 | 📋 本批明確不開放，遞延後續批次 |
+| `toggle_wishlist` | 勾選/取消 japan_items 願望清單 | 📋 收藏類工具，遞延後續批次 |
+| `update_wishlist_quantity` | 調整願望清單數量 | 📋 收藏類工具，遞延後續批次 |
+| `add_japan_item` | 新增收藏品項 | 📋 收藏類工具，遞延後續批次 |
 
-| 工具 | 對應操作 |
-|------|---------|
-| `add_spot` | 新增景點至 spots，並可指定加入某天行程 |
-| `update_spot` | 修改景點資訊（名稱、備註、類型等） |
-| `delete_spot` | 刪除景點 |
-| `reorder_day_spots` | 調整某天景點順序 |
-| `add_transport_route` | 新增 A→B 交通方式至 spot_transport_routes |
-| `toggle_wishlist` | 勾選/取消 japan_items 願望清單 |
-| `update_wishlist_quantity` | 調整願望清單數量 |
-| `add_japan_item` | 新增收藏品項 |
-
-每次 AI 執行寫入操作後，於對話框顯示明確的完成訊息（例如：「已將『熊本城』加入 Day 3 行程」）。
+**架構（V2 階段 8 第一批，2026-07-13）**：
+- Context 擴充：`spots`/`days` 改為同時攜帶 `spot_id`/`day_id`（stage 7 為求精簡只留名稱，本批工具需要精確定位，改為 ID 引用），供工具呼叫時直接使用，避免同名景點造成的模糊比對問題
+- 後端實作 Anthropic tool-use 迴圈：`stop_reason` 為 `tool_use` 時執行對應工具、把 `tool_result`（含 `is_error`）附回訊息陣列再呼叫，迴圈上限 10 次；超過上限仍未拿到最終文字回覆，回報「操作過於複雜，請拆小」
+- 寫入一律用查詢 context 同一支「請求者 token 的 client」，RLS（`is_admin()`）為最終防線，API 層不繞過；由於本階段僅管理員能呼叫此 API，RLS 一律放行，協作者權限不受影響
+- 每個工具執行後檢查受影響筆數，0 筆一律回報失敗（`{success:false, error}`），不得對 AI 或使用者謊報成功
+- `add_spot`/`update_spot` 的地址一律呼叫 Google Geocoding API 換算座標與 `place_id`（重用既有前端環境變數 `PUBLIC_GOOGLE_MAPS_KEY`，未新增環境變數）；解析失敗直接回報錯誤，不寫入資料庫、不臆造座標
+- `type_name`/`subtype_name` 依 context 提供的既有名稱做字串對照解析成 `spot_type_id`/`spot_subtype_id`，對不到就寫 NULL（不阻擋整個操作）
+- 完整性檢查：`update_spot`/`add_transport_route` 收到的 `spot_id` 執行前都先確認確實屬於目前 `tripId`，防止模型幻覺 ID 時誤寫（即使 context 本身只會包含當前行程的 ID）
+- System prompt 增補：寫入前若使用者未明確要求該操作先文字確認；每次成功後在回覆中明確描述做了什麼；ID 必須直接使用 context 中出現的值，不可自行編造
+- 前端 `AiAssistant.astro` 未改動，工具完全在後端執行，對話 UI 照舊只顯示文字結果
+- ⚠️ **已知風險（如實記錄，非本次能解決）**：10 輪迴圈 × 每輪最多 30 秒逾時，理論上限可能到數分鐘；若 Vercel 方案的 serverless function 逾時上限（Hobby 方案固定 10 秒，無法調整）比這個短，複雜的多工具操作可能被 Vercel 中途砍斷，而非後端邏輯自己回報「操作過於複雜」。若之後實測常態逾時，需另外討論對策（例如降低單輪 timeout、減少迴圈上限）
 
 ### 5.3 介面 ✅ 已上線(唯讀對話,無工具)
 
@@ -285,7 +293,7 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | 5 | 資源子分頁：優惠券、地鐵圖分類化、trip_subway_categories | ✅ 已完成（任務一：子分頁骨架 + 優惠券牆 2026-07-13；任務二：地鐵圖全域分類庫 2026-07-13） |
 | 6 | 交通查詢子分頁：spot_transport_routes、行程內嵌交通方式 UI | ✅ 已完成（任務一：spot_transport_routes 建表 + 交通查詢子分頁 2026-07-13；任務二：行程內嵌交通方式 UI，M2 2026-07-13） |
 | 7 | AI 助手（只讀）：/api/ai-assistant，讀取行程/收藏資料並回答問題 | ✅ 已完成（2026-07-13） |
-| 8 | AI 工具逐個開放：add_spot、toggle_wishlist 等寫入工具 | 📋 待開始 |
+| 8 | AI 工具逐個開放：add_spot、toggle_wishlist 等寫入工具 | 🔶 第一批（行程類四工具）已完成（2026-07-13），收藏類與 delete 類待開始 |
 | 9 | 程式碼清理與重構：統一 Modal/CSS 命名規則、評估舊頁面下線 | 📋 待開始（待功能全部穩定後執行） |
 
 > 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 三個任務、階段 5 兩個任務、階段 6 兩個任務、階段 7 的實作記錄與驗收對照表，見 PROJECT_PROGRESS.md「V2 階段 4」「V2 階段 5」「V2 階段 6」「V2 階段 7」對應章節。
