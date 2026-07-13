@@ -105,7 +105,7 @@
 
 ---
 
-### 🔶 /trip 整合頁面（階段 1、2、3、4、5、6、7、8 第一批已完成，階段 8 第二批程式碼完成待實測，階段 2.5 有未解決問題待釐清，階段 9 未開始）
+### 🔶 /trip 整合頁面（階段 1、2、3、4、5、6、7、8 已完成，階段 2.5 有未解決問題待釐清，階段 9 未開始）
 
 將 `/travel` 與 `/japan` 整合為單一頁面 `/trip`，含 Desktop/Mobile 雙版面、AI 助手分頁（唯讀版 ✅ 已上線，V2 階段 7；寫入工具規劃中，階段 8）、協作者權限系統（✅ 已全數落實，V2 階段 4）。詳細架構規劃見 **PROJECT_ARCHITECTURE_V2.md**。
 
@@ -587,7 +587,7 @@
 
 ---
 
-### 🔶 V2 階段 8 第二批：AI 助手開放收藏類工具與 delete_spot（2026-07-13，程式碼已完成，待使用者實測）
+### ✅ V2 階段 8 第二批：AI 助手開放收藏類工具與 delete_spot，階段 8 全部結案（2026-07-13）
 
 - **背景**：V2 階段 8 第一批已開放行程類寫入工具，本批補齊剩下的 `delete_spot`（唯一的刪除工具）、`toggle_wishlist`/`update_wishlist_quantity`/`add_japan_item`（收藏類），完成後 V2 階段 8 全部結案
 - **關鍵澄清（依現有程式碼校正任務描述）**：原始任務描述寫「toggle_wishlist / update_wishlist_quantity 操作管理員自己的願望清單列（user_id 為管理員）」，但查證 `JapanCollection.astro` 第 1370、1397 行既有寫法後發現：**管理員自己的願望清單狀態存在 `japan_items.owner_wishlist`/`owner_quantity` 兩個欄位本身**，不是寫入 `wishlist_items` 表（那張表是朋友/家人專用，有獨立的 `user_id`/`japan_item_id`/`quantity`，管理員的資料從來不會出現在裡面）。本批依實際 schema 實作，避免工具行為與既有 UI 顯示邏輯脫節
@@ -607,10 +607,10 @@
 |---|---|---|
 | 型別檢查無新增錯誤 | `astro check` | ✅ |
 | 未帶/假 token 回 401 | 既有身分驗證未被破壞 | ✅（本機 curl 驗證） |
-| a. 刪除流程：要求刪除 → AI 複述並要求確認 → 未確認不執行 → 確認後才真刪 | `delete_spot` + system prompt 確認規則 | ⏳ 待使用者實測 |
-| b. 「把 XX 加進願望清單、數量 2」→ 收藏分頁重整後如實反映 | `toggle_wishlist` + `update_wishlist_quantity` | ⏳ 待使用者實測 |
-| c. 新增收藏品指定行程 → 收藏分頁重整後帶行程徽章出現 | `add_japan_item`（scope=trip） | ⏳ 待使用者實測 |
-| d. 每項以頁面重整後的實際狀態為準核對 | 全部工具的 0 筆受影響檢查 | ⏳ 待使用者實測 |
+| a. 刪除流程：要求刪除 → AI 複述並要求確認 → 未確認不執行 → 確認後才真刪 | `delete_spot` + system prompt 確認規則 | ✅ 使用者實測通過 |
+| b. 「把 XX 加進願望清單、數量 2」→ 收藏分頁重整後如實反映 | `toggle_wishlist` + `update_wishlist_quantity` | ✅ 使用者實測通過 |
+| c. 新增收藏品指定行程 → 收藏分頁重整後帶行程徽章出現 | `add_japan_item`（scope=trip） | ✅ 使用者實測通過 |
+| d. 每項以頁面重整後的實際狀態為準核對 | 全部工具的 0 筆受影響檢查 | ✅ 全數確認 |
 
 ---
 
@@ -733,7 +733,7 @@
 5. ~~**階段 5**：旅行資源頁面（任務一：子分頁骨架 + 優惠券牆；任務二：地鐵圖全域分類庫）~~ **✅ 2026-07-13 全部完成**，詳見上方「V2 階段 5」對應章節
 6. ~~**階段 6**：交通查詢系統（任務一：spot_transport_routes + 交通查詢子分頁；任務二：行程內嵌交通方式 M2）~~ **✅ 2026-07-13 全部完成**，詳見上方「V2 階段 6」對應章節；AI 輔助整理遞延階段 7-8
 7. ~~**階段 7**：AI 助手分頁（唯讀版）與 /api/ai-assistant 串接~~ **✅ 2026-07-13 全部完成，a-e 驗收項目全數通過**，詳見上方「V2 階段 7」
-8. ~~**階段 8 第一批**：行程類寫入工具(add_spot/assign_spot_to_day/update_spot/reorder_day_spots/add_transport_route)~~ **✅ 2026-07-13 全部完成,a-e 驗收項目全數通過**,詳見上方「V2 階段 8 第一批」;**階段 8 第二批**:收藏類(toggle_wishlist/update_wishlist_quantity/add_japan_item)與 delete_spot 🔶 程式碼已完成、本機驗證通過,詳見上方「V2 階段 8 第二批」,a-d 瀏覽器實測待你操作
+8. ~~**階段 8**:AI 工具逐個開放(第一批行程類五工具 + 第二批收藏類三工具與 delete_spot)~~ **✅ 2026-07-13 全部完成,階段 8 結案**,詳見上方「V2 階段 8 第一批」「V2 階段 8 第二批」
 9. /trip 穩定後評估是否移除舊的 /travel 與 /japan 頁面
 10. **階段 9**（全部功能穩定後）：程式碼清理與重構，含 CSS/ID 前綴隔離補齊（衝突熱點稽核中發現、決議延後的項目）；一併處理 V2 階段 4 任務一盤點發現的 `spots.category`/`spots.icon` 遺留欄位（`NOT NULL` 但前端從未寫入，一律吃預設值，已被 `spot_type_id`/`spot_subtype_id` 取代）；一併評估是否補上 `body.trip-page` class（V2 階段 7 發現的既有落差，見 PROJECT_ARCHITECTURE_V2.md 5.3 節）
 
