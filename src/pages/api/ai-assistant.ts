@@ -277,7 +277,7 @@ function buildSystemPrompt(context: unknown): string {
     '你是「The Corner Table」網站 /trip 頁面的行程與收藏助手,以繁體中文回答。',
     '你只能依據下方提供的 JSON 資料回答問題;資料中沒有的內容,一律誠實說明「目前資料中沒有這項資訊」,不得編造或推測。',
     '回答請精簡扼要,不需要重複使用者的問題。',
-    '你有工具可以新增/修改景點、調整某天景點順序、新增景點間的交通方式。執行任何寫入工具前,若使用者的訊息沒有明確要求該操作,先用文字確認,不要自行猜測執行。',
+    '你有工具可以新增全新景點、把已存在的景點加入某一天、修改景點、調整某天景點順序、新增景點間的交通方式。使用者要求把「已經存在於目前資料中的景點」加入某一天時,用 assign_spot_to_day,不要用 add_spot(那會建立重複的新景點)。執行任何寫入工具前,若使用者的訊息沒有明確要求該操作,先用文字確認,不要自行猜測執行。',
     '每次工具執行成功後,在回覆中明確描述做了什麼(例如:「已將『熊本城』加入 Day 3 第 2 順位」);工具若回傳失敗,如實告知使用者失敗原因,不得謊報成功。',
     '所有 spot_id、day_number 等識別資訊必須直接使用下方資料中出現的值,不可自行編造。',
     '',
@@ -295,7 +295,7 @@ function buildToolDefinitions() {
     {
       name: 'add_spot',
       description:
-        '新增一個景點到目前行程。address 必填,系統會自動地理編碼取得座標與 place_id;若提供 day_number 會同時把景點加入該天的行程(可選 position 指定 1-based 順位,省略則加到最後)。',
+        '新增一個全新的景點到目前行程(資料庫會產生新的 spot_id)。address 必填,系統會自動地理編碼取得座標與 place_id;若提供 day_number 會同時把新景點加入該天的行程(可選 position 指定 1-based 順位,省略則加到最後)。⚠️ 若使用者要加入的景點已經存在於目前資料的 spots 清單中,不要用這個工具(會重複建立一筆新資料),改用 assign_spot_to_day。',
       input_schema: {
         type: 'object',
         properties: {
@@ -311,6 +311,20 @@ function buildToolDefinitions() {
           position: { type: 'integer', description: '加入該天的第幾順位(1-based),省略則加到最後' },
         },
         required: ['name', 'address'],
+      },
+    },
+    {
+      name: 'assign_spot_to_day',
+      description:
+        '把目前資料中已經存在的景點(spot_id 取自目前資料的 spots 清單)加入某一天的行程。若該景點已經在該天,會回報失敗而不會重複加入。這是使用者說「把某個已存在的景點加進 Day X」時應該用的工具,不要改用 add_spot 重新建立一筆新資料。',
+      input_schema: {
+        type: 'object',
+        properties: {
+          spot_id: { type: 'string', description: '景點 ID,取自目前資料' },
+          day_number: { type: 'integer', description: '要加入的天數,例如 1 代表 Day 1' },
+          position: { type: 'integer', description: '加入該天的第幾順位(1-based),省略則加到最後' },
+        },
+        required: ['spot_id', 'day_number'],
       },
     },
     {
@@ -390,6 +404,8 @@ async function executeTool(name: string, input: any, ctx: ToolCtx): Promise<{ su
     switch (name) {
       case 'add_spot':
         return await toolAddSpot(ctx, input);
+      case 'assign_spot_to_day':
+        return await toolAssignSpotToDay(ctx, input);
       case 'update_spot':
         return await toolUpdateSpot(ctx, input);
       case 'reorder_day_spots':
@@ -509,6 +525,51 @@ async function toolAddSpot(ctx: ToolCtx, input: any) {
   }
 
   return { success: true, spot_id: data.id, message: `已新增景點「${name}」,並加入 Day ${input.day_number}` };
+}
+
+async function toolAssignSpotToDay(ctx: ToolCtx, input: any) {
+  const { supabase, tripId, lookups } = ctx;
+  const spotId = input.spot_id ? String(input.spot_id) : '';
+  if (!spotId) return { success: false, error: 'spot_id 為必填' };
+  if (input.day_number == null) return { success: false, error: 'day_number 為必填' };
+
+  const { data: existingSpot, error: fetchError } = await supabase
+    .from('spots')
+    .select('id, trip_id, name')
+    .eq('id', spotId)
+    .maybeSingle();
+  if (fetchError) return { success: false, error: fetchError.message };
+  if (!existingSpot || String(existingSpot.trip_id) !== String(tripId)) {
+    return { success: false, error: '找不到此景點,或此景點不屬於目前行程' };
+  }
+
+  const dayId = lookups.tripDayIdByNumber.get(Number(input.day_number));
+  if (!dayId) return { success: false, error: `找不到 Day ${input.day_number}` };
+
+  const { data: existingDaySpots, error: dsError } = await supabase
+    .from('day_spots')
+    .select('id, spot_id, order_index')
+    .eq('day_id', dayId)
+    .order('order_index', { ascending: true });
+  if (dsError) return { success: false, error: dsError.message };
+
+  const alreadyInDay = (existingDaySpots ?? []).some((ds: any) => String(ds.spot_id) === spotId);
+  if (alreadyInDay) {
+    return { success: false, error: `景點「${existingSpot.name}」已經在 Day ${input.day_number} 的行程中,未重複加入` };
+  }
+
+  const currentIds = (existingDaySpots ?? []).map((ds: any) => String(ds.spot_id));
+  let insertAt = currentIds.length;
+  if (input.position != null) {
+    insertAt = Math.max(0, Math.min(currentIds.length, Number(input.position) - 1));
+  }
+  const newOrder = [...currentIds];
+  newOrder.splice(insertAt, 0, spotId);
+
+  const result = await applyDaySpotOrder(supabase, dayId, newOrder, existingDaySpots ?? []);
+  if (!result.success) return result;
+
+  return { success: true, message: `已將景點「${existingSpot.name}」加入 Day ${input.day_number}` };
 }
 
 async function toolUpdateSpot(ctx: ToolCtx, input: any) {
