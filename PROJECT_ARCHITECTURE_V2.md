@@ -159,7 +159,7 @@
 - `src/pages/api/ai-assistant.ts`（`prerender = false`）：
   - 身分驗證完全比照 `/api/trigger-deploy`——前端帶 Supabase access token（`Authorization: Bearer`），後端 `supabase.auth.getUser(token)` 驗證後比對後端環境變數 `ADMIN_EMAIL`（過渡期 fallback `PUBLIC_ADMIN_EMAIL`），不符一律 401
   - 查詢 context 一律用「請求者的 token」建立的 client（RLS 生效），**不使用 service role**
-  - 呼叫 Anthropic API 直接用原生 `fetch`（未安裝 `@anthropic-ai/sdk`，比照 `src/pages/api/explore.ts` 呼叫外部 API 的既有寫法），model `claude-sonnet-4-6`，`max_tokens: 2048`，非串流，30 秒逾時
+  - 呼叫 Anthropic API 直接用原生 `fetch`（未安裝 `@anthropic-ai/sdk`，比照 `src/pages/api/explore.ts` 呼叫外部 API 的既有寫法），model `claude-sonnet-5`，`max_tokens: 2048`，非串流，30 秒逾時
   - Context 組成（只留必要欄位，不含 images 陣列與座標）：目前選中行程的 `trips`（名稱/emoji）、`trip_days`+`day_spots`+`spots`（依天數排序的景點名稱/備註/類型/子類型/是否連鎖店）、`spot_transport_routes`（該行程景點之間的路線）、`japan_items`（`trip_id` 等於該行程或為 NULL）+`wishlist_items`（供 AI 判斷願望清單數量相關問題）
   - API 金鑰存於後端環境變數 `ANTHROPIC_API_KEY`，不出現在任何前端程式碼
 - 前端元件 `src/components/AiAssistant.astro`：token 取自 `window.__latestAuthState` 快照、tripId 取自 `window.currentTripId` +監聽 `trip-changed`（套用與 auth 快照相同的 Race Condition 雙保險），對話歷史存於記憶體陣列，前端固定只送出最近 20 則（超過丟最舊，控制成本），不做持久化

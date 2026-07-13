@@ -377,7 +377,7 @@ if (!session) {
 ### Anthropic API（/trip AI 助手，2026-07-13 新增，V2 階段 7）
 - 後端 Serverless Function：src/pages/api/ai-assistant.ts，直接用原生 `fetch` 呼叫 `https://api.anthropic.com/v1/messages`（未安裝 `@anthropic-ai/sdk`）
 - Key 存於 Vercel 後端環境變數 `ANTHROPIC_API_KEY`（不加 `PUBLIC_` 前綴，絕不進前端）
-- Model：`claude-sonnet-4-6`，`max_tokens: 2048`，非串流，30 秒逾時
+- Model：`claude-sonnet-5`，`max_tokens: 2048`，非串流，30 秒逾時
 - 身分驗證與 `/api/trigger-deploy` 同一套模式（見上方「Vercel Deploy Hook」章節）；查詢 Supabase context 一律用請求者 token 建立的 client 讓 RLS 生效，不使用 service role
 - 完整架構細節見 PROJECT_ARCHITECTURE_V2.md 第五節
 

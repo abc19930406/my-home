@@ -525,7 +525,7 @@
 - **後端（`src/pages/api/ai-assistant.ts`，`prerender = false`）**：
   - 身分驗證完全比照既有 `/api/trigger-deploy` 模式：前端帶 Supabase access token（`Authorization: Bearer`），後端 `supabase.auth.getUser(token)` 驗證後比對後端環境變數 `ADMIN_EMAIL`（沿用既有過渡期 fallback `PUBLIC_ADMIN_EMAIL`），不符一律 401，不信任前端任何身分宣告
   - 查詢 context 一律用「請求者的 token」建立的 client 讓 RLS 生效，**不使用 service role**
-  - 呼叫 Anthropic API 直接用原生 `fetch`（比照 `src/pages/api/explore.ts` 呼叫外部 API 的既有寫法），**未安裝 `@anthropic-ai/sdk`**，不觸碰「安裝依賴套件」安全紅線；model `claude-sonnet-4-6`，`max_tokens: 2048`，非串流，`AbortController` 30 秒逾時
+  - 呼叫 Anthropic API 直接用原生 `fetch`（比照 `src/pages/api/explore.ts` 呼叫外部 API 的既有寫法），**未安裝 `@anthropic-ai/sdk`**，不觸碰「安裝依賴套件」安全紅線；model `claude-sonnet-5`，`max_tokens: 2048`，非串流，`AbortController` 30 秒逾時
   - Context 組成：`trips`（名稱/emoji）、`trip_days`+`day_spots`+`spots`（依天數排序的景點名稱/備註/類型/子類型/是否連鎖店）、`spot_transport_routes`（該行程景點間路線）、`japan_items`（`trip_id` 等於該行程或為 NULL）+`wishlist_items`（供判斷願望清單數量問題）；只留必要欄位，不含 images 陣列與座標
   - system prompt 明確要求：以繁中回答、只依提供資料回答、資料裡沒有的一律誠實說沒有、回答精簡
 - **前端（新元件 `src/components/AiAssistant.astro`）**：
