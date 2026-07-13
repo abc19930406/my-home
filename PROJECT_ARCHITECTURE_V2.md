@@ -150,9 +150,9 @@
 
 ---
 
-## 五、「AI」分頁 ✅ 唯讀版已上線（V2 階段 7），行程類寫入工具已上線（V2 階段 8 第一批，2026-07-13）
+## 五、「AI」分頁 ✅ 唯讀版已上線（V2 階段 7），寫入工具已全部上線（V2 階段 8，2026-07-13）
 
-固定對話視窗，**僅管理員可見與使用**。V2 階段 7 為純唯讀；V2 階段 8 第一批開放四個行程類寫入工具（見 5.2 節），收藏類與刪除類工具仍遞延後續批次。
+固定對話視窗，**僅管理員可見與使用**。V2 階段 7 為純唯讀；V2 階段 8 分兩批開放全部規劃中的寫入工具（見 5.2 節），第一批已驗收通過，第二批程式碼已完成、待使用者瀏覽器實測。
 
 ### 5.1 架構 ✅ 已上線
 
@@ -173,10 +173,10 @@
 | `update_spot` | 修改景點資訊（名稱、地址、類型、開放時間、價格、備註、狀態） | ✅ 已上線 |
 | `reorder_day_spots` | 調整某天景點順序（整批傳入新順序，不可增減成員） | ✅ 已上線 |
 | `add_transport_route` | 新增 A→B 交通方式至 spot_transport_routes | ✅ 已上線 |
-| `delete_spot` | 刪除景點 | 📋 本批明確不開放，遞延後續批次 |
-| `toggle_wishlist` | 勾選/取消 japan_items 願望清單 | 📋 收藏類工具，遞延後續批次 |
-| `update_wishlist_quantity` | 調整願望清單數量 | 📋 收藏類工具，遞延後續批次 |
-| `add_japan_item` | 新增收藏品項 | 📋 收藏類工具，遞延後續批次 |
+| `delete_spot` | 刪除景點（無法復原） | ✅ 已上線（2026-07-13，V2 階段 8 第二批） |
+| `toggle_wishlist` | 勾選/取消管理員自己在 japan_items 的願望清單標記 | ✅ 已上線 |
+| `update_wishlist_quantity` | 調整管理員自己的願望數量 | ✅ 已上線 |
+| `add_japan_item` | 新增收藏品項 | ✅ 已上線 |
 
 **架構（V2 階段 8 第一批，2026-07-13）**：
 - Context 擴充：`spots`/`days` 改為同時攜帶 `spot_id`/`day_id`（stage 7 為求精簡只留名稱，本批工具需要精確定位，改為 ID 引用），供工具呼叫時直接使用，避免同名景點造成的模糊比對問題
@@ -190,6 +190,16 @@
 - 前端 `AiAssistant.astro` 未改動，工具完全在後端執行，對話 UI 照舊只顯示文字結果
 - **`assign_spot_to_day`（驗收 a 發現的缺口，2026-07-13 補上）**：原始四工具設計中，`add_spot` 只能新增全新景點、`reorder_day_spots` 只能調整既有成員順序不能新增成員，導致「把已經存在於行程中的景點加入某一天」這個操作沒有對應工具（對應既有前端 `TripPlanner.astro` 的 `addSpotToDay()`/「從想去清單選擇」功能）。使用者實測時要求把已存在的景點加入 Day 1，AI 正確判斷現有工具做不到並如實告知，沒有誤用 `add_spot` 建立重複資料——證明系統提示的「不確定就先確認、不要猜測執行」有效。已新增 `assign_spot_to_day` 工具補上缺口，重用既有的 `applyDaySpotOrder` 排序邏輯；若該景點已在該天則回報失敗而非重複加入
 - ⚠️ **已知風險（如實記錄，非本次能解決）**：10 輪迴圈 × 每輪最多 30 秒逾時，理論上限可能到數分鐘；若 Vercel 方案的 serverless function 逾時上限（Hobby 方案固定 10 秒，無法調整）比這個短，複雜的多工具操作可能被 Vercel 中途砍斷，而非後端邏輯自己回報「操作過於複雜」。若之後實測常態逾時，需另外討論對策（例如降低單輪 timeout、減少迴圈上限）
+
+**架構（V2 階段 8 第二批，2026-07-13）**：
+- **關鍵澄清（依現有程式碼校正任務描述）**：`toggle_wishlist`/`update_wishlist_quantity` 操作的是 **`japan_items.owner_wishlist`/`owner_quantity` 兩個欄位本身**（管理員自己的收藏狀態就存在這裡），**不是** `wishlist_items` 表——後者是朋友/家人專用（有獨立的 `user_id`/`japan_item_id`/`quantity`），管理員的收藏狀態從來不會出現在那張表。兩套機制完全獨立，實作前已比對 `JapanCollection.astro` 第 1370、1397 行既有寫法確認
+- Context 擴充：`japan_items` 補上 `item_id`（沿用批次一「工具需要 ID 才能精確定位」的原則，此前只有名稱）與解析後的 `category`；新增 `japan_categories` 查詢，回傳 `categories` 陣列供顯示，並建立 `categoryIdByName` lookup 供 `add_japan_item` 解析分類
+- **`delete_spot`**：本批唯一的刪除工具，`spot_id` 執行前確認屬於目前 `tripId`（比照 `update_spot`），成功訊息固定包含「已刪除，若為誤刪需手動重建」。⚠️ **確認流程是提示詞層級的行為約束，不是程式碼層級的強制擋修**：規則寫在 system prompt 與工具 `description`——只有使用者在對話中明確點名要刪除某景點才可考慮呼叫、呼叫前必須先用文字複述景點名稱與所屬行程並等待使用者在下一則訊息明確確認。程式碼本身不會技術性阻止模型提前呼叫，完全仰賴模型對提示詞的遵循程度
+- `toggle_wishlist`：`update({ owner_wishlist, owner_quantity: 1 })` 兩欄位一起寫，勾選與取消皆重置數量為 1，完全比照既有手動 UI 行為
+- `update_wishlist_quantity`：`update({ owner_quantity })`，只改數量，比照既有手動 UI
+- `add_japan_item`：欄位對齊既有 `itemData`（`name`/`note`/`image_url`/`category_id`/`trip_id`）；AI 無法上傳圖片，`image_url` 固定 null；`scope` 省略時預設 `'trip'`（歸屬目前行程），需明確指定 `general` 才存進不分行程的一般收藏
+- System prompt 增補：`japan_items` 的 `scope` 語意說明（`general`=一般收藏、`trip`=歸屬目前行程，新增品項預設歸屬目前行程）；`delete_spot` 的確認流程規則
+- 前端 `AiAssistant.astro` 未改動
 
 ### 5.3 介面 ✅ 已上線(唯讀對話,無工具)
 
@@ -295,7 +305,7 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | 5 | 資源子分頁：優惠券、地鐵圖分類化、trip_subway_categories | ✅ 已完成（任務一：子分頁骨架 + 優惠券牆 2026-07-13；任務二：地鐵圖全域分類庫 2026-07-13） |
 | 6 | 交通查詢子分頁：spot_transport_routes、行程內嵌交通方式 UI | ✅ 已完成（任務一：spot_transport_routes 建表 + 交通查詢子分頁 2026-07-13；任務二：行程內嵌交通方式 UI，M2 2026-07-13） |
 | 7 | AI 助手（只讀）：/api/ai-assistant，讀取行程/收藏資料並回答問題 | ✅ 已完成（2026-07-13） |
-| 8 | AI 工具逐個開放：add_spot、toggle_wishlist 等寫入工具 | 🔶 第一批（行程類五工具，含補丁 assign_spot_to_day）已完成並驗收通過（2026-07-13），收藏類與 delete 類待開始 |
+| 8 | AI 工具逐個開放：add_spot、toggle_wishlist 等寫入工具 | 🔶 第一批行程類五工具（含補丁 assign_spot_to_day）已完成並驗收通過；第二批收藏類三工具與 delete_spot 程式碼已完成（2026-07-13），待使用者實測 |
 | 9 | 程式碼清理與重構：統一 Modal/CSS 命名規則、評估舊頁面下線 | 📋 待開始（待功能全部穩定後執行） |
 
 > 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 三個任務、階段 5 兩個任務、階段 6 兩個任務、階段 7 的實作記錄與驗收對照表，見 PROJECT_PROGRESS.md「V2 階段 4」「V2 階段 5」「V2 階段 6」「V2 階段 7」對應章節。
