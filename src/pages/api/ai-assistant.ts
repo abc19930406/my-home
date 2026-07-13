@@ -4,8 +4,11 @@ import { createClient } from '@supabase/supabase-js';
 export const prerender = false;
 
 // 管理員專用:驗證 Supabase access token 後,以請求者身分(RLS 生效)查詢目前
-// 行程與收藏資料,並開放行程類寫入工具(add_spot/update_spot/reorder_day_spots/
-// add_transport_route)。delete 類與收藏類工具本批不開放。
+// 行程與收藏資料,並開放行程類寫入工具(add_spot/assign_spot_to_day/update_spot/
+// reorder_day_spots/add_transport_route)與收藏類工具(toggle_wishlist/
+// update_wishlist_quantity/add_japan_item)、唯一的刪除工具 delete_spot。
+// delete_spot 的「使用者明確確認」規則屬提示詞層級的行為約束,見下方 system prompt
+// 與工具描述,程式碼本身不做技術性強制擋修。
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -158,11 +161,12 @@ async function buildTripContext(supabase: any, tripId: string) {
     spotTypesByName: new Map<string, any>(),
     spotSubtypesByName: new Map<string, any>(),
     tripDayIdByNumber: new Map<number, any>(),
+    categoryIdByName: new Map<string, any>(),
   };
 
   if (!tripId) {
     return {
-      context: { trip: null, spots: [], days: [], transport_routes: [], japan_items: [] },
+      context: { trip: null, spots: [], days: [], transport_routes: [], japan_items: [], categories: [] },
       lookups: emptyLookups,
     };
   }
@@ -175,6 +179,7 @@ async function buildTripContext(supabase: any, tripId: string) {
     { data: spotSubtypes },
     { data: japanItems },
     { data: wishlistItems },
+    { data: japanCategories },
   ] = await Promise.all([
     supabase.from('trips').select('id, name, emoji').eq('id', tripId).maybeSingle(),
     supabase.from('trip_days').select('id, day_number').eq('trip_id', tripId).order('day_number', { ascending: true }),
@@ -183,6 +188,7 @@ async function buildTripContext(supabase: any, tripId: string) {
     supabase.from('spot_subtypes').select('id, name, is_chain_store'),
     supabase.from('japan_items').select('id, name, category_id, owner_wishlist, owner_quantity, trip_id').or(`trip_id.eq.${tripId},trip_id.is.null`),
     supabase.from('wishlist_items').select('japan_item_id, quantity'),
+    supabase.from('japan_categories').select('id, name'),
   ]);
 
   const spotList = spots ?? [];
@@ -191,6 +197,8 @@ async function buildTripContext(supabase: any, tripId: string) {
   const subtypeById = new Map<any, any>((spotSubtypes ?? []).map((st: any) => [st.id, st]));
   const spotTypesByName = new Map<string, any>((spotTypes ?? []).map((t: any) => [t.name, t.id]));
   const spotSubtypesByName = new Map<string, any>((spotSubtypes ?? []).map((st: any) => [st.name, st.id]));
+  const categoryById = new Map<any, any>((japanCategories ?? []).map((c: any) => [c.id, c]));
+  const categoryIdByName = new Map<string, any>((japanCategories ?? []).map((c: any) => [c.name, c.id]));
 
   const { data: daySpots } = tripDays && tripDays.length > 0
     ? await supabase
@@ -253,12 +261,16 @@ async function buildTripContext(supabase: any, tripId: string) {
   });
 
   const japan_items = (japanItems ?? []).map((item: any) => ({
+    item_id: item.id,
     name: item.name,
+    category: item.category_id ? categoryById.get(item.category_id)?.name : undefined,
     scope: item.trip_id ? 'trip' : 'general',
     owner_wishlist: item.owner_wishlist,
     owner_quantity: item.owner_wishlist ? item.owner_quantity : undefined,
     friend_wishlist_quantities: wishlistByItem.get(String(item.id)) ?? [],
   }));
+
+  const categories = (japanCategories ?? []).map((c: any) => ({ name: c.name }));
 
   return {
     context: {
@@ -267,8 +279,9 @@ async function buildTripContext(supabase: any, tripId: string) {
       days,
       transport_routes,
       japan_items,
+      categories,
     },
-    lookups: { spotTypesByName, spotSubtypesByName, tripDayIdByNumber },
+    lookups: { spotTypesByName, spotSubtypesByName, tripDayIdByNumber, categoryIdByName },
   };
 }
 
@@ -277,9 +290,11 @@ function buildSystemPrompt(context: unknown): string {
     '你是「The Corner Table」網站 /trip 頁面的行程與收藏助手,以繁體中文回答。',
     '你只能依據下方提供的 JSON 資料回答問題;資料中沒有的內容,一律誠實說明「目前資料中沒有這項資訊」,不得編造或推測。',
     '回答請精簡扼要,不需要重複使用者的問題。',
-    '你有工具可以新增全新景點、把已存在的景點加入某一天、修改景點、調整某天景點順序、新增景點間的交通方式。使用者要求把「已經存在於目前資料中的景點」加入某一天時,用 assign_spot_to_day,不要用 add_spot(那會建立重複的新景點)。執行任何寫入工具前,若使用者的訊息沒有明確要求該操作,先用文字確認,不要自行猜測執行。',
+    '你有工具可以新增全新景點、把已存在的景點加入某一天、修改景點、調整某天景點順序、新增景點間的交通方式、刪除景點、調整收藏願望清單與數量、新增收藏品項。使用者要求把「已經存在於目前資料中的景點」加入某一天時,用 assign_spot_to_day,不要用 add_spot(那會建立重複的新景點)。執行任何寫入工具前,若使用者的訊息沒有明確要求該操作,先用文字確認,不要自行猜測執行。',
     '每次工具執行成功後,在回覆中明確描述做了什麼(例如:「已將『熊本城』加入 Day 3 第 2 順位」);工具若回傳失敗,如實告知使用者失敗原因,不得謊報成功。',
-    '所有 spot_id、day_number 等識別資訊必須直接使用下方資料中出現的值,不可自行編造。',
+    '所有 spot_id、item_id、day_number 等識別資訊必須直接使用下方資料中出現的值,不可自行編造。',
+    '⚠️ delete_spot 是唯一會刪除資料且無法復原的工具,規則極嚴格:只有使用者在對話中明確點名要刪除某個景點時才可以考慮呼叫;呼叫前必須先用文字複述將刪除的景點名稱與其所屬行程,並等待使用者在下一則訊息明確回覆確認(例如「確認」「對,刪掉」),使用者未回覆確認前絕對不可呼叫這個工具。刪除成功後,回覆必須包含「已刪除,若為誤刪需手動重建」的提醒。',
+    '收藏資料(japan_items)中 scope 為 general 代表「一般收藏」(不分行程),scope 為 trip 代表歸屬目前這個行程。使用者要求新增收藏品項時,若沒有特別說要放進一般收藏,預設歸屬目前這個行程。',
     '',
     '目前資料:',
     JSON.stringify(context),
@@ -381,6 +396,57 @@ function buildToolDefinitions() {
         required: ['origin_spot_id', 'destination_spot_id', 'mode'],
       },
     },
+    {
+      name: 'delete_spot',
+      description:
+        '刪除一個景點,無法復原。⚠️ 只有使用者在對話中明確點名要刪除某個景點時才可以考慮呼叫此工具;呼叫前必須先用文字複述將刪除的景點名稱與其所屬行程,並等待使用者在下一則訊息明確回覆確認,未經確認絕對不可呼叫。',
+      input_schema: {
+        type: 'object',
+        properties: {
+          spot_id: { type: 'string', description: '景點 ID,取自目前資料,必須是使用者已明確確認要刪除的那一筆' },
+        },
+        required: ['spot_id'],
+      },
+    },
+    {
+      name: 'toggle_wishlist',
+      description: '勾選或取消管理員自己在某收藏品項上的願望清單標記。取消或重新勾選時,數量會一併重設為 1。',
+      input_schema: {
+        type: 'object',
+        properties: {
+          item_id: { type: 'string', description: '收藏品項 ID,取自目前資料的 japan_items 清單' },
+          wishlist: { type: 'boolean', description: 'true 表示勾選願望清單,false 表示取消' },
+        },
+        required: ['item_id', 'wishlist'],
+      },
+    },
+    {
+      name: 'update_wishlist_quantity',
+      description: '調整管理員自己在某收藏品項上的願望數量。',
+      input_schema: {
+        type: 'object',
+        properties: {
+          item_id: { type: 'string', description: '收藏品項 ID,取自目前資料的 japan_items 清單' },
+          quantity: { type: 'integer', description: '數量,至少為 1' },
+        },
+        required: ['item_id', 'quantity'],
+      },
+    },
+    {
+      name: 'add_japan_item',
+      description:
+        '新增一個日本收藏品項。category_name 須為目前資料 categories 中已存在的分類名稱,對不到會存為未分類;scope 省略時預設歸屬目前這個行程(trip),要放進不分行程的「一般收藏」需明確指定 general。',
+      input_schema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', description: '品項名稱' },
+          category_name: { type: 'string', description: '分類名稱,須為目前資料中已存在的分類' },
+          note: { type: 'string', description: '備註' },
+          scope: { type: 'string', enum: ['trip', 'general'], description: '歸屬,省略預設 trip(目前行程)' },
+        },
+        required: ['name'],
+      },
+    },
   ];
 }
 
@@ -396,6 +462,7 @@ interface ToolCtx {
     spotTypesByName: Map<string, any>;
     spotSubtypesByName: Map<string, any>;
     tripDayIdByNumber: Map<number, any>;
+    categoryIdByName: Map<string, any>;
   };
 }
 
@@ -412,6 +479,14 @@ async function executeTool(name: string, input: any, ctx: ToolCtx): Promise<{ su
         return await toolReorderDaySpots(ctx, input);
       case 'add_transport_route':
         return await toolAddTransportRoute(ctx, input);
+      case 'delete_spot':
+        return await toolDeleteSpot(ctx, input);
+      case 'toggle_wishlist':
+        return await toolToggleWishlist(ctx, input);
+      case 'update_wishlist_quantity':
+        return await toolUpdateWishlistQuantity(ctx, input);
+      case 'add_japan_item':
+        return await toolAddJapanItem(ctx, input);
       default:
         return { success: false, error: `未知工具:${name}` };
     }
@@ -676,4 +751,109 @@ async function toolAddTransportRoute(ctx: ToolCtx, input: any) {
   if (!data || data.length === 0) return { success: false, error: '新增交通方式失敗(0 筆受影響)' };
 
   return { success: true, message: `已新增「${origin.name}」到「${dest.name}」的交通方式(${mode})` };
+}
+
+async function toolDeleteSpot(ctx: ToolCtx, input: any) {
+  const { supabase, tripId } = ctx;
+  const spotId = input.spot_id ? String(input.spot_id) : '';
+  if (!spotId) return { success: false, error: 'spot_id 為必填' };
+
+  const { data: existingSpot, error: fetchError } = await supabase
+    .from('spots')
+    .select('id, trip_id, name')
+    .eq('id', spotId)
+    .maybeSingle();
+  if (fetchError) return { success: false, error: fetchError.message };
+  if (!existingSpot || String(existingSpot.trip_id) !== String(tripId)) {
+    return { success: false, error: '找不到此景點,或此景點不屬於目前行程' };
+  }
+
+  const { data, error } = await supabase.from('spots').delete().eq('id', spotId).select();
+  if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) return { success: false, error: '刪除失敗,沒有權限或資料不存在(0 筆受影響)' };
+
+  return { success: true, message: `已刪除景點「${existingSpot.name}」,若為誤刪需手動重建` };
+}
+
+async function toolToggleWishlist(ctx: ToolCtx, input: any) {
+  const { supabase } = ctx;
+  const itemId = input.item_id ? String(input.item_id) : '';
+  if (!itemId) return { success: false, error: 'item_id 為必填' };
+  if (typeof input.wishlist !== 'boolean') return { success: false, error: 'wishlist 為必填且須為布林值' };
+
+  const { data: existingItem, error: fetchError } = await supabase
+    .from('japan_items')
+    .select('id, name')
+    .eq('id', itemId)
+    .maybeSingle();
+  if (fetchError) return { success: false, error: fetchError.message };
+  if (!existingItem) return { success: false, error: '找不到此收藏品項' };
+
+  const { data, error } = await supabase
+    .from('japan_items')
+    .update({ owner_wishlist: input.wishlist, owner_quantity: 1 })
+    .eq('id', itemId)
+    .select();
+  if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) return { success: false, error: '更新失敗,沒有權限或資料不存在(0 筆受影響)' };
+
+  return {
+    success: true,
+    message: input.wishlist
+      ? `已將「${existingItem.name}」加入願望清單(數量重設為 1)`
+      : `已將「${existingItem.name}」從願望清單移除`,
+  };
+}
+
+async function toolUpdateWishlistQuantity(ctx: ToolCtx, input: any) {
+  const { supabase } = ctx;
+  const itemId = input.item_id ? String(input.item_id) : '';
+  const quantity = Number(input.quantity);
+  if (!itemId) return { success: false, error: 'item_id 為必填' };
+  if (!Number.isInteger(quantity) || quantity < 1) return { success: false, error: 'quantity 必須是至少為 1 的整數' };
+
+  const { data: existingItem, error: fetchError } = await supabase
+    .from('japan_items')
+    .select('id, name')
+    .eq('id', itemId)
+    .maybeSingle();
+  if (fetchError) return { success: false, error: fetchError.message };
+  if (!existingItem) return { success: false, error: '找不到此收藏品項' };
+
+  const { data, error } = await supabase
+    .from('japan_items')
+    .update({ owner_quantity: quantity })
+    .eq('id', itemId)
+    .select();
+  if (error) return { success: false, error: error.message };
+  if (!data || data.length === 0) return { success: false, error: '更新失敗,沒有權限或資料不存在(0 筆受影響)' };
+
+  return { success: true, message: `已將「${existingItem.name}」的願望數量調整為 ${quantity}` };
+}
+
+async function toolAddJapanItem(ctx: ToolCtx, input: any) {
+  const { supabase, tripId, lookups } = ctx;
+  const name = String(input.name || '').trim();
+  if (!name) return { success: false, error: 'name 為必填' };
+
+  const categoryId = input.category_name ? lookups.categoryIdByName.get(input.category_name) ?? null : null;
+  const scope = input.scope === 'general' ? 'general' : 'trip';
+  const itemTripId = scope === 'trip' ? tripId : null;
+
+  const payload = {
+    name,
+    note: input.note || null,
+    image_url: null,
+    category_id: categoryId,
+    trip_id: itemTripId,
+  };
+
+  const { data, error } = await supabase.from('japan_items').insert([payload]).select().single();
+  if (error || !data) return { success: false, error: '新增收藏品項失敗:' + (error?.message || '未知錯誤') };
+
+  return {
+    success: true,
+    item_id: data.id,
+    message: `已新增收藏品項「${name}」(${scope === 'trip' ? '歸屬目前行程' : '一般收藏'})`,
+  };
 }
