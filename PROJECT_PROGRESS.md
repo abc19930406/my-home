@@ -105,7 +105,7 @@
 
 ---
 
-### 🔶 /trip 整合頁面（階段 1、2、3、4、5、6、7、8 已完成，階段 2.5 有未解決問題待釐清，階段 9 未開始）
+### 🔶 /trip 整合頁面（階段 1、2、3、4、5、6、7、8 已完成，階段 9 第一個任務完成待實測，階段 2.5 有未解決問題待釐清，階段 9 其餘清理項目未開始）
 
 將 `/travel` 與 `/japan` 整合為單一頁面 `/trip`，含 Desktop/Mobile 雙版面、AI 助手分頁（唯讀版 ✅ 已上線，V2 階段 7；寫入工具規劃中，階段 8）、協作者權限系統（✅ 已全數落實，V2 階段 4）。詳細架構規劃見 **PROJECT_ARCHITECTURE_V2.md**。
 
@@ -614,6 +614,30 @@
 
 ---
 
+### 🔶 V2 階段 9 第一個任務：/japan、/travel 正式退役（2026-07-13，程式碼已完成，待使用者實測）
+
+- **前提**：使用者已明確確認 `/japan`、`/travel` 功能已全數遷移至 `/trip` 並穩定運行多個階段（V2 階段 1-8），同意正式退役
+- **`astro.config.mjs`**：新增 `redirects: { '/japan': '/trip', '/travel': '/trip' }`，字串簡寫預設 301 永久轉址
+- **封存**：`src/pages/japan.astro`、`src/pages/travel.astro` 以 `git mv` 搬移至 `src/_archived/`（不刪除，保留至階段 9 收尾批次）；因 `src/_archived/` 與 `src/pages/` 同層，檔案內既有的 `../layouts/`、`../lib/`、`../styles/` 相對路徑深度不變，未修改任何 import；frontmatter 開頭加封存說明註解
+- **連結盤點**：全站 grep `/japan`、`/travel` 後，唯一需要更新的活連結是 `src/components/CardSection.astro` 首頁「旅行地圖」卡片子選單（第 67-69 行），把 `href="/travel"`、`href="/japan"` 改成 `href="/trip"`；其餘出現的字串皆是兩個封存檔**自己內部**的邏輯（OAuth `redirectTo`、登入 `from` 參數），封存後不再是路由、屬死碼，未修改
+- ⚠️ **副作用告知**：改完後首頁子選單三個連結全部導向同一個 `/trip`（僅文字標籤不同），是忠實執行「連結改指 /trip」的必然結果；選單本身瘦身（例如砍成一個連結）屬介面重新設計，不在本次範圍，留待後續清理批次評估
+- **本地驗證**：`astro check` 無新增錯誤（封存檔沿用原有既存警告，非新增）；`curl` 確認 `http://localhost:4321/japan`、`/travel` 皆回 301 且 `location: /trip`；瀏覽器確認首頁子選單三個連結皆為 `/trip`；`/trip` 本身功能不受影響
+- **文件同步**：`CLAUDE.md` 的「凍結頁面」規則改寫為退役說明；`PROJECT_ARCHITECTURE.md` 目錄結構圖同步移除 `japan.astro`/`travel.astro` 於 `src/pages/` 的條目、新增 `src/_archived/` 區塊（順帶補上先前遺漏的 `ai-assistant.ts`/`AiAssistant.astro` 條目）
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| 型別檢查無新增錯誤 | `astro check` | ✅ |
+| 本機 `/japan`、`/travel` 皆 301 轉址 `/trip` | `astro.config.mjs` redirects | ✅（本機 curl 驗證） |
+| 首頁子選單三個連結皆為 `/trip` | `CardSection.astro` href 更新 | ✅（本機瀏覽器驗證） |
+| `/trip` 本身功能不受影響 | 轉址設定不影響既有路由 | ✅（本機瀏覽器驗證） |
+| a. 正式站 `/japan`、`/travel` 網址轉址（登入、未登入各一次） | Vercel 部署後實測 | ⏳ 待使用者實測 |
+| b. 首頁各處入口點擊皆到 `/trip`，全站無殘留舊連結 | 同上 | ⏳ 待使用者實測 |
+| c. `/trip` 全功能抽測正常 | 同上 | ⏳ 待使用者實測 |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
@@ -622,7 +646,7 @@
 2. ~~**交通查詢子分頁**：`spot_transport_routes` 表 + 行程內嵌交通方式 UI（M2）~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 6 任務一」「V2 階段 6 任務二」；剩餘：AI 輔助搜尋（遞延階段 7-8）
 ~~3. **協作者權限系統**：`trip_collaborators` 表 + 雙開關權限（can_edit_wishlist / can_edit_itinerary）+ Sandbox 模式~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 4」相關章節
 3. ~~**AI 助手分頁**：`/api/ai-assistant` Serverless API，讀取行程/收藏資料回答問題 + tool use 寫入功能（add_spot / assign_spot_to_day / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 7」「V2 階段 8 第一批」「V2 階段 8 第二批」
-4. **舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan
+4. ~~**舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan~~ **🔶 2026-07-13 已執行退役(V2 階段 9 第一個任務)**：原網址 301 轉址 /trip、檔案封存 src/_archived/ 不刪除,詳見上方「V2 階段 9」;a-c 瀏覽器實測待你操作
 5. **程式碼清理階段**（獨立規劃，待全部功能穩定後執行）：統一 Modal 開關/CSS class 命名規則、移除殘留冗餘邏輯
 
 ### 其他規劃中功能

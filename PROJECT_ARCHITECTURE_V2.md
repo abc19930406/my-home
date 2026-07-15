@@ -20,7 +20,7 @@
 整合後：
 - 管理員（你）：完整功能，包含 AI 助手
 - 協作者（朋友/家人）：依各行程個別授權的權限，使用簡化版功能
-- `/japan`、`/travel` 兩個現有頁面是否下線，待 `/trip` 全面穩定後評估
+- ✅ `/japan`、`/travel` 已於 2026-07-13（V2 階段 9）正式退役並轉址至 `/trip`，詳見第八節階段 9
 
 ### 1.2 命名
 
@@ -306,7 +306,7 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | 6 | 交通查詢子分頁：spot_transport_routes、行程內嵌交通方式 UI | ✅ 已完成（任務一：spot_transport_routes 建表 + 交通查詢子分頁 2026-07-13；任務二：行程內嵌交通方式 UI，M2 2026-07-13） |
 | 7 | AI 助手（只讀）：/api/ai-assistant，讀取行程/收藏資料並回答問題 | ✅ 已完成（2026-07-13） |
 | 8 | AI 工具逐個開放：add_spot、toggle_wishlist 等寫入工具 | ✅ 已完成（2026-07-13）：第一批行程類五工具（含補丁 assign_spot_to_day）+ 第二批收藏類三工具與 delete_spot，皆驗收通過 |
-| 9 | 程式碼清理與重構：統一 Modal/CSS 命名規則、評估舊頁面下線 | 📋 待開始（待功能全部穩定後執行） |
+| 9 | 程式碼清理與重構：統一 Modal/CSS 命名規則、評估舊頁面下線 | 🔶 第一個任務（/japan、/travel 正式退役+轉址）✅ 已完成（2026-07-13）；統一 Modal/CSS 命名規則等其餘清理項目待開始 |
 
 > 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 三個任務、階段 5 兩個任務、階段 6 兩個任務、階段 7 的實作記錄與驗收對照表，見 PROJECT_PROGRESS.md「V2 階段 4」「V2 階段 5」「V2 階段 6」「V2 階段 7」對應章節。
 

@@ -47,16 +47,19 @@ my-home/
 │   │   │   └── index.astro      # 語錄收藏（prerender = true）
 │   │   ├── polaroid.astro       # 底片日記（prerender = true）
 │   │   ├── ledger.astro         # 記帳系統（prerender = true）
-│   │   ├── japan.astro          # 日本收藏（舊頁面，核心邏輯已搬移至 JapanCollection.astro）
-│   │   ├── travel.astro         # 旅行地圖（舊頁面，核心邏輯已搬移至 TripPlanner.astro）
 │   │   ├── trip.astro           # 🆕 整合頁面（行程+收藏+AI），Supabase 單一入口
 │   │   └── api/
 │   │       ├── explore.ts       # 探索日本 Serverless（prerender = false）
 │   │       ├── exchange-rate.ts # 匯率 API（prerender = false）
-│   │       └── trigger-deploy.ts # 觸發重新部署（prerender = false，驗證管理員後代呼叫 Deploy Hook）
+│   │       ├── trigger-deploy.ts # 觸發重新部署（prerender = false，驗證管理員後代呼叫 Deploy Hook）
+│   │       └── ai-assistant.ts  # AI 助手唯讀查詢 + 寫入工具（prerender = false，V2 階段 7-8）
+│   ├── _archived/                # 已封存、不再參與路由（V2 階段 9，不得修改或復用）
+│   │   ├── japan.astro          # 舊日本收藏頁，原網址已 301 導向 /trip
+│   │   └── travel.astro         # 舊旅行地圖頁，原網址已 301 導向 /trip
 │   ├── components/
-│   │   ├── TripPlanner.astro    # 🆕 行程地圖/每日行程元件（從 travel.astro 搬移，被 trip.astro 引用）
-│   │   └── JapanCollection.astro # 🆕 日本收藏元件（從 japan.astro 搬移，被 trip.astro 引用）
+│   │   ├── TripPlanner.astro    # 行程地圖/每日行程元件（原從 travel.astro 搬移，被 trip.astro 引用）
+│   │   ├── JapanCollection.astro # 日本收藏元件（原從 japan.astro 搬移，被 trip.astro 引用）
+│   │   └── AiAssistant.astro    # AI 助手對話 UI（被 trip.astro 引用，V2 階段 7）
 │   ├── layouts/
 │   │   └── Layout.astro         # 共用 Layout（含 Supabase CDN 注入）
 │   ├── styles/
@@ -64,7 +67,7 @@ my-home/
 │   │   └── travel.css           # .travel-modal-overlay 等 travel- 前綴 class
 │   └── data/
 │       └── links.ts             # 首頁卡片資料
-├── astro.config.mjs             # 含 Vite plugin 移除 modulepreload + optimizeDeps exclude
+├── astro.config.mjs             # 含 Vite plugin 移除 modulepreload + optimizeDeps exclude、/japan+/travel redirects
 ├── .env                         # 本地環境變數（git ignore）
 └── package.json
 ```
