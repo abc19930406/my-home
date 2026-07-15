@@ -689,6 +689,29 @@
 | SDK 版本與先前凍結的 CDN 版本一致（2.110.2） | Fable 覆核發現版本落差後修復 | ✅（commit `11234f1`） |
 | 正式站登入實測（DevTools 全程關閉，對照歷史觸發條件） | 使用者操作 | ✅ 使用者實測通過 |
 
+#### 🔶 第二波：其餘頁面轉為 npm 匯入（進行中，本輪範圍）
+
+- **全域盤點結果（與任務原先預期清單有出入）**：Grep 全站 `window._supabaseCreateClient`/`supabase-ready`/`waitForSupabase` 後，真正消費 CDN 就緒信號的頁面只有 4 個：`Welcome.astro`（首頁）、`admin.astro`、`ledger.astro`、`polaroid.astro`；`src/_archived/` 內的封存檔依規則跳過
+- **重要發現**：`posts/[id].astro`、`posts/index.astro`、`quotes/index.astro` 完全沒有出現在盤點結果——查證後這三個頁面（含 client-side script）本來就直接 `import { supabase } from '../../lib/supabase-client'`（SSR 端既有模組），從來沒有走過 CDN，不在本次遷移範圍內，任務原先列的「posts/[id]」是誤植，本波不動這三個檔案
+- **轉換模式**：4 個檔案皆為單一 `<script define:vars={{ supabaseUrl, supabaseAnonKey[, adminEmail] }}>` 標籤、內含該頁全部 client-side 邏輯；移除 `define:vars` 屬性（變成一般 script，經 Vite 打包）、script 內加 `import { getSupabaseBrowserClient } from '../lib/supabase-browser.js'`、移除 CDN 等待邏輯改呼叫 `getSupabaseBrowserClient()`；`ledger.astro` 的 `adminEmail` 改直讀 `import.meta.env.PUBLIC_ADMIN_EMAIL`；其餘業務邏輯一行不動
+- 每個檔案獨立 commit，四個都完成後送 Fable 覆核，通過才請使用者於 DevTools 全程關閉狀態下逐頁實測登入相關功能
+
+- **實作完成（commit `cedc22d` Welcome.astro、`c67eec7` admin.astro、`6b0f779` ledger.astro、`3dd4150` polaroid.astro）**：四個檔案皆為單一 `define:vars` script 內含全部業務邏輯的結構；轉換手法與盤點時預期一致，`ledger.astro` 的 `adminEmail` 改直讀 `import.meta.env.PUBLIC_ADMIN_EMAIL ?? ''`。每個檔案本機皆驗證：`astro check` 無新增錯誤、瀏覽器無 console 錯誤、頁面行為與改動前一致（首頁狀態小工具正常渲染、`/admin` 未登入正確顯示登入表單、`/ledger` 未登入正確導向 `/login?from=/ledger`、`/polaroid` 正常渲染）
+- **Fable 覆核（涵蓋四個 commit，2026-07-13）**：七項檢查（機械性、業務邏輯逐行比對、無殘留參照、`ledger.astro` 的 `adminEmail` 讀取方式、跨頁全域變數依賴排查、相對路徑正確性、`astro build` 產出檢查）**全數 PASS**；額外確認這四個頁面都不依賴 `window.__ADMIN_EMAIL__`/`__SUPABASE_URL__`/`__SUPABASE_ANON_KEY__`（那是 trip.astro/JapanCollection.astro 專用的橋接，彼此獨立無交叉依賴）
+  - **非阻塞性觀察（記錄供第三波參考，不需現在處理）**：目前全站（除 `src/_archived/` 內的封存頁）已沒有任何頁面消費 `window._supabaseCreateClient`，`Layout.astro` 的 CDN 注入變成純粹的多餘流量，預期第三波拆除後消失；`src/lib/supabase-client.ts`（SSR/`login.astro`/`posts`/`quotes` 用）與新的 `src/lib/supabase-browser.js` 是兩支獨立的 client 單例，目前沒有任何頁面兩者都用，暫不需要合併，留待未來評估
+- **整體結論**：安全，可進行四個頁面的正式站登入實測
+
+#### 自我驗收對照表（第二波）
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| 全域盤點完成，確認實際只有 4 個頁面消費 CDN | grep 全站 | ✅ |
+| 四個檔案 diff 皆只觸碰載入機制，業務邏輯逐行比對一致 | Fable 覆核（見上） | ✅ |
+| 型別檢查無新增錯誤 | `astro check` × 4 | ✅ |
+| 本機瀏覽器驗證四頁皆無 console 錯誤、既有行為不變 | 本機驗證 | ✅ |
+| 四頁皆不依賴 trip.astro 專用的 `window.__ADMIN_EMAIL__` 等全域變數 | Fable 覆核 | ✅ |
+| 正式站四頁登入相關功能實測（DevTools 全程關閉） | 待使用者操作 | ⏳ 待使用者實測 |
+
 ---
 
 ## 二、規劃中功能（尚未開始）
