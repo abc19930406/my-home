@@ -2,10 +2,6 @@
 export const prerender = true;
 import Layout from '../layouts/Layout.astro';
 import '../styles/ledger.css';
-
-const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
-const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
 ---
 
 <Layout title="記帳系統 | The Corner Table">
@@ -182,15 +178,13 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
   <div id="toast" class="toast"></div>
 </Layout>
 
-<script define:vars={{ supabaseUrl, supabaseAnonKey, adminEmail }}>
+<script>
+import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
+
+const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
+
 (async () => {
-  const waitForSupabase = () => new Promise(resolve => {
-    if (window._supabaseCreateClient) return resolve();
-    window.addEventListener('supabase-ready', resolve, { once: true });
-  });
-  await waitForSupabase();
-  const createClient = window._supabaseCreateClient;
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const supabase = getSupabaseBrowserClient();
 
   // 1. 權限保護
   const { data: { session } } = await supabase.auth.getSession();
