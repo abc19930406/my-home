@@ -105,7 +105,7 @@
 
 ---
 
-### 🔶 /trip 整合頁面（階段 1、2、3、4、5、6、7、8 已完成，階段 9 第一個任務完成待實測，階段 2.5 有未解決問題待釐清，階段 9 其餘清理項目未開始）
+### 🔶 /trip 整合頁面（階段 1、2、3、4、5、6、7、8、9 第一個任務已完成，階段 2.5 有未解決問題待釐清，階段 9 其餘清理項目未開始）
 
 將 `/travel` 與 `/japan` 整合為單一頁面 `/trip`，含 Desktop/Mobile 雙版面、AI 助手分頁（唯讀版 ✅ 已上線，V2 階段 7；寫入工具規劃中，階段 8）、協作者權限系統（✅ 已全數落實，V2 階段 4）。詳細架構規劃見 **PROJECT_ARCHITECTURE_V2.md**。
 
@@ -614,7 +614,7 @@
 
 ---
 
-### 🔶 V2 階段 9 第一個任務：/japan、/travel 正式退役（2026-07-13，程式碼已完成，待使用者實測）
+### ✅ V2 階段 9 第一個任務：/japan、/travel 正式退役（2026-07-13，已結案）
 
 - **前提**：使用者已明確確認 `/japan`、`/travel` 功能已全數遷移至 `/trip` 並穩定運行多個階段（V2 階段 1-8），同意正式退役
 - **`astro.config.mjs`**：新增 `redirects: { '/japan': '/trip', '/travel': '/trip' }`，字串簡寫預設 301 永久轉址
@@ -632,9 +632,9 @@
 | 本機 `/japan`、`/travel` 皆 301 轉址 `/trip` | `astro.config.mjs` redirects | ✅（本機 curl 驗證） |
 | 首頁子選單三個連結皆為 `/trip` | `CardSection.astro` href 更新 | ✅（本機瀏覽器驗證） |
 | `/trip` 本身功能不受影響 | 轉址設定不影響既有路由 | ✅（本機瀏覽器驗證） |
-| a. 正式站 `/japan`、`/travel` 網址轉址（登入、未登入各一次） | Vercel 部署後實測 | ⏳ 待使用者實測 |
-| b. 首頁各處入口點擊皆到 `/trip`，全站無殘留舊連結 | 同上 | ⏳ 待使用者實測 |
-| c. `/trip` 全功能抽測正常 | 同上 | ⏳ 待使用者實測 |
+| a. 正式站 `/japan`、`/travel` 網址轉址（登入、未登入各一次） | Vercel 部署後實測 | ✅ 使用者實測通過 |
+| b. 首頁各處入口點擊皆到 `/trip`，全站無殘留舊連結 | 同上 | ✅ 使用者實測通過 |
+| c. `/trip` 全功能抽測正常 | 同上 | ✅ 使用者實測通過 |
 
 ---
 
@@ -646,7 +646,7 @@
 2. ~~**交通查詢子分頁**：`spot_transport_routes` 表 + 行程內嵌交通方式 UI（M2）~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 6 任務一」「V2 階段 6 任務二」；剩餘：AI 輔助搜尋（遞延階段 7-8）
 ~~3. **協作者權限系統**：`trip_collaborators` 表 + 雙開關權限（can_edit_wishlist / can_edit_itinerary）+ Sandbox 模式~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 4」相關章節
 3. ~~**AI 助手分頁**：`/api/ai-assistant` Serverless API，讀取行程/收藏資料回答問題 + tool use 寫入功能（add_spot / assign_spot_to_day / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 7」「V2 階段 8 第一批」「V2 階段 8 第二批」
-4. ~~**舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan~~ **🔶 2026-07-13 已執行退役(V2 階段 9 第一個任務)**：原網址 301 轉址 /trip、檔案封存 src/_archived/ 不刪除,詳見上方「V2 階段 9」;a-c 瀏覽器實測待你操作
+4. ~~**舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan~~ **✅ 2026-07-13 已執行退役,a-c 驗收項目全數通過**(V2 階段 9 第一個任務):原網址 301 轉址 /trip、檔案封存 src/_archived/ 不刪除,詳見上方「V2 階段 9」
 5. **程式碼清理階段**（獨立規劃，待全部功能穩定後執行）：統一 Modal 開關/CSS class 命名規則、移除殘留冗餘邏輯
 
 ### 其他規劃中功能
