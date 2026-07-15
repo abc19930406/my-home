@@ -712,6 +712,38 @@
 | 四頁皆不依賴 trip.astro 專用的 `window.__ADMIN_EMAIL__` 等全域變數 | Fable 覆核 | ✅ |
 | 正式站四頁登入相關功能實測（DevTools 全程關閉） | 使用者操作 | ✅ 使用者實測通過 |
 
+#### 🔶 第三波：拆除 CDN 基礎設施（進行中，本輪範圍，風險最高的一波）
+
+- **範圍**：`Layout.astro` 的 CDN 注入 `<script is:inline>`、`astro.config.mjs` 的 `remove-modulepreload` plugin 與 `optimizeDeps.exclude`、`TripPlanner.astro`/`JapanCollection.astro` 兩個 `/trip` 子元件內殘留的 `waitForSharedSupabase` 輪詢
+- **關鍵發現（影響拆分方式）**：`TripPlanner.astro` 第 875 行讀 `window.__ADMIN_EMAIL__`，但這個值從未由 `TripPlanner.astro` 自己的 `define:vars` 提供，完全依賴 `JapanCollection.astro` 的橋接先執行過——這是遷移前就存在的脆弱跨元件全域變數耦合（第一波 Fable 覆核已預先示警）。若只改 `JapanCollection.astro` 拿掉橋接，`TripPlanner.astro` 的管理員判斷會靜默壞掉。**兩個檔案必須同一個 commit 一起修**，`TripPlanner.astro` 順勢改為直接讀 `import.meta.env.PUBLIC_ADMIN_EMAIL`，徹底擺脫這個依賴
+- **另一發現**：兩個檔案的 `define:vars` 內都夾帶 `supabaseUrl`/`supabaseAnonKey`，但兩者在各自的業務邏輯裡從未被實際使用（死變數，推測是更早期直接 `createClient` 寫法留下的殘骸），移除時一併清掉
+- **決策**：`vite.build.modulePreload` 設定與 `trip.astro` 本身的 `window.sharedSupabase = ...` 賦值本波皆不動，降低風險、避免擴大範圍
+- **提交拆分**：Commit 1（`Layout.astro` + `astro.config.mjs`）、Commit 2（`JapanCollection.astro` + `TripPlanner.astro`，因上述耦合必須同批）
+
+- **實作完成**：
+  - **Commit `ef5c436`**：`Layout.astro` 刪除 CDN 注入 `<script is:inline>`（與同檔案的 SW 清除、下拉重新整理兩段腳本無關，未受影響）；`astro.config.mjs` 移除 `remove-modulepreload` plugin 與 `optimizeDeps.exclude`，`vite.build.modulePreload` 保留不動
+  - **Commit `b9bcde6`**：`JapanCollection.astro`/`TripPlanner.astro` 移除 `define:vars`/`is:inline`，改直接 `import getSupabaseBrowserClient`；修復跨檔案耦合——`TripPlanner.astro` 原本讀 `window.__ADMIN_EMAIL__` 但自己從未設定過這個全域變數，完全依賴 `JapanCollection.astro` 的橋接先執行過（第一波 Fable 覆核已預先示警），兩檔案改為各自獨立讀 `import.meta.env.PUBLIC_ADMIN_EMAIL`，徹底解除依賴；兩檔案內未使用的死變數 `supabaseUrl`/`supabaseAnonKey` 一併移除；`TripPlanner.astro` 的 `mapsKey` 同步改直讀 `import.meta.env.PUBLIC_GOOGLE_MAPS_KEY`
+  - 本機驗證：`astro check` 無新增錯誤；`/trip` 行程與收藏兩分頁資料正常抓取、Google Maps 正常初始化、無 console 錯誤、無 CDN 請求
+- **Fable 覆核（涵蓋兩個 commit，2026-07-13）**：七項檢查**全數 PASS**，額外做了 `astro build` 產出檢查確認 `trip.astro`/`TripPlanner`/`JapanCollection` 三者都 import 同一個 `supabase-browser` chunk（共用同一個 client 單例，無多實例風險）；`auth-state-changed`/`__latestAuthState` 事件機制逐行比對位置與內容完全一致，且因為 `waitForSharedSupabase` 這個唯一的前置 `await` 被移除，監聽器綁定時機反而變得比之前更早（race condition 防護只有變強，沒有變弱）
+- **Fable 提出的非阻塞觀察**：
+  1. `trip.astro` 第 128 行 `window.sharedSupabase = getSupabaseBrowserClient();` 目前已無任何讀者（死賦值），留待第四波或未來清理批次移除
+  2. `src/pages/quotes/index.astro` 仍有一組**自成一體**的 `window.__ADMIN_EMAIL__` 橋接（設定與讀取都在同一檔案內，走既有的 `supabase-client.ts`，從未依賴本次移除的 CDN 注入），不在本波範圍，非阻塞
+  3. **文件同步的時機提醒**：Fable 指出 `CLAUDE.md`、`PROJECT_ARCHITECTURE.md` 目前仍描述已被本波刪除的 CDN 注入機制與規則（例如 `CLAUDE.md` 的「不可改為直接 import CDN URL」硬性規則）。這是刻意的——任務設計把「文件改寫為 npm 架構說明」明確排在第四波（浸泡一至兩週確認穩定後），現在改寫言之過早；但為避免浸泡期間有人依賴這些已經過時的規則做出錯誤判斷，待與使用者確認是否需要在第四波之前先做「不算數的過渡性澄清」（不改變規則本身，只加註記說明目前正在遷移中、機制已變更）
+- **整體結論**：安全，可進行**全站**登入回歸測試（每一頁、三種身分）
+
+#### 自我驗收對照表（第三波）
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| 全站無殘留 CDN 消費點（`window._supabaseCreateClient`/`supabase-ready`） | Fable 覆核 grep 全站 | ✅ |
+| `Layout.astro` 刪除範圍精確，未動到 SW 清除/下拉重新整理 | Fable 覆核 | ✅ |
+| `adminEmail` 跨檔案耦合修復正確，兩處比對邏輯不變 | Fable 覆核 | ✅ |
+| 業務邏輯逐行比對完全一致 | Fable 覆核（含 diff 逐行核對） | ✅ |
+| 死變數（`supabaseUrl`/`supabaseAnonKey`）確認真的未使用 | Fable 覆核 | ✅ |
+| `auth-state-changed`/`__latestAuthState` 事件機制位置與內容不變 | Fable 覆核 | ✅ |
+| `astro build` 產出檢查（含三元件共用同一 client 單例） | Fable 覆核 | ✅ |
+| 全站登入回歸測試（每一頁、三種身分，DevTools 全程關閉） | 待使用者操作 | ⏳ 待使用者實測 |
+
 ---
 
 ## 二、規劃中功能（尚未開始）
