@@ -1688,6 +1688,33 @@ body.modal-open {
   color: var(--travel-primary);
 }
 
+.subway-map-admin-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+}
+
+.subway-map-admin-actions button {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: none;
+  background-color: rgba(255, 255, 255, 0.92);
+  color: var(--travel-text);
+  box-shadow: var(--travel-shadow-sm);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+}
+
+.subway-map-admin-actions button:hover {
+  background-color: #fff;
+  color: var(--travel-primary);
+}
+
 .subway-category-row {
   display: flex;
   align-items: center;

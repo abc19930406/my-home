@@ -2420,6 +2420,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           <div class="subway-images-row">
             ${grouped[category].map(m => `
               <div class="subway-map-thumb-wrap">
+                <div class="subway-map-admin-actions admin-only" style="display: none;">
+                  <button type="button" class="btn-subway-map-delete" data-id="${m.id}" title="刪除"><i class="ti ti-trash"></i></button>
+                </div>
                 <img src="${m.image_url}" alt="${m.title}" class="subway-map-thumb" data-src="${m.image_url}" title="${m.title}" loading="lazy" />
                 ${m.external_url ? `<a href="${m.external_url}" target="_blank" rel="noopener noreferrer" class="subway-map-link" title="開啟原始連結"><i class="ti ti-external-link"></i></a>` : ''}
               </div>
@@ -2438,6 +2441,34 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
             lightbox.style.display = 'flex';
             document.body.classList.add('modal-open');
           }
+        });
+      });
+
+      // 管理員專屬：刪除地鐵圖（比照 renderCoupons 的刪除模式）
+      container.querySelectorAll('.btn-subway-map-delete').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const id = btn.dataset.id;
+          if (!confirm('確定要刪除這張地鐵圖嗎？')) return;
+
+          const { data, error } = await supabase
+            .from('travel_subway_maps')
+            .delete()
+            .eq('id', id)
+            .select();
+
+          if (error) {
+            alert('刪除失敗：' + error.message);
+            return;
+          }
+          if (!data || data.length === 0) {
+            alert('刪除失敗：沒有權限或資料不存在');
+            return;
+          }
+          subwayMapsCache = subwayMapsCache.filter(m => String(m.id) !== String(id));
+          renderSubwayGroups();
+          showToast('地鐵圖已刪除');
+          triggerBuildWebhook();
         });
       });
     }
