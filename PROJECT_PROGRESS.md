@@ -105,7 +105,7 @@
 
 ---
 
-### 🔶 /trip 整合頁面（階段 1、2、3、4、5、6、7、8、9 第一個任務已完成，階段 2.5 有未解決問題待釐清，階段 9 其餘清理項目未開始）
+### 🔶 /trip 整合頁面（階段 1-8 已完成，階段 9：舊頁面退役+npm 遷移+O3 清理皆已完成，僅餘 Heisenbug 診斷碼移除待浸泡期滿；階段 2.5 有未解決問題待釐清）
 
 將 `/travel` 與 `/japan` 整合為單一頁面 `/trip`，含 Desktop/Mobile 雙版面、AI 助手分頁（唯讀版 ✅ 已上線，V2 階段 7；寫入工具規劃中，階段 8）、協作者權限系統（✅ 已全數落實，V2 階段 4）。詳細架構規劃見 **PROJECT_ARCHITECTURE_V2.md**。
 
@@ -769,6 +769,36 @@
 
 ---
 
+### 🔶 V2 階段 9 最終任務（O3）：清空歷史遺留（進行中，浸泡期間執行）
+
+- **範圍調整聲明**：使用者下達任務時指示調整：「Heisenbug 診斷碼移除」與「Heisenbug 案結案記錄」本輪不做（浸泡期未滿），留待浸泡期滿（一至兩週）後以獨立小任務處理；其餘項目全部執行。本輪結束後 V2 階段表第 9 列標記為 🔶（僅餘浸泡期收尾）而非全 ✅
+- **檔案刪除批次（commit `d63ceaf`，使用者逐項核准後執行）**：
+  - `src/_archived/japan.astro`、`travel.astro`（已退役頁面，原網址已 301 轉址 `/trip`）
+  - `PROJECT_NOTES.md`（自行標註已於 2026-07 廢棄的舊版說明書）
+  - 根目錄 9 個除錯遺留：`check-console.cjs`、`check-dom.cjs`、`check-duplicates.cjs`、`check-mutations.cjs`、`verify-css-fix.cjs`、`verify-modals.cjs`、`dev_server.log`、`dev_server2.log`、`dev_server3.log`
+  - 額外發現並經使用者確認一併清除：`test_diagnose.js`（同類除錯 stub，命名不符原清單規則）、`.CLAUDE.md.swp`（未追蹤的 vim 暫存檔）
+  - `.gitignore` 補上 `*.log`，避免未來再度誤入版控
+  - 本機驗證：`astro check` 無新增錯誤；`/trip`、`/japan`（轉址）皆正常運作無 console 錯誤
+- **資料庫遺留欄位（讀寫皆由使用者於 Supabase 執行，不可逆操作慣例）**：
+  - 程式碼面已確認 `spots.category`/`spots.icon`（被 `spot_type_id`/`spot_subtype_id` 取代）、`travel_subway_maps.trip_id`（被 `trip_subway_categories` 取代）全站皆無讀寫引用
+  - 提供唯讀確認 SQL（`GROUP BY` 確認資料分佈）與刪除欄位 SQL（`ALTER TABLE ... DROP COLUMN`），待使用者確認資料庫端現況並執行
+  - （本節將於使用者回報執行結果後補上結果）
+- **Modal/CSS 命名稽核（commit `8d713f9`）**：CLAUDE.md 的前綴隔離規則限定「多元件共存頁面」，全站只有 `/trip`（`TripPlanner.astro`+`JapanCollection.astro`）符合。盤點結果：容器層級已正確做前綴隔離；內層按鈕/標題 ID 本身沒有前綴，但目前彼此巧合不重複、無實際衝突；`JapanCollection.astro` 內部發現一處不一致——`item-modal` 的關閉按鈕用泛用 ID `btn-modal-close`，同檔案的 `collect-modal` 卻有專屬的 `btn-collect-modal-close`。已改為 `btn-item-modal-close`（比照既有慣例），同步更新對應 `getElementById` 呼叫點。**刻意不做**全站 Modal ID 大規模重新命名（`TripPlanner.astro`/`JapanCollection.astro` 皆為高風險大檔案，目前無實際衝突，重新命名的手滑風險大於預防性補前綴的效益），若未來需要全面補齊前綴另立任務處理
+- **明確排除本輪**：`[DEBUG-HEISENBUG]` 診斷碼與 Heisenbug 案結案記錄（浸泡期未滿）
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| 檔案刪除清單經使用者逐項核准 | 本輪文件呈現的清單 | ✅ |
+| 檔案刪除後型別檢查與 `/trip`/`/japan` 功能正常 | 本機驗證 | ✅ |
+| 資料庫遺留欄位程式碼面確認無引用 | grep 全站 | ✅ |
+| 資料庫欄位刪除 SQL 已提供，待使用者執行 | 唯讀確認 SQL + 刪除 SQL | ⏳ 待使用者操作 |
+| Modal 命名稽核完成，範圍內修正已驗證 | 本機瀏覽器實測開關 modal | ✅ |
+| V2 階段表第 9 列標記為 🔶（非全 ✅） | `PROJECT_ARCHITECTURE_V2.md` | ✅ |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
@@ -889,8 +919,9 @@
 6. ~~**階段 6**：交通查詢系統（任務一：spot_transport_routes + 交通查詢子分頁；任務二：行程內嵌交通方式 M2）~~ **✅ 2026-07-13 全部完成**，詳見上方「V2 階段 6」對應章節；AI 輔助整理遞延階段 7-8
 7. ~~**階段 7**：AI 助手分頁（唯讀版）與 /api/ai-assistant 串接~~ **✅ 2026-07-13 全部完成，a-e 驗收項目全數通過**，詳見上方「V2 階段 7」
 8. ~~**階段 8**:AI 工具逐個開放(第一批行程類五工具 + 第二批收藏類三工具與 delete_spot)~~ **✅ 2026-07-13 全部完成,階段 8 結案**,詳見上方「V2 階段 8 第一批」「V2 階段 8 第二批」
-9. /trip 穩定後評估是否移除舊的 /travel 與 /japan 頁面
-10. **階段 9**（全部功能穩定後）：程式碼清理與重構，含 CSS/ID 前綴隔離補齊（衝突熱點稽核中發現、決議延後的項目）；一併處理 V2 階段 4 任務一盤點發現的 `spots.category`/`spots.icon` 遺留欄位（`NOT NULL` 但前端從未寫入，一律吃預設值，已被 `spot_type_id`/`spot_subtype_id` 取代）；一併評估是否補上 `body.trip-page` class（V2 階段 7 發現的既有落差，見 PROJECT_ARCHITECTURE_V2.md 5.3 節）
+9. ~~/trip 穩定後評估是否移除舊的 /travel 與 /japan 頁面~~ **✅ 2026-07-13 已退役並轉址，原始檔案已於 O3 清理批次刪除**
+10. ~~**階段 9**：Supabase npm 遷移（四波）~~ **✅ 2026-07-15 全部完成，Fable 覆核 + 使用者實測皆通過**，詳見上方「V2 階段 9 核心任務」
+11. ~~**階段 9 最終任務（O3）**：程式碼清理與重構，含 CSS/ID 前綴隔離補齊、`spots.category`/`spots.icon`/`travel_subway_maps.trip_id` 遺留欄位、根目錄除錯遺留、退役檔案~~ **✅ 2026-07-16 大部分完成**，詳見上方「V2 階段 9 最終任務（O3）」；資料庫欄位刪除待使用者執行 SQL；**Heisenbug 診斷碼移除與案件結案記錄、`body.trip-page` class 評估（V2 階段 7 發現的既有落差，見 PROJECT_ARCHITECTURE_V2.md 5.3 節）本輪皆未處理，留待浸泡期滿後的獨立任務**
 
 ---
 
