@@ -21,8 +21,6 @@ interface Props {
 }
 
 const { groupedCards, initialStatus } = Astro.props;
-const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 
 // 格式化日期：5.13 更新
 const formatShortDate = (dateStr: string) => {
@@ -99,16 +97,11 @@ const formatShortDate = (dateStr: string) => {
 </div>
 
 <!-- 現在狀態管理邏輯 -->
-<script define:vars={{ supabaseUrl, supabaseAnonKey }}>
+<script>
+import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
+
 (async () => {
-  // 動態匯入 Supabase SDK
-  const waitForSupabase = () => new Promise(resolve => {
-    if (window._supabaseCreateClient) return resolve();
-    window.addEventListener('supabase-ready', resolve, { once: true });
-  });
-  await waitForSupabase();
-  const createClient = window._supabaseCreateClient;
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const supabase = getSupabaseBrowserClient();
 
   // 1. 偵測登入狀態
   const { data: { session } } = await supabase.auth.getSession();
