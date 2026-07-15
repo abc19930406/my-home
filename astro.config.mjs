@@ -7,6 +7,10 @@ import vercel from '@astrojs/vercel';
 export default defineConfig({
   output: 'server',
   adapter: vercel(),
+  redirects: {
+    '/japan': '/trip',
+    '/travel': '/trip',
+  },
   vite: {
     plugins: [
       tailwindcss(),
