@@ -689,7 +689,7 @@
 | SDK 版本與先前凍結的 CDN 版本一致（2.110.2） | Fable 覆核發現版本落差後修復 | ✅（commit `11234f1`） |
 | 正式站登入實測（DevTools 全程關閉，對照歷史觸發條件） | 使用者操作 | ✅ 使用者實測通過 |
 
-#### 🔶 第二波：其餘頁面轉為 npm 匯入（進行中，本輪範圍）
+#### ✅ 第二波：其餘頁面轉為 npm 匯入（已結案）
 
 - **全域盤點結果（與任務原先預期清單有出入）**：Grep 全站 `window._supabaseCreateClient`/`supabase-ready`/`waitForSupabase` 後，真正消費 CDN 就緒信號的頁面只有 4 個：`Welcome.astro`（首頁）、`admin.astro`、`ledger.astro`、`polaroid.astro`；`src/_archived/` 內的封存檔依規則跳過
 - **重要發現**：`posts/[id].astro`、`posts/index.astro`、`quotes/index.astro` 完全沒有出現在盤點結果——查證後這三個頁面（含 client-side script）本來就直接 `import { supabase } from '../../lib/supabase-client'`（SSR 端既有模組），從來沒有走過 CDN，不在本次遷移範圍內，任務原先列的「posts/[id]」是誤植，本波不動這三個檔案
@@ -710,7 +710,7 @@
 | 型別檢查無新增錯誤 | `astro check` × 4 | ✅ |
 | 本機瀏覽器驗證四頁皆無 console 錯誤、既有行為不變 | 本機驗證 | ✅ |
 | 四頁皆不依賴 trip.astro 專用的 `window.__ADMIN_EMAIL__` 等全域變數 | Fable 覆核 | ✅ |
-| 正式站四頁登入相關功能實測（DevTools 全程關閉） | 待使用者操作 | ⏳ 待使用者實測 |
+| 正式站四頁登入相關功能實測（DevTools 全程關閉） | 使用者操作 | ✅ 使用者實測通過 |
 
 ---
 
