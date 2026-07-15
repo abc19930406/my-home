@@ -645,6 +645,7 @@
 - **實作（`TripPlanner.astro`）**：完全比照既有「優惠券刪除」模式——`renderSubwayGroups()` 每張圖新增 `admin-only` 垃圾桶按鈕（`.subway-map-admin-actions`），點擊 `confirm()` 後 `.delete().eq('id', id).select()`，檢查受影響筆數為 0 時明確提示失敗，成功後更新本地快取、重繪、`showToast()`、`triggerBuildWebhook()`；按鈕點擊 `stopPropagation()` 避免誤觸底下景點放大檢視的 lightbox
 - **明確不做的事（比照既有慣例維持一致性）**：不刪除 Storage 裡的圖片檔（比照 `travel_coupons`/`post_images` 既有孤兒檔案慣例，不引入新清理邏輯）；不處理 `trip_subway_categories`（該表以 `trip_id`+分類名稱關聯，非外鍵指向 `travel_subway_maps.id`，刪除單張圖片不影響任何行程的分類關聯設定）
 - **本地驗證**：`astro check` 無新增錯誤；瀏覽器強制顯示 `admin-only` 元素後確認按鈕外觀與位置正確、`confirm()` 對話框正確跳出（stub 攔截確認訊息文字無誤）、點擊不觸發底下的 lightbox 放大
+- **上線後回報 bug 與修復（2026-07-13，commit `0f1584e`）**：使用者實測反映垃圾桶「時而出現、時而消失」。**根因**：`renderSubwayGroups()`（以及既有的 `renderCoupons()`）的 admin-only 刪除按鈕容器寫死 `style="display: none"`，只靠登入當下一次性的全域 `updateAuthUI()` 的 `.admin-only` 掃描補上顯示；但這兩個函式會在切換分類、切換行程、上傳/刪除後反覆重新產生 `innerHTML`，每次重繪都會把 style 重置回 `display:none`，且不會有任何後續動作再次觸發全域掃描，導致按鈕「重繪後就消失、只有剛登入那一刻曾經短暫出現過」。修法比照 `JapanCollection.astro` 既有同類重繪函式（第 921 行）的寫法，直接在樣板字串內插入當下的 `isAdminUser` 狀態（`style="display: ${isAdminUser ? 'flex' : 'none'}"`），不再依賴外部單次全域補丁；優惠券刪除按鈕原本就有同樣的潛在問題（只是尚未被注意到，因為 `renderCoupons()` 平常重繪頻率較低），一併修正，避免同一根因的 bug 只修一半
 
 #### 自我驗收對照表
 
@@ -653,6 +654,8 @@
 | 型別檢查無新增錯誤 | `astro check` | ✅ |
 | 刪除按鈕外觀、位置、confirm() 觸發正常 | 本機瀏覽器強制顯示驗證 | ✅ |
 | 點擊刪除按鈕不誤觸景點放大檢視 | `stopPropagation()` | ✅（本機驗證） |
+| 垃圾桶按鈕在切換分類/行程/上傳/刪除後仍持續顯示，不再消失 | `isAdminUser` 直接插入樣板（commit `0f1584e`） | ⏳ 待使用者實測 |
+| 優惠券刪除按鈕同一根因修復，行為一致 | 同上 | ⏳ 待使用者實測 |
 | 管理員上傳測試圖 → 刪除 → 重整後確認資料庫真的消失 | 待使用者以真實管理員帳號實測 | ⏳ 待使用者實測 |
 | 非管理員身分看不到刪除按鈕 | 待使用者實測 | ⏳ 待使用者實測 |
 
