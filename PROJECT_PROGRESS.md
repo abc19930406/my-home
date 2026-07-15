@@ -673,7 +673,21 @@
 - `trip.astro`：移除 `<script define:vars={...} is:inline>` 橋接區塊（其存在理由是讓不經 Vite 打包的 `is:inline` script 拿到值，改為 npm 匯入後不再需要）；主要 Heisenbug 診斷 `<script>`（本來就非 `is:inline`/`define:vars`，已經過 Vite 打包）改為直接 `import` 該模組 + 直讀 `import.meta.env.PUBLIC_ADMIN_EMAIL`；`waitForSupabase()` 輪詢 CDN 就緒的邏輯整段移除，改為直接呼叫 `getSupabaseBrowserClient()`
 - 子元件（`TripPlanner.astro`/`JapanCollection.astro`/`AiAssistant.astro`）完全不動，接收 `window.sharedSupabase`/`auth-state-changed`/`window.__latestAuthState` 的方式不變
 
-（本節將於本波完成、覆核、使用者實測後補上結果）
+- **本地驗證（commit `54f4548`）**：`astro check` 無新增錯誤（既有 baseline 錯誤不變）；瀏覽器確認 `window.sharedSupabase` 正確建立且帶完整 `auth` 方法、`auth-state-changed`/`__latestAuthState` 序列與改動前一致、無 console 錯誤、Supabase 改由 `node_modules`（非 CDN jsdelivr）載入
+- **Fable 覆核（commit `54f4548`，2026-07-13）**：逐項覆核機械性、事件流程、Heisenbug 診斷碼、新模組正確性、script 標籤是否真的經 Vite 處理、賦值時機提早是否引入新 race condition，**六項全數 PASS**；並實際跑 `astro build` 讀取產出的 client chunk，確認 `import.meta.env.PUBLIC_*` 確實在 build time 被正確替換為真實值（非只是「dev 環境剛好沒報錯」）
+  - **發現並已修復的問題（commit `11234f1`）**：`package-lock.json` 原鎖定 `@supabase/supabase-js@2.105.4`，與先前 CDN 特地凍結、驗證過的 `2.110.2` 不一致——這正是當初凍結想排除的「SDK 版本自行變動」變數，若不修，之後的登入測試會多一個版本差異的干擾因素。已取得使用者明確同意（依安全紅線，依賴版本變更須先問），將 `package.json` 改為確切版號 `2.110.2`（不浮動），重新 `npm install` 更新 `package-lock.json`，使這次遷移真正做到「版本中性」，本機重新驗證（`astro check`、瀏覽器 `window.sharedSupabase`/`__latestAuthState`）皆正常
+  - **記錄供第二波參考的潛在陷阱**：`TripPlanner.astro:875` 讀取 `window.__ADMIN_EMAIL__`，目前只靠 `JapanCollection.astro` 的 `define:vars` 橋接還在運作才沒有壞掉（trip.astro 自己的橋接已在本波移除）。第二波若把 `JapanCollection.astro` 也轉換為 npm 匯入、順手移除它的橋接，**必須在同一個 commit 內一併把 `TripPlanner.astro` 這處讀取改掉**，否則管理員身分判斷會靜默退化成空字串
+  - 兩份 SDK 並存的過渡期現象（`/trip` 頁面本身仍會下載 Layout.astro 注入的 CDN 版本，但完全未被使用；其餘尚未轉換的頁面仍在跑 CDN 版本）：功能上相容，預期在第三波拆除 CDN 注入後消失，非本波需要處理的問題
+
+#### 自我驗收對照表（第一波）
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| diff 只觸碰載入機制，事件流程/診斷碼逐行比對一致 | Fable 覆核（見上） | ✅ |
+| 型別檢查無新增錯誤 | `astro check` | ✅ |
+| `window.sharedSupabase` 正確建立、auth 事件序列正常 | 本機瀏覽器驗證 | ✅ |
+| SDK 版本與先前凍結的 CDN 版本一致（2.110.2） | Fable 覆核發現版本落差後修復 | ✅（commit `11234f1`） |
+| 正式站登入實測（DevTools 全程關閉，對照歷史觸發條件） | 待使用者操作 | ⏳ 待使用者實測 |
 
 ---
 
