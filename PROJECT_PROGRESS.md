@@ -667,7 +667,7 @@
 - **鐵律**（貫穿四波）：純機械轉換，不改任何業務邏輯/函式內容/事件流程；`/trip` 單一入口架構與子元件事件接收端完全不動；Heisenbug 診斷碼（`logAuth` 與所有 `[DEBUG-HEISENBUG]` 呼叫點）原樣保留；每波獨立 commit+push，使用者以 **DevTools 全程關閉**的方式實測登入（歷史觸發條件），異常立刻停下取 `sessionStorage.__auth_debug_log` 回報，不自行往下修
 - **四波規劃**：① `trip.astro`（本次執行）② 逐頁轉換其餘消費 CDN 的頁面 ③ 拆除 `Layout.astro` CDN 注入 + `astro.config.mjs` modulepreload 移除 plugin ④ 浸泡一至兩週無異常後結案，改寫 `PROJECT_ARCHITECTURE.md`/`CLAUDE.md` 對應規則
 
-#### 第一波：`trip.astro`（本輪範圍）
+#### ✅ 第一波：`trip.astro`（已結案）
 
 - 新增 `src/lib/supabase-browser.js`：模組層級單例，`import { createClient } from '@supabase/supabase-js'`，內部讀 `import.meta.env.PUBLIC_SUPABASE_URL`/`PUBLIC_SUPABASE_ANON_KEY`，匯出 `getSupabaseBrowserClient()`
 - `trip.astro`：移除 `<script define:vars={...} is:inline>` 橋接區塊（其存在理由是讓不經 Vite 打包的 `is:inline` script 拿到值，改為 npm 匯入後不再需要）；主要 Heisenbug 診斷 `<script>`（本來就非 `is:inline`/`define:vars`，已經過 Vite 打包）改為直接 `import` 該模組 + 直讀 `import.meta.env.PUBLIC_ADMIN_EMAIL`；`waitForSupabase()` 輪詢 CDN 就緒的邏輯整段移除，改為直接呼叫 `getSupabaseBrowserClient()`
@@ -687,7 +687,7 @@
 | 型別檢查無新增錯誤 | `astro check` | ✅ |
 | `window.sharedSupabase` 正確建立、auth 事件序列正常 | 本機瀏覽器驗證 | ✅ |
 | SDK 版本與先前凍結的 CDN 版本一致（2.110.2） | Fable 覆核發現版本落差後修復 | ✅（commit `11234f1`） |
-| 正式站登入實測（DevTools 全程關閉，對照歷史觸發條件） | 待使用者操作 | ⏳ 待使用者實測 |
+| 正式站登入實測（DevTools 全程關閉，對照歷史觸發條件） | 使用者操作 | ✅ 使用者實測通過 |
 
 ---
 
