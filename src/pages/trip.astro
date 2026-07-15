@@ -5,11 +5,6 @@ import TripPlanner from "../components/TripPlanner.astro";
 import JapanCollection from "../components/JapanCollection.astro";
 import AiAssistant from "../components/AiAssistant.astro";
 import "../styles/trip.css";
-
-// Admin email from env for client-side comparison
-const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? "";
-const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL ?? "";
-const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? "";
 ---
 
 <Layout title="行程與收藏 | The Corner Table">
@@ -95,14 +90,9 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? "";
   </div>
 </Layout>
 
-<!-- 傳遞環境變數給 Client JS -->
-<script define:vars={{ adminEmail, supabaseUrl, supabaseAnonKey }} is:inline>
-  window.__ADMIN_EMAIL__ = adminEmail;
-  window.__SUPABASE_URL__ = supabaseUrl;
-  window.__SUPABASE_ANON_KEY__ = supabaseAnonKey;
-</script>
-
 <script>
+  import { getSupabaseBrowserClient } from "../lib/supabase-browser.js";
+
   // [DEBUG-HEISENBUG] 診斷記錄函式:寫入 sessionStorage,禁用 console 以免其開銷改變時序
   function logAuth(label, data) {
     try {
@@ -120,9 +110,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? "";
     latestAuthStateExists: typeof window.__latestAuthState !== "undefined",
   });
 
-  const adminEmail = window.__ADMIN_EMAIL__ || "";
-  const supabaseUrl = window.__SUPABASE_URL__ || "";
-  const supabaseAnonKey = window.__SUPABASE_ANON_KEY__ || "";
+  const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL || "";
 
   // 提升 auth-modal 到 document.body，避免受 tab 容器 display: none 影響
   document.addEventListener("DOMContentLoaded", () => {
@@ -137,15 +125,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? "";
 
   (async () => {
     try {
-      // 依據架構要求：等待 Supabase CDN 準備就緒
-      const waitForSupabase = () =>
-        new Promise((resolve) => {
-          if (window._supabaseCreateClient) return resolve(true);
-          window.addEventListener("supabase-ready", resolve, { once: true });
-        });
-      await waitForSupabase();
-      const createClient = window._supabaseCreateClient;
-      window.sharedSupabase = createClient(supabaseUrl, supabaseAnonKey);
+      window.sharedSupabase = getSupabaseBrowserClient();
       const supabase = window.sharedSupabase;
 
       supabase.auth.onAuthStateChange(async (event, session) => {

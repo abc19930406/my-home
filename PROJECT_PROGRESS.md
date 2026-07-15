@@ -638,7 +638,7 @@
 
 ---
 
-### 🔶 地鐵圖新增刪除功能（2026-07-13，程式碼已完成，待使用者實測，非分階段任務，使用者臨時追加需求）
+### ✅ 地鐵圖新增刪除功能（2026-07-13，已結案，非分階段任務，使用者臨時追加需求）
 
 - **背景**：「資源」子分頁的地鐵圖（V2 階段 5 任務二）原本只有管理員上傳功能，沒有刪除功能，使用者測完階段 9 第一個任務後提出這個小需求
 - **執行前確認**：`travel_subway_maps` 的 RLS 早已就緒——`travel_subway_maps_admin_all` 是 `FOR ALL`（涵蓋 SELECT/INSERT/UPDATE/DELETE）鎖管理員 email 的既有政策，DELETE 本來就被允許，只是前端從未做過對應按鈕，**本次不需要任何 SQL/RLS 變更**
@@ -654,10 +654,26 @@
 | 型別檢查無新增錯誤 | `astro check` | ✅ |
 | 刪除按鈕外觀、位置、confirm() 觸發正常 | 本機瀏覽器強制顯示驗證 | ✅ |
 | 點擊刪除按鈕不誤觸景點放大檢視 | `stopPropagation()` | ✅（本機驗證） |
-| 垃圾桶按鈕在切換分類/行程/上傳/刪除後仍持續顯示，不再消失 | `isAdminUser` 直接插入樣板（commit `0f1584e`） | ⏳ 待使用者實測 |
-| 優惠券刪除按鈕同一根因修復，行為一致 | 同上 | ⏳ 待使用者實測 |
-| 管理員上傳測試圖 → 刪除 → 重整後確認資料庫真的消失 | 待使用者以真實管理員帳號實測 | ⏳ 待使用者實測 |
-| 非管理員身分看不到刪除按鈕 | 待使用者實測 | ⏳ 待使用者實測 |
+| 垃圾桶按鈕在切換分類/行程/上傳/刪除後仍持續顯示，不再消失 | `isAdminUser` 直接插入樣板（commit `0f1584e`） | ✅ 使用者實測通過 |
+| 優惠券刪除按鈕同一根因修復，行為一致 | 同上 | ✅ 使用者實測通過 |
+| 管理員上傳測試圖 → 刪除 → 重整後確認資料庫真的消失 | 使用者以真實管理員帳號實測 | ✅ 使用者實測通過 |
+| 非管理員身分看不到刪除按鈕 | 使用者實測 | ✅ 使用者實測通過 |
+
+---
+
+### 🔶 V2 階段 9 核心任務：Supabase 瀏覽器端由 CDN 動態注入改為 npm 打包（進行中，四波執行）
+
+- **背景**：CDN 動態注入是歷史上 modulepreload 錯誤、版本浮動、多實例、race condition（含 Heisenbug 登入異常）等一整類問題的共同根源；改由 `@supabase/supabase-js`（npm 套件，SSR 端 `src/lib/supabase-client.ts` 已在用）打包後，版本由 `package-lock.json` 鎖死、載入時序交給 Vite，結構性消除這類問題
+- **鐵律**（貫穿四波）：純機械轉換，不改任何業務邏輯/函式內容/事件流程；`/trip` 單一入口架構與子元件事件接收端完全不動；Heisenbug 診斷碼（`logAuth` 與所有 `[DEBUG-HEISENBUG]` 呼叫點）原樣保留；每波獨立 commit+push，使用者以 **DevTools 全程關閉**的方式實測登入（歷史觸發條件），異常立刻停下取 `sessionStorage.__auth_debug_log` 回報，不自行往下修
+- **四波規劃**：① `trip.astro`（本次執行）② 逐頁轉換其餘消費 CDN 的頁面 ③ 拆除 `Layout.astro` CDN 注入 + `astro.config.mjs` modulepreload 移除 plugin ④ 浸泡一至兩週無異常後結案，改寫 `PROJECT_ARCHITECTURE.md`/`CLAUDE.md` 對應規則
+
+#### 第一波：`trip.astro`（本輪範圍）
+
+- 新增 `src/lib/supabase-browser.js`：模組層級單例，`import { createClient } from '@supabase/supabase-js'`，內部讀 `import.meta.env.PUBLIC_SUPABASE_URL`/`PUBLIC_SUPABASE_ANON_KEY`，匯出 `getSupabaseBrowserClient()`
+- `trip.astro`：移除 `<script define:vars={...} is:inline>` 橋接區塊（其存在理由是讓不經 Vite 打包的 `is:inline` script 拿到值，改為 npm 匯入後不再需要）；主要 Heisenbug 診斷 `<script>`（本來就非 `is:inline`/`define:vars`，已經過 Vite 打包）改為直接 `import` 該模組 + 直讀 `import.meta.env.PUBLIC_ADMIN_EMAIL`；`waitForSupabase()` 輪詢 CDN 就緒的邏輯整段移除，改為直接呼叫 `getSupabaseBrowserClient()`
+- 子元件（`TripPlanner.astro`/`JapanCollection.astro`/`AiAssistant.astro`）完全不動，接收 `window.sharedSupabase`/`auth-state-changed`/`window.__latestAuthState` 的方式不變
+
+（本節將於本波完成、覆核、使用者實測後補上結果）
 
 ---
 
