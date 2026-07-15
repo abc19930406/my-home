@@ -2,9 +2,6 @@
 export const prerender = true;
 import Layout from '../layouts/Layout.astro';
 import '../styles/polaroid.css';
-
-const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
 ---
 
 <Layout title="Polaroid | 一天一句">
@@ -102,16 +99,12 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY;
   <div id="toast" class="toast"></div>
 </Layout>
 
-<script define:vars={{ supabaseUrl, supabaseAnonKey }}>
+<script>
+import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
+
 (async () => {
   // 1. 初始化 Supabase
-  const waitForSupabase = () => new Promise(resolve => {
-    if (window._supabaseCreateClient) return resolve();
-    window.addEventListener('supabase-ready', resolve, { once: true });
-  });
-  await waitForSupabase();
-  const createClient = window._supabaseCreateClient;
-  const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const supabase = getSupabaseBrowserClient();
 
   // 2. 狀態管理
   let selectedDate = new Date(); // 選中的日期
