@@ -83,6 +83,9 @@ my-home/
 - 單篇短文 `/posts/[id].astro` 為 SSR（無 prerender）
 
 ### Supabase CDN 載入方式（重要，已更新版本鎖定）
+
+> ⚠️ **過渡性註記（2026-07-13）**：本節描述的 CDN 動態注入機制正在遷移至 npm 匯入（V2 階段 9 核心任務，第一至三波已完成，現於浸泡觀察期），**目前程式碼實際上已不再使用 CDN**，本節內容已過時，待第四波浸泡確認穩定後正式改寫為 npm 架構說明。過渡期間請以 `PROJECT_PROGRESS.md`「V2 階段 9 核心任務」章節的實際現況為準，不要依本節舊描述行動。
+
 - **不能**在 `<script>` 裡直接 `import` CDN URL，Vite 會掃描並產生錯誤的 modulepreload
 - **正確做法**：Layout.astro 用 `<script is:inline>` 動態注入：
   ```html
