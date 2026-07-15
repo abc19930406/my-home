@@ -140,7 +140,8 @@ order by tablename, cmd;
 | **spots / trips / trip_days / day_spots**(✅ 2026-07-13 寫入已修復,SELECT 維持公開設計) | 🟡 全表可讀(完整行程、地點、座標,刻意保留) | 否 | 全表可讀(不變) | ~~🔴 任何登入帳號可 CRUD 任何行程/景點~~ → 已收斂:`trips` 一律僅 `is_admin()`;`trip_days`/`spots`/`day_spots` 改用新函式 `can_edit_trip(trip_id)`(管理員,或該行程 `trip_collaborators.can_edit_itinerary=true` 的協作者);`day_spots` 的 INSERT/UPDATE 新增完整性檢查,擋下「把 A 行程景點塞進 B 行程某一天」 | 寫入已收斂,SELECT 維持設計原狀 |
 | **spot_types / spot_subtypes** | 🟡 全表可讀(僅分類名稱) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD | **LOW** |
 | **expense_categories / income_categories** | 🟡 全表可讀(記帳分類名稱,非金額) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD | **LOW** |
-| **cards / status / daily** | 🟢 全表可讀(設計上本就公開:首頁卡片、狀態便條、Polaroid) | 否 | 全表可讀 | 🔴 任何登入帳號可改(cards/status)或 CRUD(daily),非僅管理員 | **LOW**(讀取合理,寫入權限過寬) |
+| **cards / status** | 🟢 全表可讀(設計上本就公開:首頁卡片、狀態便條) | 否 | 全表可讀 | 🔴 任何登入帳號可改,非僅管理員 | **LOW**(讀取合理,寫入權限過寬,尚未修復) |
+| **daily**(✅ 2026-07-13 已修復) | 🟢 全表可讀(設計上本就公開:Polaroid 底片日記) | 否 | 全表可讀(不變) | ~~🔴 任何登入帳號可 CRUD,非僅管理員(政策命名為「admin」但條件只查 `auth.role() = 'authenticated'`)~~ → INSERT/UPDATE/DELETE 已改為 `public.is_admin()` | ~~LOW~~ → 寫入已收斂,SELECT 維持設計原狀 |
 | **travel_coupons / travel_subway_maps**(✅ 2026-07-13 UI 已上線) | 🟢 全表可讀,UI 使用中 | 否 | 全表可讀 | 🟢 **正確示範**:寫入鎖定 `auth.jwt()->>'email' = 'abc19930406@gmail.com'`,真正限定管理員本人 | UI 已上線,結構與寫入權限正確,未異動 |
 | **trip_subway_categories**(新增,2026-07-13,建表當下即設計) | 否 | 否 | 🟢 全表可讀(任何人可查詢行程關聯了哪些分類) | 🟢 INSERT/DELETE 用 `can_edit_trip()`(管理員或該行程 can_edit_itinerary 協作者),UPDATE 不開放 | 建表當下即收斂,無歷史包袱 |
 | **spot_transport_routes**(新增,2026-07-13,建表當下即設計) | 否 | 否 | 🟢 全表可讀(任何人可查詢已儲存的交通方式) | 🟢 INSERT/UPDATE/DELETE 用 `can_edit_trip(起點所屬行程)`,INSERT/UPDATE 另加跨行程完整性檢查(起訖點須同屬一行程) | 建表當下即收斂,無歷史包袱;使用者已實測驗證跨行程完整性檢查生效 |
@@ -161,11 +162,12 @@ order by tablename, cmd;
 
 ### 貫穿多張表的系統性問題:「authenticated」被當成「admin」使用
 
-你的登入設計本來就存在非管理員的登入帳號(Google OAuth 朋友、Email/Password 家人,用於日本收藏願望清單)。~~`posts`~~(✅ 已改為僅 `is_admin()` 可寫入)、~~`allowed_users`~~(✅ 已改為僅 `is_admin()` 可寫入,非管理員 SELECT 也收斂為只讀自己)、~~`transactions`~~(✅ 已改為僅 `is_admin()` 可讀寫)、~~`japan_items`~~、~~`japan_categories`~~(✅ 寫入已改為僅 `is_admin()`,SELECT 維持公開設計不動)、~~`quotes`~~(✅ 已改為僅 `is_admin()` 可寫入,SELECT 收斂為 public/is_admin()/is_friend(),均 2026-07-11 修復)、`spots` 系列、`trip_days`、`cards`、`status`、`daily`、`spot_types/subtypes`、`expense/income_categories` 的寫入政策一律只檢查 `auth.role() = 'authenticated'`,**沒有任何一條額外比對是不是管理員本人**。也就是說,任何一個朋友或家人帳號,只要成功登入(哪怕登入目的只是想勾選日本收藏願望清單),理論上就能透過直接呼叫 Supabase API:
+你的登入設計本來就存在非管理員的登入帳號(Google OAuth 朋友、Email/Password 家人,用於日本收藏願望清單)。~~`posts`~~(✅ 已改為僅 `is_admin()` 可寫入)、~~`allowed_users`~~(✅ 已改為僅 `is_admin()` 可寫入,非管理員 SELECT 也收斂為只讀自己)、~~`transactions`~~(✅ 已改為僅 `is_admin()` 可讀寫)、~~`japan_items`~~、~~`japan_categories`~~(✅ 寫入已改為僅 `is_admin()`,SELECT 維持公開設計不動)、~~`quotes`~~(✅ 已改為僅 `is_admin()` 可寫入,SELECT 收斂為 public/is_admin()/is_friend(),均 2026-07-11 修復)、~~`daily`~~(✅ 2026-07-13 已改為僅 `is_admin()` 可寫入)、`spots` 系列、`trip_days`、`cards`、`status`、`spot_types/subtypes`、`expense/income_categories` 的寫入政策一律只檢查 `auth.role() = 'authenticated'`,**沒有任何一條額外比對是不是管理員本人**。也就是說,任何一個朋友或家人帳號,只要成功登入(哪怕登入目的只是想勾選日本收藏願望清單),理論上就能透過直接呼叫 Supabase API:
 - ~~讀取/刪除你的完整記帳明細~~(✅ 已修復)
 - 新增、竄改或刪除你的語錄(posts 已修復)、~~日本收藏品項與分類~~(✅ 已修復)
 - ~~修改整份 `allowed_users` 白名單~~(✅ 已修復)
 - ~~刪改你的旅行行程(`spots`/`trips`/`trip_days` 等)~~(✅ 2026-07-13 已修復,見上方)
+- ~~新增/修改/刪除你的 Polaroid 底片日記(`daily`)~~(✅ 2026-07-13 已修復)
 
 `travel_coupons`、`travel_subway_maps` 這兩張表用 `auth.jwt() ->> 'email' = '特定管理員 email'` 正確做出了「登入 ≠ 管理員」的區分,是本次盤點中**唯一**正確收斂到管理員身分的範例,可作為修復時的參考模式。
 

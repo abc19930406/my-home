@@ -712,7 +712,7 @@
 | 四頁皆不依賴 trip.astro 專用的 `window.__ADMIN_EMAIL__` 等全域變數 | Fable 覆核 | ✅ |
 | 正式站四頁登入相關功能實測（DevTools 全程關閉） | 使用者操作 | ✅ 使用者實測通過 |
 
-#### 🔶 第三波：拆除 CDN 基礎設施（進行中，本輪範圍，風險最高的一波）
+#### ✅ 第三波：拆除 CDN 基礎設施（已結案，風險最高的一波）
 
 - **範圍**：`Layout.astro` 的 CDN 注入 `<script is:inline>`、`astro.config.mjs` 的 `remove-modulepreload` plugin 與 `optimizeDeps.exclude`、`TripPlanner.astro`/`JapanCollection.astro` 兩個 `/trip` 子元件內殘留的 `waitForSharedSupabase` 輪詢
 - **關鍵發現（影響拆分方式）**：`TripPlanner.astro` 第 875 行讀 `window.__ADMIN_EMAIL__`，但這個值從未由 `TripPlanner.astro` 自己的 `define:vars` 提供，完全依賴 `JapanCollection.astro` 的橋接先執行過——這是遷移前就存在的脆弱跨元件全域變數耦合（第一波 Fable 覆核已預先示警）。若只改 `JapanCollection.astro` 拿掉橋接，`TripPlanner.astro` 的管理員判斷會靜默壞掉。**兩個檔案必須同一個 commit 一起修**，`TripPlanner.astro` 順勢改為直接讀 `import.meta.env.PUBLIC_ADMIN_EMAIL`，徹底擺脫這個依賴
@@ -742,7 +742,30 @@
 | 死變數（`supabaseUrl`/`supabaseAnonKey`）確認真的未使用 | Fable 覆核 | ✅ |
 | `auth-state-changed`/`__latestAuthState` 事件機制位置與內容不變 | Fable 覆核 | ✅ |
 | `astro build` 產出檢查（含三元件共用同一 client 單例） | Fable 覆核 | ✅ |
-| 全站登入回歸測試（每一頁、三種身分，DevTools 全程關閉） | 待使用者操作 | ⏳ 待使用者實測 |
+| 全站登入回歸測試（每一頁、三種身分，DevTools 全程關閉） | 使用者操作 | ✅ 使用者實測通過（另發現一項與遷移無關的既有權限漏洞，見下方獨立章節，已修復） |
+
+---
+
+### ✅ 既有安全漏洞修復：polaroid.astro 權限判斷（2026-07-13，V2 階段 9 全站回歸測試時發現，已結案）
+
+- **背景**：使用者執行 V2 階段 9 第三波的全站登入回歸測試時，發現白名單朋友帳號能編輯、刪除 `/polaroid` 的底片日記內容
+- **確認與本次遷移無關**：比對第二波 `polaroid.astro` 的實際 commit diff（`3dd4150`），只動了取得 supabase client 的那幾行，完全沒有碰任何權限判斷邏輯，確認是遷移前就存在的既有漏洞
+- **根因（頁面層）**：`checkAuth()` 只檢查「是否有登入 session」就設 `isAdmin = true`，從未比對登入者 email 是否為管理員本人——與 2026-07-11 修復 `posts`/`quotes`/`transactions`/`japan_items` 時的同一類舊模式，`SECURITY_AUDIT.md` 當時已將 `daily` 表列為已知但優先度標記 LOW 的未修復項目，這次全站回歸測試意外把它重新浮上來
+- **根因（資料庫層，使用者提供 `pg_policies` 查詢結果確認）**：`daily` 表的 INSERT/UPDATE/DELETE 政策雖命名為「admin」，實際條件只寫 `auth.role() = 'authenticated'::text`，任何登入帳號都符合，資料庫層本身也沒有擋下非管理員的寫入，是真正能寫入成功的漏洞，不是前端誤導的假象
+- **修復（commit `74a3fcb`，頁面層）**：`isAdmin` 改為嚴格比對 `session.user.email === adminEmail`；新增/刪除按鈕的 `onclick` handler 額外加 `if (!isAdmin) return;`（不只靠隱藏按鈕擋，比照 `japan_items` 曾經的委派事件繞過教訓）
+- **修復（資料庫層，使用者於 Supabase SQL Editor 執行）**：沿用既有 `public.is_admin()` 輔助函式（重用 2026-07-11 建立的函式，未新建），`ALTER POLICY` 修正 INSERT 的 `WITH CHECK`、UPDATE 的 `USING`/`WITH CHECK`、DELETE 的 `USING` 為 `public.is_admin()`；SELECT（公開可讀）維持不動，符合頁面本來就公開的設計
+- **文件同步**：`SECURITY_AUDIT.md` 的 `daily` 列與「authenticated 被當成 admin」清單同步標記為已修復（比照既有 `posts`/`quotes` 等的刪除線標記慣例）
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| 確認漏洞與 CDN 遷移無關 | 比對 commit `3dd4150` diff | ✅ |
+| 頁面層 `isAdmin` 改為嚴格 email 比對 | commit `74a3fcb` | ✅ |
+| 寫入 handler 加 `isAdmin` 檢查，不只靠隱藏按鈕 | commit `74a3fcb` | ✅ |
+| 資料庫層確認實際漏洞（非前端誤判） | 使用者提供 `pg_policies` 查詢結果 | ✅ |
+| 資料庫層 RLS 修復為 `is_admin()` | 使用者於 Supabase SQL Editor 執行，回報成功 | ✅ |
+| `SECURITY_AUDIT.md` 同步更新 | 本輪文件同步 | ✅ |
 
 ---
 
