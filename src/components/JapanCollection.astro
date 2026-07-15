@@ -54,9 +54,6 @@ const fallbackCategories = [
 const categories = initialCategories.length > 0 ? initialCategories : fallbackCategories;
 const items = initialItems;
 
-const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
-const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL ?? '';
-const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
 ---
 
   <div class="top-right-auth-container">
@@ -375,28 +372,13 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
   <div id="japan-toast" class="toast">已成功儲存</div>
 
 
-<!-- 環境變數傳遞 -->
-<script define:vars={{ adminEmail, supabaseUrl, supabaseAnonKey }} is:inline>
-  window.__ADMIN_EMAIL__ = adminEmail;
-  window.__SUPABASE_URL__ = supabaseUrl;
-  window.__SUPABASE_ANON_KEY__ = supabaseAnonKey;
-</script>
 <script>
-  const adminEmail = window.__ADMIN_EMAIL__ || '';
-  const supabaseUrl = window.__SUPABASE_URL__ || '';
-  const supabaseAnonKey = window.__SUPABASE_ANON_KEY__ || '';
+  import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
 
-  const waitForSharedSupabase = () => new Promise(resolve => {
-    if (window.sharedSupabase) return resolve(window.sharedSupabase);
-    const check = setInterval(() => {
-      if (window.sharedSupabase) {
-        clearInterval(check);
-        resolve(window.sharedSupabase);
-      }
-    }, 50);
-  });
-  const supabase = await waitForSharedSupabase();
-  
+  const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL || '';
+
+  const supabase = getSupabaseBrowserClient();
+
   const toast = document.getElementById('japan-toast');
 
   // 本地快取狀態
