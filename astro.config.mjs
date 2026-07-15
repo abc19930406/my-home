@@ -13,20 +13,8 @@ export default defineConfig({
   },
   vite: {
     plugins: [
-      tailwindcss(),
-      {
-        name: 'remove-modulepreload',
-        transformIndexHtml: {
-          order: 'post',
-          handler(html) {
-            return html.replace(/<link[^>]*rel="modulepreload"[^>]*>\s*/g, '');
-          }
-        }
-      }
+      tailwindcss()
     ],
-    optimizeDeps: {
-      exclude: ['@supabase/supabase-js']
-    },
     build: {
       modulePreload: {
         polyfill: false,

@@ -44,19 +44,6 @@ import '../styles/global.css';
 	</head>
 	<body>
 		<slot />
-		<script is:inline>
-		  // 動態載入 Supabase，Vite 不會掃描此寫法
-		  (function() {
-		    const s = document.createElement('script');
-		    s.type = 'module';
-		    s.textContent = `
-		      import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/+esm';
-		      window._supabaseCreateClient = createClient;
-		      window.dispatchEvent(new Event('supabase-ready'));
-		    `;
-		    document.head.appendChild(s);
-		  })();
-		</script>
 		<div id="ptr-spinner" class="ptr-spinner"></div>
 		<style>
 		  .ptr-spinner {
