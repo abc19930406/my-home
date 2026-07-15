@@ -223,7 +223,7 @@ const items = initialItems;
         <div class="modal-box">
           <div class="modal-header">
             <h3 id="modal-title">新增品項</h3>
-            <button id="btn-modal-close" class="btn-modal-close">&times;</button>
+            <button id="btn-item-modal-close" class="btn-modal-close">&times;</button>
           </div>
           <form id="item-form">
             <div class="modal-body">
@@ -1242,7 +1242,7 @@ const items = initialItems;
   }
 
   document.getElementById('btn-open-add-modal')?.addEventListener('click', () => openModal(false));
-  document.getElementById('btn-modal-close')?.addEventListener('click', closeModal);
+  document.getElementById('btn-item-modal-close')?.addEventListener('click', closeModal);
   document.getElementById('btn-modal-cancel')?.addEventListener('click', closeModal);
 
   // --- 管理面板顯隱 ---
