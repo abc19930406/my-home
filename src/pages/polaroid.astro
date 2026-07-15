@@ -102,6 +102,8 @@ import '../styles/polaroid.css';
 <script>
 import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
 
+const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
+
 (async () => {
   // 1. 初始化 Supabase
   const supabase = getSupabaseBrowserClient();
@@ -289,6 +291,7 @@ import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
 
   // 提交紀錄
   submitBtn.onclick = async () => {
+    if (!isAdmin) return;
     const content = dailyInput.value.trim();
     if (!content) return;
 
@@ -312,6 +315,7 @@ import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
   // 刪除紀錄
   if (deleteBtn) {
     deleteBtn.onclick = async () => {
+      if (!isAdmin) return;
       if (!confirm('確定刪除這筆紀錄？')) return;
       
       const dateStr = formatDate(selectedDate);
@@ -329,18 +333,13 @@ import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
 
   async function checkAuth() {
     const { data: { session } } = await supabase.auth.getSession();
-    if (session) {
-      isAdmin = true;
-      if (adminZone) adminZone.style.display = 'block';
-      if (topAuthGuest) topAuthGuest.style.display = 'none';
-      if (topAuthUser) topAuthUser.style.display = 'block';
+    isAdmin = !!(session && session.user.email === adminEmail);
+    if (adminZone) adminZone.style.display = isAdmin ? 'block' : 'none';
+    if (topAuthGuest) topAuthGuest.style.display = session ? 'none' : 'block';
+    if (topAuthUser) topAuthUser.style.display = session ? 'block' : 'none';
+    if (isAdmin) {
       // 重新載入當前日期資料以更新輸入框
       loadDateData();
-    } else {
-      isAdmin = false;
-      if (adminZone) adminZone.style.display = 'none';
-      if (topAuthGuest) topAuthGuest.style.display = 'block';
-      if (topAuthUser) topAuthUser.style.display = 'none';
     }
   }
 
