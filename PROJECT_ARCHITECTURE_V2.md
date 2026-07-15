@@ -126,6 +126,7 @@
   - ⚠️ **與原規劃不同**：分類欄位第一版做成「下拉選單（選既有）/文字框（輸入新分類）」雙欄位切換設計，使用者驗收時反映選了既有分類仍誤以為要填新分類名稱，體驗混淆；改為單一輸入框 + `<datalist>`，選現有或打新分類都在同一欄位完成
   - 監聽 `trip-changed` 事件，切換行程時重新查詢該行程關聯的分類（`loadTripSubwayCategories()`），全域地鐵圖清單本身只在頁面初次載入時抓取一次，不隨行程切換重抓
 - 「AI 幫我找圖」**明確遞延至階段 7**（依賴階段 7 才會建置的 AI 後端），本次僅實作手動上傳
+- **管理員專屬「刪除地鐵圖」**（✅ 2026-07-13 已上線，非分階段任務，使用者臨時追加需求）：每張圖右上角 `admin-only` 垃圾桶按鈕，`confirm()` 後刪除該筆 `travel_subway_maps` 資料，完全比照既有優惠券刪除模式；RLS 早已就緒（`travel_subway_maps_admin_all` 為 `FOR ALL` 鎖管理員 email，DELETE 本來就允許，只是先前沒有對應前端按鈕），不需要任何 SQL 變更。只刪資料庫該筆資料，圖片檔案留在 Storage bucket（比照 `travel_coupons`/`post_images` 既有孤兒檔案慣例，不引入新的清理邏輯）；`trip_subway_categories` 以 `trip_id`+分類名稱關聯、非外鍵指向 `travel_subway_maps.id`，刪除單張圖片不影響任何行程的分類關聯設定
 
 ---
 

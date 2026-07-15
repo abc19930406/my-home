@@ -638,6 +638,26 @@
 
 ---
 
+### 🔶 地鐵圖新增刪除功能（2026-07-13，程式碼已完成，待使用者實測，非分階段任務，使用者臨時追加需求）
+
+- **背景**：「資源」子分頁的地鐵圖（V2 階段 5 任務二）原本只有管理員上傳功能，沒有刪除功能，使用者測完階段 9 第一個任務後提出這個小需求
+- **執行前確認**：`travel_subway_maps` 的 RLS 早已就緒——`travel_subway_maps_admin_all` 是 `FOR ALL`（涵蓋 SELECT/INSERT/UPDATE/DELETE）鎖管理員 email 的既有政策，DELETE 本來就被允許，只是前端從未做過對應按鈕，**本次不需要任何 SQL/RLS 變更**
+- **實作（`TripPlanner.astro`）**：完全比照既有「優惠券刪除」模式——`renderSubwayGroups()` 每張圖新增 `admin-only` 垃圾桶按鈕（`.subway-map-admin-actions`），點擊 `confirm()` 後 `.delete().eq('id', id).select()`，檢查受影響筆數為 0 時明確提示失敗，成功後更新本地快取、重繪、`showToast()`、`triggerBuildWebhook()`；按鈕點擊 `stopPropagation()` 避免誤觸底下景點放大檢視的 lightbox
+- **明確不做的事（比照既有慣例維持一致性）**：不刪除 Storage 裡的圖片檔（比照 `travel_coupons`/`post_images` 既有孤兒檔案慣例，不引入新清理邏輯）；不處理 `trip_subway_categories`（該表以 `trip_id`+分類名稱關聯，非外鍵指向 `travel_subway_maps.id`，刪除單張圖片不影響任何行程的分類關聯設定）
+- **本地驗證**：`astro check` 無新增錯誤；瀏覽器強制顯示 `admin-only` 元素後確認按鈕外觀與位置正確、`confirm()` 對話框正確跳出（stub 攔截確認訊息文字無誤）、點擊不觸發底下的 lightbox 放大
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| 型別檢查無新增錯誤 | `astro check` | ✅ |
+| 刪除按鈕外觀、位置、confirm() 觸發正常 | 本機瀏覽器強制顯示驗證 | ✅ |
+| 點擊刪除按鈕不誤觸景點放大檢視 | `stopPropagation()` | ✅（本機驗證） |
+| 管理員上傳測試圖 → 刪除 → 重整後確認資料庫真的消失 | 待使用者以真實管理員帳號實測 | ⏳ 待使用者實測 |
+| 非管理員身分看不到刪除按鈕 | 待使用者實測 | ⏳ 待使用者實測 |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
