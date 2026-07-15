@@ -2263,7 +2263,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           : '';
         return `
           <div class="coupon-card" data-id="${c.id}">
-            <div class="coupon-card-admin-actions admin-only" style="display: none;">
+            <div class="coupon-card-admin-actions admin-only" style="display: ${isAdminUser ? 'flex' : 'none'};">
               <button type="button" class="btn-coupon-edit" data-id="${c.id}" title="編輯"><i class="ti ti-pencil"></i></button>
               <button type="button" class="btn-coupon-delete" data-id="${c.id}" title="刪除"><i class="ti ti-trash"></i></button>
             </div>
@@ -2420,7 +2420,7 @@ const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
           <div class="subway-images-row">
             ${grouped[category].map(m => `
               <div class="subway-map-thumb-wrap">
-                <div class="subway-map-admin-actions admin-only" style="display: none;">
+                <div class="subway-map-admin-actions admin-only" style="display: ${isAdminUser ? 'flex' : 'none'};">
                   <button type="button" class="btn-subway-map-delete" data-id="${m.id}" title="刪除"><i class="ti ti-trash"></i></button>
                 </div>
                 <img src="${m.image_url}" alt="${m.title}" class="subway-map-thumb" data-src="${m.image_url}" title="${m.title}" loading="lazy" />
