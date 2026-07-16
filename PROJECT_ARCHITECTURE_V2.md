@@ -116,7 +116,7 @@
 - RLS 稽核時已確認正確（SELECT 全開、寫入鎖管理員 email），本次未異動
 
 **地鐵圖**（`travel_subway_maps` + `trip_subway_categories`，✅ 2026-07-13 已上線，V2 階段 5 任務二）
-- `travel_subway_maps` 新增 `category`（text，NOT NULL）欄位，全域資源庫依此分組顯示；原 `trip_id` 欄位**停用不刪**（新程式碼不再讀寫，保留至階段 9 評估是否清理，此為刻意決定，不是遺漏）
+- `travel_subway_maps` 新增 `category`（text，NOT NULL）欄位，全域資源庫依此分組顯示；原 `trip_id` 欄位已於 2026-07-16（V2 階段 9 O3）確認全站無讀寫引用後由使用者執行 `DROP COLUMN` 移除
 - 新表 `trip_subway_categories`（`trip_id` + `category`，`UNIQUE(trip_id, category)`）記錄行程關聯了哪些分類；RLS：SELECT 開放、INSERT/DELETE 重用 `can_edit_trip()`（V2 階段 4 任務二建立），UPDATE 不開放（要改就刪了重加）
 - 「資源」子分頁優惠券下方新增地鐵圖區塊：預設依目前行程關聯的分類分組顯示圖片，點圖沿用既有 `#lightbox`（與景點照片共用）放大檢視
 - 「瀏覽全部分類」：⚠️ **與原規劃不同**——原規劃僅管理員與 `can_edit_itinerary` 協作者可見。開發驗收時使用者提出調整：**開放給所有人使用**（含朋友帳號、未登入訪客），比照 V2 階段 3「收藏依行程篩選」的精神。但寫入行為依身分分流：
@@ -270,7 +270,7 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | 資料表 | 狀態 | 說明 |
 |--------|------|------|
 | travel_coupons | ✅ 已建立，UI 已上線（2026-07-13） | 優惠券，全站共用 |
-| travel_subway_maps | ✅ 已調整，UI 已上線（2026-07-13） | 地鐵圖，新增 `category` 欄位分組；`trip_id` 停用不刪（留待階段 9） |
+| travel_subway_maps | ✅ 已調整，UI 已上線（2026-07-13） | 地鐵圖，新增 `category` 欄位分組；`trip_id` 已於 2026-07-16（階段 9 O3）確認無引用後刪除 |
 | trip_subway_categories | ✅ 已建立，UI 已上線（2026-07-13） | trip_id + category，行程關聯的地鐵圖分類，RLS 重用 `can_edit_trip()` |
 | spot_transport_routes | ✅ 已建立，UI 已上線（2026-07-13） | origin_spot_id + destination_spot_id + 多筆交通方式（mode/duration/cost/note/timetable_url/subway_map_category），RLS 重用 `can_edit_trip()` |
 | trip_collaborators | ✅ 已建立（2026-07-12），權限已全數落實（2026-07-13） | trip_id + user_email + can_edit_wishlist + can_edit_itinerary，RLS 已設定，管理員 UI 已上線，兩個權限開關均已在對應表的 RLS 中生效 |
@@ -282,7 +282,7 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | spot_types | 新增 `is_chain_store` boolean | ✅ 已完成 |
 | spot_subtypes | 新增 `is_chain_store` boolean | ✅ 已完成 |
 | japan_items | 新增 `trip_id`（可空，FK → trips，`ON DELETE SET NULL`） | ✅ 已完成（2026-07-12） |
-| travel_subway_maps | 新增 `category`（text, NOT NULL）；`trip_id` 停用不刪（改用 trip_subway_categories 記錄關聯，`trip_id` 本身保留至階段 9 評估） | ✅ 已完成（2026-07-13） |
+| travel_subway_maps | 新增 `category`（text, NOT NULL）；改用 trip_subway_categories 記錄關聯，`trip_id` 已於 2026-07-16（階段 9 O3）確認無引用後 `DROP COLUMN` | ✅ 已完成（2026-07-13 新增欄位／2026-07-16 舊欄位刪除） |
 | spots | `trip_id` 外鍵刪除規則 `CASCADE` → `SET NULL`（配合刪除行程功能，比照 japan_items 設計） | ✅ 已完成（2026-07-13） |
 
 ### 7.3 Storage Buckets

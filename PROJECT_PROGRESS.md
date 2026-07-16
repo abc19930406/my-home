@@ -769,7 +769,7 @@
 
 ---
 
-### 🔶 V2 階段 9 最終任務（O3）：清空歷史遺留（進行中，浸泡期間執行）
+### 🔶 V2 階段 9 最終任務（O3）：清空歷史遺留（已完成，僅餘 Heisenbug 兩項待浸泡期滿後獨立處理）
 
 - **範圍調整聲明**：使用者下達任務時指示調整：「Heisenbug 診斷碼移除」與「Heisenbug 案結案記錄」本輪不做（浸泡期未滿），留待浸泡期滿（一至兩週）後以獨立小任務處理；其餘項目全部執行。本輪結束後 V2 階段表第 9 列標記為 🔶（僅餘浸泡期收尾）而非全 ✅
 - **檔案刪除批次（commit `d63ceaf`，使用者逐項核准後執行）**：
@@ -779,10 +779,10 @@
   - 額外發現並經使用者確認一併清除：`test_diagnose.js`（同類除錯 stub，命名不符原清單規則）、`.CLAUDE.md.swp`（未追蹤的 vim 暫存檔）
   - `.gitignore` 補上 `*.log`，避免未來再度誤入版控
   - 本機驗證：`astro check` 無新增錯誤；`/trip`、`/japan`（轉址）皆正常運作無 console 錯誤
-- **資料庫遺留欄位（讀寫皆由使用者於 Supabase 執行，不可逆操作慣例）**：
+- **資料庫遺留欄位（讀寫皆由使用者於 Supabase 執行，不可逆操作慣例，已完成）**：
   - 程式碼面已確認 `spots.category`/`spots.icon`（被 `spot_type_id`/`spot_subtype_id` 取代）、`travel_subway_maps.trip_id`（被 `trip_subway_categories` 取代）全站皆無讀寫引用
-  - 提供唯讀確認 SQL（`GROUP BY` 確認資料分佈）與刪除欄位 SQL（`ALTER TABLE ... DROP COLUMN`），待使用者確認資料庫端現況並執行
-  - （本節將於使用者回報執行結果後補上結果）
+  - 唯讀確認 SQL 結果（`spots.category`/`spots.icon` 資料分佈）：`購物/🛍️` 1 筆、`景點/⛩️` 1 筆、`景點/🎡` 1 筆、`景點/📍`（文件記載的預設值）113 筆——絕大多數確為預設值，僅 3 筆非預設組合，但程式碼面已確認全站無任何讀寫路徑會用到這兩欄，此 3 筆歷史資料不影響任何現行功能
+  - 使用者已於 Supabase SQL Editor 執行 `ALTER TABLE ... DROP COLUMN`，三欄（`spots.category`、`spots.icon`、`travel_subway_maps.trip_id`）皆一併執行成功，欄位已刪除
 - **Modal/CSS 命名稽核（commit `8d713f9`）**：CLAUDE.md 的前綴隔離規則限定「多元件共存頁面」，全站只有 `/trip`（`TripPlanner.astro`+`JapanCollection.astro`）符合。盤點結果：容器層級已正確做前綴隔離；內層按鈕/標題 ID 本身沒有前綴，但目前彼此巧合不重複、無實際衝突；`JapanCollection.astro` 內部發現一處不一致——`item-modal` 的關閉按鈕用泛用 ID `btn-modal-close`，同檔案的 `collect-modal` 卻有專屬的 `btn-collect-modal-close`。已改為 `btn-item-modal-close`（比照既有慣例），同步更新對應 `getElementById` 呼叫點。**刻意不做**全站 Modal ID 大規模重新命名（`TripPlanner.astro`/`JapanCollection.astro` 皆為高風險大檔案，目前無實際衝突，重新命名的手滑風險大於預防性補前綴的效益），若未來需要全面補齊前綴另立任務處理
 - **明確排除本輪**：`[DEBUG-HEISENBUG]` 診斷碼與 Heisenbug 案結案記錄（浸泡期未滿）
 
@@ -793,7 +793,7 @@
 | 檔案刪除清單經使用者逐項核准 | 本輪文件呈現的清單 | ✅ |
 | 檔案刪除後型別檢查與 `/trip`/`/japan` 功能正常 | 本機驗證 | ✅ |
 | 資料庫遺留欄位程式碼面確認無引用 | grep 全站 | ✅ |
-| 資料庫欄位刪除 SQL 已提供，待使用者執行 | 唯讀確認 SQL + 刪除 SQL | ⏳ 待使用者操作 |
+| 資料庫欄位刪除，使用者確認執行成功 | 唯讀確認 SQL + 刪除 SQL，三欄皆執行成功 | ✅ |
 | Modal 命名稽核完成，範圍內修正已驗證 | 本機瀏覽器實測開關 modal | ✅ |
 | V2 階段表第 9 列標記為 🔶（非全 ✅） | `PROJECT_ARCHITECTURE_V2.md` | ✅ |
 
@@ -921,7 +921,7 @@
 8. ~~**階段 8**:AI 工具逐個開放(第一批行程類五工具 + 第二批收藏類三工具與 delete_spot)~~ **✅ 2026-07-13 全部完成,階段 8 結案**,詳見上方「V2 階段 8 第一批」「V2 階段 8 第二批」
 9. ~~/trip 穩定後評估是否移除舊的 /travel 與 /japan 頁面~~ **✅ 2026-07-13 已退役並轉址，原始檔案已於 O3 清理批次刪除**
 10. ~~**階段 9**：Supabase npm 遷移（四波）~~ **✅ 2026-07-15 全部完成，Fable 覆核 + 使用者實測皆通過**，詳見上方「V2 階段 9 核心任務」
-11. ~~**階段 9 最終任務（O3）**：程式碼清理與重構，含 CSS/ID 前綴隔離補齊、`spots.category`/`spots.icon`/`travel_subway_maps.trip_id` 遺留欄位、根目錄除錯遺留、退役檔案~~ **✅ 2026-07-16 大部分完成**，詳見上方「V2 階段 9 最終任務（O3）」；資料庫欄位刪除待使用者執行 SQL；**Heisenbug 診斷碼移除與案件結案記錄、`body.trip-page` class 評估（V2 階段 7 發現的既有落差，見 PROJECT_ARCHITECTURE_V2.md 5.3 節）本輪皆未處理，留待浸泡期滿後的獨立任務**
+11. ~~**階段 9 最終任務（O3）**：程式碼清理與重構，含 CSS/ID 前綴隔離補齊、`spots.category`/`spots.icon`/`travel_subway_maps.trip_id` 遺留欄位、根目錄除錯遺留、退役檔案~~ **✅ 2026-07-16 全部完成**，詳見上方「V2 階段 9 最終任務（O3）」；**Heisenbug 診斷碼移除與案件結案記錄、`body.trip-page` class 評估（V2 階段 7 發現的既有落差，見 PROJECT_ARCHITECTURE_V2.md 5.3 節）本輪皆未處理，留待浸泡期滿後的獨立任務**
 
 ---
 
