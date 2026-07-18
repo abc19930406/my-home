@@ -288,6 +288,7 @@ if (!session) {
 | post_media_items | 短文媒體：YouTube / 短片 / 錄音（2026-07-11 新增，見下方章節） |
 | quotes | 語錄收藏 |
 | status | 現在狀態（id=1 固定） |
+| cards | 首頁卡片資料，**實際資料源**（見下方「cards 資料表欄位」章節） |
 | daily | Polaroid 底片日記 |
 | transactions | 記帳明細（含 currency、amount_jpy、exchange_rate） |
 | income_categories | 收入來源（動態管理） |
@@ -314,6 +315,15 @@ if (!session) {
 - id（固定為 1）
 - reading、music、mood、doing（現在狀態四欄）
 - japan_explore_public（boolean，控制探索日本搜尋的公開/私人）
+
+### cards 資料表欄位（首頁卡片資料，2026-07-18 補充記錄）
+- 欄位：`id`（PK，自動遞增）、`section`（分區名稱）、`title`、`icon`（Tabler icon 名稱）、`description`、`url`、`sort_order`（現有資料以 10 為單位遞增：10、20、30...）、`children`（jsonb 陣列，格式 `{ title, url }[]`，供卡片下方子連結使用，例如「知識庫」卡片的「Obsidian 筆記」）
+- **⚠️ 重要：此表才是首頁卡片的實際資料源，`src/data/links.ts` 只是編譯期備援**——`src/pages/index.astro` 會先查詢此表，查到非空結果就完全採用；只有查詢失敗或資料表是空的，才會退回使用 `linksData`（見 `index.astro` 第 11-21 行）。正常情況下（此表有資料）修改 `links.ts` **不會**反映到正式站，必須直接對此表寫入才會生效。目前兩邊內容已知存在落差（例如「記帳系統」的 `url` 在 `cards` 表為空字串、`links.ts` 為 `/ledger`；「旅行地圖」在 `cards` 表為 `/japan`、`links.ts` 為空字串），屬歷史遺留，非單一任務範圍內能一次修復，日後如需讓兩邊保持一致，需要專門排一個同步任務逐欄核對
+- **RLS 現況（2026-07-18 以 anon key 實測確認，非查詢資料庫政策文字本身）**：
+  - SELECT：對任何人開放（未登入、匿名 anon key 皆可完整讀取全部卡片資料），供首頁公開展示，符合預期
+  - INSERT：已確認鎖管理員——anon key 嘗試寫入直接收到 `new row violates row-level security policy for table "cards"`（42501），未實際寫入任何資料
+  - UPDATE / DELETE：**未直接測試**（避免對正式資料做寫入類測試，即使是無害的原值覆寫也不做未經授權的正式環境寫入）；比對站內其他公開展示型資料表的一致設計慣例（SELECT 開放 + 寫入鎖 `is_admin()`／管理員 email 的 `FOR ALL` 政策，如 `travel_coupons`、`travel_subway_maps`），高度可能是同一套「僅管理員可寫入」設計，但**未經確認不能視為定案**；如需 100% 確定政策文字，需由使用者本人於 Supabase Dashboard → Authentication → Policies 查看 `cards` 表的實際政策定義
+- **新增卡片流程（目前限制）**：`admin.astro` 的卡片編輯 Modal（`.from('cards').update(...)`）只支援 `UPDATE`（依 `title` 比對既有列），沒有新增列的介面；新增卡片目前只能由管理員在 Supabase Dashboard 手動執行 SQL INSERT 或用 Table Editor 新增列
 
 ### wishlist_items RLS policies
 - SELECT：所有登入用戶可讀

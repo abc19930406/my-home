@@ -863,6 +863,7 @@
 | post_media_items | 短文媒體（YouTube / 短片 / 錄音），2026-07-11 新增 | ✅ |
 | quotes | 語錄收藏 | ✅ |
 | status | 現在狀態（id=1 固定） | ✅ |
+| cards | 首頁卡片資料，**首頁的實際資料源**（`links.ts` 僅為查詢失敗/空表時的編譯期備援，2026-07-18 確認並補上「日文學習」卡片時發現，欄位結構與 RLS 現況見 PROJECT_ARCHITECTURE.md「cards 資料表欄位」章節） | ✅ |
 | daily | Polaroid 底片日記 | ✅ |
 | transactions | 記帳明細（含 currency、amount_jpy、exchange_rate） | ✅ |
 | income_categories | 收入來源（動態管理） | ✅ |
