@@ -25,6 +25,8 @@
 - 三個卡片分區：知識與創作 / 生活記錄 / 工具
 - 登入後每張卡片出現編輯按鈕
 - 「旅行地圖」卡片點擊後展開子選單（/travel 和 /japan，未來將導向 /trip）
+- ⚠️ **重要澄清（2026-07-18）**：`src/data/links.ts` 現在只是**編譯期備援**，不是實際資料來源——`index.astro` 會先查詢 Supabase `cards` 資料表，查到非空結果就完全採用該表資料，`links.ts` 只有在查詢失敗或資料表是空的才會生效。實測確認 `cards` 表目前已有資料且與 `links.ts` 內容存在落差（例如「記帳系統」在 `cards` 表 url 為空、`links.ts` 為 `/ledger`），**修改 `links.ts` 不會反映到正式站，必須直接對 Supabase `cards` 表寫入才會生效**；`admin.astro` 的卡片編輯功能也只支援 `UPDATE`（依標題比對既有列），沒有新增列的介面，新增卡片目前只能手動在 Supabase Dashboard 執行 SQL INSERT。新增「日文學習」卡片（工具分區，連結 https://kotoba-delta.vercel.app）即依此方式完成：`links.ts` 新增對應項目維持兩邊同步、`cards` 表另外手動 INSERT 一列（id=14，使用者本人於 Dashboard 執行）
+- 「工具」分區新增「日文學習」卡片（2026-07-18），連結外部獨立部署的日文學習工具 https://kotoba-delta.vercel.app，同視窗開啟，不涉及主站程式碼
 
 ### ✅ 現在狀態便條紙（首頁卡片上方）
 - 淡黃色便條紙 + 頂部琥珀色紙膠帶 + 微傾斜

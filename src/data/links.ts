@@ -104,5 +104,12 @@ export const linksData: CardLink[] = [
     icon: "bookmark",
     description: "好用的資源・常去的網站",
     url: ""
+  },
+  {
+    section: "工具",
+    title: "日文學習",
+    icon: "language",
+    description: "單字・文法・練習工具",
+    url: "https://kotoba-delta.vercel.app"
   }
 ];
