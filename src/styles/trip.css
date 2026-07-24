@@ -143,7 +143,7 @@ body.trip-page {
     display: none;
   }
 
-  /* 頂部列 */
+  /* 頂部列（固定於畫面頂端，避免捲動時消失導致選單無法點擊） */
   .trip-mobile-header {
     height: 56px;
     background-color: #2C1E14;
@@ -152,8 +152,16 @@ body.trip-page {
     justify-content: flex-end; /* 右上角按鈕 */
     padding: 0 16px;
     flex-shrink: 0;
-    position: relative;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
     z-index: 100;
+  }
+
+  /* 頂部列改為 fixed 後脫離文件流，內容區補上對應高度避免被蓋住 */
+  .trip-main-content {
+    padding-top: 56px;
   }
 
   .mobile-menu-btn {

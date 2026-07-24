@@ -218,6 +218,83 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* ==========================================================
+   /trip 收藏分頁 Mobile 版面修正
+   （/trip 的 Mobile/Desktop 分界為 767px，與 trip.css 一致）
+   - 登入/登出按鈕原本與 Mobile 版頂部漢堡選單重疊，改為固定在頂部列下方
+   - 搜尋框與分類篩選列改為固定在頂部列下方，捲動時維持可見
+   - 主/子分類列改為單行橫向捲動，讓固定區塊維持可預期的高度
+   ========================================================== */
+@media (max-width: 767px) {
+  .japan-top-auth {
+    position: fixed;
+    top: 66px;
+    right: 1rem;
+    z-index: 95;
+  }
+
+  .japan-filter-bar {
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    z-index: 90;
+    margin: 0;
+    border-radius: 0;
+    padding: 12px 16px;
+    gap: 10px;
+  }
+
+  .filter-row {
+    width: 100%;
+  }
+
+  .main-categories,
+  .sub-categories {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .main-categories::-webkit-scrollbar,
+  .sub-categories::-webkit-scrollbar {
+    display: none;
+  }
+
+  .main-categories .tag-btn,
+  .sub-categories .tag-btn {
+    flex-shrink: 0;
+  }
+
+  .admin-actions {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+  }
+
+  .admin-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .admin-actions .btn-action,
+  .admin-actions .btn-action-primary {
+    flex-shrink: 0;
+  }
+
+  .japan-container {
+    /* 需容納「管理員 + 子分類展開」的最高情況（實測約 236px），
+       避免固定區塊在該情況下蓋住卡片 */
+    padding-top: 216px;
+  }
+}
+
 .tag-btn {
   background: transparent;
   border: 1px solid var(--japan-border);
