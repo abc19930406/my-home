@@ -5,6 +5,13 @@ import '../styles/notes.css';
 ---
 
 <Layout title="讀書筆記 | The Corner Table">
+  <div class="top-right-auth-container">
+    <div id="notes-auth-user" style="display: none;">
+      <span id="notes-auth-email" class="notes-auth-email"></span>
+      <button id="btn-notes-logout" class="btn-top-auth">登出</button>
+    </div>
+  </div>
+
   <div class="notes-body">
     <div class="notes-container">
       <header class="notes-header">
@@ -38,15 +45,20 @@ import '../styles/notes.css';
 
   const lockedEl = document.getElementById('notes-locked');
   const emptyEl = document.getElementById('notes-empty');
+  const authUserEl = document.getElementById('notes-auth-user');
+  const authEmailEl = document.getElementById('notes-auth-email');
 
   function showLocked() {
     if (lockedEl) lockedEl.style.display = 'flex';
     if (emptyEl) emptyEl.style.display = 'none';
+    if (authUserEl) authUserEl.style.display = 'none';
   }
 
-  function showEmpty() {
+  function showEmpty(email: string) {
     if (lockedEl) lockedEl.style.display = 'none';
     if (emptyEl) emptyEl.style.display = 'flex';
+    if (authUserEl) authUserEl.style.display = 'flex';
+    if (authEmailEl) authEmailEl.textContent = `已登入：${email}`;
   }
 
   (async () => {
@@ -56,8 +68,13 @@ import '../styles/notes.css';
         data: { session },
       } = await supabase.auth.getSession();
 
+      document.getElementById('btn-notes-logout')?.addEventListener('click', async () => {
+        await supabase.auth.signOut();
+        window.location.reload();
+      });
+
       if (session && session.user.email === adminEmail) {
-        showEmpty();
+        showEmpty(session.user.email);
       } else {
         showLocked();
       }

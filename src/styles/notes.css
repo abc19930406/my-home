@@ -11,6 +11,16 @@
   --notes-accent: #C4956A;
 }
 
+#notes-auth-user {
+  align-items: center;
+}
+
+.notes-auth-email {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.8rem;
+  margin-right: 0.5rem;
+}
+
 .notes-body {
   min-height: 100vh;
   background-color: var(--notes-bg);
