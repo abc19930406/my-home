@@ -1,0 +1,69 @@
+---
+export const prerender = false;
+import Layout from '../layouts/Layout.astro';
+import '../styles/notes.css';
+---
+
+<Layout title="讀書筆記 | The Corner Table">
+  <div class="notes-body">
+    <div class="notes-container">
+      <header class="notes-header">
+        <a href="/" class="nav-back">← Back</a>
+        <h1 class="page-title">讀書筆記</h1>
+        <p class="page-subtitle">個人知識庫・複習與演講素材</p>
+      </header>
+
+      <!-- 未登入 / 非管理員：兩者顯示同一畫面，不透露差異 -->
+      <section id="notes-locked" class="notes-state-box" style="display: none;">
+        <p class="notes-state-icon">🔒</p>
+        <p class="notes-state-title">僅管理員可用</p>
+        <p class="notes-state-desc">這是私人筆記工作區，僅供管理員本人存取。</p>
+        <a href="/login?from=/notes" class="btn-notes-login">🔑 前往登入</a>
+      </section>
+
+      <!-- 管理員已登入，但本階段尚無任何筆記列表功能 -->
+      <section id="notes-empty" class="notes-state-box" style="display: none;">
+        <p class="notes-state-icon">📚</p>
+        <p class="notes-state-title">尚無筆記</p>
+        <p class="notes-state-desc">讀書筆記模組正在建置中，新增筆記的功能即將開放。</p>
+      </section>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
+
+  const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL || '';
+
+  const lockedEl = document.getElementById('notes-locked');
+  const emptyEl = document.getElementById('notes-empty');
+
+  function showLocked() {
+    if (lockedEl) lockedEl.style.display = 'flex';
+    if (emptyEl) emptyEl.style.display = 'none';
+  }
+
+  function showEmpty() {
+    if (lockedEl) lockedEl.style.display = 'none';
+    if (emptyEl) emptyEl.style.display = 'flex';
+  }
+
+  (async () => {
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (session && session.user.email === adminEmail) {
+        showEmpty();
+      } else {
+        showLocked();
+      }
+    } catch (err) {
+      console.warn('Notes auth check failed:', err);
+      showLocked();
+    }
+  })();
+</script>
