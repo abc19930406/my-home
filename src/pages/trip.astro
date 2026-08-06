@@ -93,23 +93,6 @@ import "../styles/trip.css";
 <script>
   import { getSupabaseBrowserClient } from "../lib/supabase-browser.js";
 
-  // [DEBUG-HEISENBUG] 診斷記錄函式:寫入 sessionStorage,禁用 console 以免其開銷改變時序
-  function logAuth(label, data) {
-    try {
-      const raw = sessionStorage.getItem("__auth_debug_log");
-      const arr = raw ? JSON.parse(raw) : [];
-      arr.push({ t: performance.now(), label, data });
-      sessionStorage.setItem("__auth_debug_log", JSON.stringify(arr));
-    } catch (e) {
-      // [DEBUG-HEISENBUG] 記錄失敗時靜默略過,絕不影響主流程
-    }
-  }
-  // [DEBUG-HEISENBUG] 頁面載入基準點
-  logAuth("page-load", {
-    hashHasToken: window.location.hash.includes("access_token"),
-    latestAuthStateExists: typeof window.__latestAuthState !== "undefined",
-  });
-
   const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL || "";
 
   // 提升 auth-modal 到 document.body，避免受 tab 容器 display: none 影響
@@ -129,26 +112,10 @@ import "../styles/trip.css";
       const supabase = window.sharedSupabase;
 
       supabase.auth.onAuthStateChange(async (event, session) => {
-        // [DEBUG-HEISENBUG] callback 進入點
-        logAuth("onAuthStateChange-enter", {
-          event,
-          sessionIsNull: session === null,
-          hashHasToken: window.location.hash.includes("access_token"),
-        });
         if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
           if (window.location.hash.includes("access_token")) {
-            // [DEBUG-HEISENBUG] 即將清除 hash(嫌犯一觀測點)
-            logAuth("before-replaceState-clear-hash", {
-              event,
-              sessionIsNull: session === null,
-            });
             window.history.replaceState(null, "", window.location.pathname);
           }
-          // [DEBUG-HEISENBUG] 即將廣播 auth-state-changed(callback 內 SIGNED_IN/INITIAL_SESSION 分支)
-          logAuth("before-dispatch-callback-signedin-branch", {
-            event,
-            sessionIsNull: session === null,
-          });
           window.dispatchEvent(
             new CustomEvent("auth-state-changed", {
               detail: { event, session },
@@ -157,11 +124,6 @@ import "../styles/trip.css";
           window.__latestAuthState = { event, session };
         }
         if (event === "SIGNED_OUT") {
-          // [DEBUG-HEISENBUG] 即將廣播 auth-state-changed(callback 內 SIGNED_OUT 分支)
-          logAuth("before-dispatch-callback-signedout-branch", {
-            event,
-            sessionIsNull: session === null,
-          });
           window.dispatchEvent(
             new CustomEvent("auth-state-changed", {
               detail: { event, session: null },
@@ -175,12 +137,6 @@ import "../styles/trip.css";
         data: { session: initialSession },
       } = await supabase.auth.getSession();
 
-      // [DEBUG-HEISENBUG] getSession() 返回後
-      logAuth("getSession-returned", {
-        sessionIsNull: initialSession === null,
-        hashHasToken: window.location.hash.includes("access_token"),
-      });
-
       if (initialSession && initialSession.user.email === adminEmail) {
         isAdminUser = true;
         // 顯示所有 "返回首頁" 連結，以及僅管理員可見的功能（目前為 AI 分頁入口）
@@ -192,10 +148,6 @@ import "../styles/trip.css";
           });
       }
 
-      // [DEBUG-HEISENBUG] 即將手動廣播 INITIAL_SESSION(嫌犯二觀測點)
-      logAuth("before-dispatch-manual-INITIAL_SESSION", {
-        sessionIsNull: initialSession === null,
-      });
       window.dispatchEvent(
         new CustomEvent("auth-state-changed", {
           detail: { event: "INITIAL_SESSION", session: initialSession },
@@ -203,8 +155,6 @@ import "../styles/trip.css";
       );
       window.__latestAuthState = { event: "INITIAL_SESSION", session: initialSession };
     } catch (err) {
-      // [DEBUG-HEISENBUG] init 流程拋出例外(DevTools 關閉時 console.warn 看不到,補記一筆)
-      logAuth("auth-init-catch", { message: err && err.message ? err.message : String(err) });
       console.warn("Auth init failed:", err);
     }
   })();

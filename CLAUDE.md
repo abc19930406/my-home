@@ -36,8 +36,7 @@
 ## 硬性技術規則(完整細節與原因見 PROJECT_ARCHITECTURE.md)
 
 - `is:inline` 與 `define:vars` 的 `<script>` **禁用 TypeScript 語法**:這類 script 不經過 Vite 打包器,型別標註、`as` 斷言會直接送進瀏覽器導致執行期語法錯誤。一般 `<script>`(非 `is:inline`、非 `define:vars`)會經 Vite/esbuild 打包,**可以**使用 TS 語法(型別標註、`as` 斷言皆可),專案內既有大量此類寫法且建置與執行皆正常,不要移除
-- ⚠️ **過渡性註記(2026-07-13)**:下面這條「Supabase 走 CDN 動態注入」規則正在遷移至 npm 匯入(V2 階段 9 核心任務,第一至三波已完成,現於浸泡觀察期),**目前程式碼實際上已不再使用 CDN**,下面規則描述已過時,待第四波浸泡確認穩定後正式改寫。過渡期間若要修改瀏覽器端 Supabase 載入相關程式碼,以 `PROJECT_PROGRESS.md`「V2 階段 9 核心任務」章節的實際現況為準,不要依下面這條舊規則行動
-- Supabase 走 CDN 動態注入(Layout.astro),版本鎖定**確切版號** `@supabase/supabase-js@2.110.2/+esm`(2026-07-11 凍結,禁止浮動 `@2`;升版屬依賴變更,須先問);**不可**改為直接 import CDN URL
+- Supabase 瀏覽器端載入(2026-07-16 正式改寫,取代舊版 CDN 動態注入規則,浸泡期已滿確認穩定):走 npm 匯入,`src/lib/supabase-browser.js` 的 `getSupabaseBrowserClient()` 為單例入口,各頁面/元件一律 `import { getSupabaseBrowserClient } from '.../lib/supabase-browser.js'` 取得 client,**不得**自行 `createClient()`;版本鎖定**確切版號** `@supabase/supabase-js@2.110.2`(`package.json`/`package-lock.json`,2026-07-11 由 CDN 浮動版號沿用至此,禁止浮動;升版屬依賴變更,須先問)
 - `/trip` 頁面採 Supabase 單一入口:只有 trip.astro 可呼叫 `createClient` / `getSession` / `onAuthStateChange`;TripPlanner.astro 與 JapanCollection.astro **絕不**自行呼叫,只透過 `auth-state-changed` 事件 + `window.__latestAuthState` 快照接收狀態
 - `window.__latestAuthState` 快照機制周邊的任何修改,必須完整貼出修改後程式碼供使用者肉眼確認(曾被格式化工具誤刪)
 - 多元件共存頁面:Modal/Toast 的 ID 與 CSS class 必須加 `japan-` / `travel-` 前綴隔離

@@ -300,14 +300,14 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 |------|------|------|
 | 1 | 新頁面骨架：`/trip` Desktop/Mobile 兩套版面 shell，三分頁可切換 | ✅ 已完成 |
 | 2 | 行程子分頁遷移：地圖、行程模式、連鎖店功能遷移至 TripPlanner.astro | ✅ 已完成 |
-| 2.5 | Supabase 單一入口架構重構 + Race Condition 修正（原規劃外，因應實作過程發現的問題而新增） | 🔶 大致完成，有未解決問題待釐清 |
+| 2.5 | Supabase 單一入口架構重構 + Race Condition 修正（原規劃外，因應實作過程發現的問題而新增） | ✅ 已完成（Heisenbug 案已於 2026-07-16 結案，詳見下方九、已完成項目總覽） |
 | 3 | 收藏分頁整合：japan_items.trip_id、收藏分頁顯示邏輯、一般收藏 vs 行程收藏 | ✅ 已完成（2026-07-12） |
 | 4 | 協作者權限系統：trip_collaborators、雙開關權限、Sandbox 模式（共三個子任務） | ✅ 已完成（任務一：地基與管理員 UI 2026-07-12；任務二：can_edit_itinerary 落實 2026-07-13；任務三：can_edit_wishlist 落實 + Sandbox 模式 2026-07-13） |
 | 5 | 資源子分頁：優惠券、地鐵圖分類化、trip_subway_categories | ✅ 已完成（任務一：子分頁骨架 + 優惠券牆 2026-07-13；任務二：地鐵圖全域分類庫 2026-07-13） |
 | 6 | 交通查詢子分頁：spot_transport_routes、行程內嵌交通方式 UI | ✅ 已完成（任務一：spot_transport_routes 建表 + 交通查詢子分頁 2026-07-13；任務二：行程內嵌交通方式 UI，M2 2026-07-13） |
 | 7 | AI 助手（只讀）：/api/ai-assistant，讀取行程/收藏資料並回答問題 | ✅ 已完成（2026-07-13） |
 | 8 | AI 工具逐個開放：add_spot、toggle_wishlist 等寫入工具 | ✅ 已完成（2026-07-13）：第一批行程類五工具（含補丁 assign_spot_to_day）+ 第二批收藏類三工具與 delete_spot，皆驗收通過 |
-| 9 | 程式碼清理與重構：統一 Modal/CSS 命名規則、評估舊頁面下線 | 🔶 舊頁面退役、Supabase npm 遷移（四波）、O3 歷史遺留清理（檔案/資料庫欄位/Modal 命名稽核）皆已完成，**僅餘 Heisenbug 診斷碼移除與案件結案記錄**待浸泡期滿（一至兩週）後以獨立小任務處理，詳見 PROJECT_PROGRESS.md「V2 階段 9」對應章節 |
+| 9 | 程式碼清理與重構：統一 Modal/CSS 命名規則、評估舊頁面下線 | ✅ 已完成（2026-07-16）：舊頁面退役、Supabase npm 遷移（四波）、O3 歷史遺留清理（檔案/資料庫欄位/Modal 命名稽核）、Heisenbug 診斷碼移除與案件結案記錄皆已完成，詳見 PROJECT_PROGRESS.md「V2 階段 9」對應章節 |
 
 > 階段 1、2、2.5 的詳細實作記錄與 Bug 修正過程，見 PROJECT_PROGRESS.md「/trip 整合頁面」章節；階段 4 三個任務、階段 5 兩個任務、階段 6 兩個任務、階段 7 的實作記錄與驗收對照表，見 PROJECT_PROGRESS.md「V2 階段 4」「V2 階段 5」「V2 階段 6」「V2 階段 7」對應章節。
 
@@ -331,5 +331,4 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 - 朋友帳號三層權限顯示修復（TripPlanner.astro 的 updateAuthUI 補齊白名單朋友判斷分支，詳見 PROJECT_PROGRESS.md）
 - 多項 Modal/CSS/z-index 衝突修正（詳見 PROJECT_PROGRESS.md）
 
-### 待驗證
-- 2026-06-22 發現：OAuth 登入後 UI 間歇性未切換（Heisenbug）。2026-07-11 第一輪時序診斷已排除 trip.astro auth 管線問題，並確認與 DevTools 開關無因果；診斷碼留在線上等待真實失敗取證。須先定案並解決此問題，階段 2.5 才能真正視為完成（詳見 PROJECT_PROGRESS.md「進行中問題」）
+- Heisenbug 案結案（2026-07-16）：2026-06-22 發現的「OAuth 登入後 UI 間歇性未切換」問題，根因未定案，但兩嫌犯（hash 清除時序、手動 INITIAL_SESSION 廣播時序）已排除、可疑溫床（CDN 浮動版本）已鎖版並於 npm 遷移後結構性根除，鎖版後與 npm 遷移後兩輪浸泡期均未再現，診斷碼（`logAuth`/`[DEBUG-HEISENBUG]`）已移除，案件結案；若未來再現需重新插入診斷碼取證（詳見 PROJECT_PROGRESS.md「Heisenbug 案結案」）
