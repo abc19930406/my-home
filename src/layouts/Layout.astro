@@ -88,13 +88,21 @@ import '../styles/global.css';
 		      const deltaY = currentY - startY;
 		      const deltaX = Math.abs(currentX - startX);
 
+		      // 手指往上滑或幾乎沒有垂直位移：不是下拉手勢，立刻放棄追蹤
+		      // （避免內容很短、頁面本來就在頂端的頁面上，稍微往上滑也被誤判成下拉）
+		      if (deltaY <= 0) {
+		        isPulling = false;
+		        spinner.style.display = 'none';
+		        return;
+		      }
+
 		      // 避免與橫向滑動衝突
 		      if (deltaX > deltaY) {
 		        isPulling = false;
 		        return;
 		      }
 
-		      if (window.scrollY <= 0 && deltaY > 0) {
+		      if (window.scrollY <= 0) {
 		        if (deltaY > 20) {
 		          spinner.style.display = 'block';
 		        }
@@ -127,6 +135,9 @@ import '../styles/global.css';
 		background-color: #2C1E14;
 		font-family: 'Noto Serif TC', 'Georgia', serif;
 		-webkit-font-smoothing: antialiased;
+		/* 避免瀏覽器原生下拉刷新手勢與上面自訂的 pull-to-refresh 腳本互相干擾，
+		   尤其內容很短、頁面本來就在頂端的頁面（如 /notes 空狀態），原生手勢很容易被誤觸 */
+		overscroll-behavior-y: contain;
 		-moz-osx-font-smoothing: grayscale;
 	}
 body.posts-page { background-color: transparent !important; }
