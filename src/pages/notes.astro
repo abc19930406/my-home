@@ -31,15 +31,18 @@ import '../styles/notes.css';
       <!-- 管理員已登入 -->
       <section id="notes-empty" style="display: none;">
         <div class="notes-toolbar">
+          <button id="btn-open-note-modal" class="btn-notes-manage btn-notes-manage-primary">📝 新增筆記</button>
           <button id="btn-open-sources-modal" class="btn-notes-manage">📚 管理出處</button>
           <button id="btn-open-topics-modal" class="btn-notes-manage">🏷️ 管理主題</button>
         </div>
 
-        <div class="notes-state-box">
+        <div id="notes-state-empty" class="notes-state-box">
           <p class="notes-state-icon">📚</p>
           <p class="notes-state-title">尚無筆記</p>
-          <p class="notes-state-desc">讀書筆記模組正在建置中，新增筆記的功能即將開放。</p>
+          <p class="notes-state-desc">點上方「新增筆記」開始記錄第一則筆記。</p>
         </div>
+
+        <div id="notes-list-container"></div>
       </section>
     </div>
   </div>
@@ -141,6 +144,69 @@ import '../styles/notes.css';
       </div>
     </div>
   </div>
+
+  <!-- 筆記新增/編輯 Modal -->
+  <div id="notes-note-modal" class="notes-modal-overlay" style="display: none;">
+    <div class="notes-modal-box notes-modal-box-wide">
+      <div class="notes-modal-header">
+        <h3 id="notes-note-modal-title">新增筆記</h3>
+        <button id="btn-notes-note-close" class="notes-modal-close" aria-label="關閉">&times;</button>
+      </div>
+      <div class="notes-modal-body">
+        <form id="notes-note-form" class="notes-form">
+          <input type="hidden" id="notes-note-id" />
+          <div class="notes-form-row">
+            <div class="notes-form-group notes-form-group-grow">
+              <label for="notes-note-title">標題</label>
+              <input type="text" id="notes-note-title" placeholder="筆記標題／小節名（選填）" />
+            </div>
+            <div class="notes-form-group">
+              <label for="notes-note-page-ref">頁碼／章節</label>
+              <input type="text" id="notes-note-page-ref" placeholder="例如：p.42" />
+            </div>
+          </div>
+          <div class="notes-form-row">
+            <div class="notes-form-group">
+              <label for="notes-note-source">出處</label>
+              <select id="notes-note-source">
+                <option value="">（無出處）</option>
+              </select>
+            </div>
+            <div class="notes-form-group">
+              <label for="notes-note-topic">主題</label>
+              <select id="notes-note-topic"></select>
+            </div>
+          </div>
+          <div class="notes-form-group">
+            <label for="notes-note-quote">原文引述</label>
+            <textarea id="notes-note-quote" rows="3" class="notes-quote-input" placeholder="書上原話，盡量精確"></textarea>
+          </div>
+          <div class="notes-form-group">
+            <label for="notes-note-thought">我的心得</label>
+            <textarea id="notes-note-thought" rows="3" placeholder="我的理解／詮釋／延伸想法"></textarea>
+          </div>
+          <div class="notes-form-group">
+            <label for="notes-note-images">圖片（可多選，單張上限 8MB）</label>
+            <input type="file" id="notes-note-images" accept="image/*" multiple />
+            <div id="notes-note-image-previews" class="notes-image-previews"></div>
+          </div>
+          <div class="notes-form-actions">
+            <button type="button" id="btn-notes-note-cancel-edit" class="notes-btn-secondary" style="display: none;">取消編輯</button>
+            <button type="submit" id="btn-notes-note-submit" class="notes-btn-primary">新增筆記</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- 圖片燈箱 -->
+  <div id="notes-lightbox" class="notes-lightbox-overlay">
+    <button type="button" id="notes-lightbox-close" class="notes-lightbox-close" aria-label="關閉">&times;</button>
+    <button type="button" id="notes-lightbox-prev" class="notes-lightbox-arrow notes-lightbox-prev" aria-label="上一張">&#10094;</button>
+    <img id="notes-lightbox-img" class="notes-lightbox-img" src="" alt="" />
+    <button type="button" id="notes-lightbox-next" class="notes-lightbox-arrow notes-lightbox-next" aria-label="下一張">&#10095;</button>
+    <div id="notes-lightbox-counter" class="notes-lightbox-counter"></div>
+  </div>
 </Layout>
 
 <script>
@@ -165,6 +231,28 @@ import '../styles/notes.css';
     sort_order: number;
     created_at: string;
   }
+
+  interface NoteRow {
+    id: string;
+    source_id: string | null;
+    topic_id: string;
+    title: string | null;
+    quote: string | null;
+    thought: string | null;
+    page_ref: string | null;
+    sort_order: number;
+    created_at: string;
+  }
+
+  interface NoteMediaRow {
+    id: string;
+    note_id: string;
+    path: string;
+    sort_order: number;
+    created_at: string;
+  }
+
+  const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8MB
 
   const KIND_LABELS: Record<string, string> = {
     book: '書籍',
@@ -521,6 +609,498 @@ import '../styles/notes.css';
   });
 
   // ============================================================
+  // 筆記（notes）CRUD + 私有圖片
+  // ============================================================
+  let notesCache: NoteRow[] = [];
+  let mediaByNoteId: Map<string, NoteMediaRow[]> = new Map();
+  let signedUrlCache: Map<string, string> = new Map();
+  let editingNoteId: string | null = null;
+  let pendingNoteImages: File[] = [];
+  let pendingNoteImagePreviews: string[] = [];
+
+  function populateNoteFormSelects() {
+    const sourceSel = document.getElementById('notes-note-source') as HTMLSelectElement | null;
+    const topicSel = document.getElementById('notes-note-topic') as HTMLSelectElement | null;
+    if (sourceSel) {
+      const current = sourceSel.value;
+      sourceSel.innerHTML =
+        '<option value="">（無出處）</option>' +
+        sourcesCache.map((s) => `<option value="${s.id}">${escapeHtml(s.title)}</option>`).join('');
+      sourceSel.value = current;
+    }
+    if (topicSel) {
+      const current = topicSel.value;
+      topicSel.innerHTML = topicsCache.map((t) => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+      if (current) {
+        topicSel.value = current;
+      } else {
+        const def = topicsCache.find((t) => t.is_default);
+        if (def) topicSel.value = def.id;
+      }
+    }
+  }
+
+  function resetNoteForm() {
+    editingNoteId = null;
+    (document.getElementById('notes-note-form') as HTMLFormElement)?.reset();
+    pendingNoteImages = [];
+    pendingNoteImagePreviews.forEach((url) => URL.revokeObjectURL(url));
+    pendingNoteImagePreviews = [];
+    renderImagePreviews();
+    populateNoteFormSelects();
+    const submitBtn = document.getElementById('btn-notes-note-submit');
+    if (submitBtn) submitBtn.textContent = '新增筆記';
+    const cancelBtn = document.getElementById('btn-notes-note-cancel-edit');
+    if (cancelBtn) cancelBtn.style.display = 'none';
+    const titleEl = document.getElementById('notes-note-modal-title');
+    if (titleEl) titleEl.textContent = '新增筆記';
+  }
+
+  function renderImagePreviews() {
+    const container = document.getElementById('notes-note-image-previews');
+    if (!container) return;
+    const existingHtml =
+      editingNoteId && mediaByNoteId.has(editingNoteId)
+        ? (mediaByNoteId.get(editingNoteId) || [])
+            .map(
+              (m) => `
+        <div class="notes-image-preview-item" data-existing-media-id="${m.id}">
+          <img src="${signedUrlCache.get(m.path) || ''}" alt="" />
+          <button type="button" class="notes-image-preview-remove" data-existing-media-id="${m.id}" title="刪除這張圖片">&times;</button>
+        </div>
+      `
+            )
+            .join('')
+        : '';
+    const pendingHtml = pendingNoteImagePreviews
+      .map(
+        (url, idx) => `
+      <div class="notes-image-preview-item notes-image-preview-pending" data-pending-index="${idx}">
+        <img src="${url}" alt="" />
+        <button type="button" class="notes-image-preview-remove" data-pending-index="${idx}" title="移除">&times;</button>
+      </div>
+    `
+      )
+      .join('');
+    container.innerHTML = existingHtml + pendingHtml;
+  }
+
+  document.getElementById('notes-note-images')?.addEventListener('change', (e) => {
+    const input = e.target as HTMLInputElement;
+    const files = input.files;
+    if (!files) return;
+    const rejected: string[] = [];
+    Array.from(files).forEach((file) => {
+      if (!file.type.startsWith('image/')) {
+        rejected.push(`${file.name}（不是圖片格式）`);
+        return;
+      }
+      if (file.size > MAX_IMAGE_BYTES) {
+        rejected.push(`${file.name}（超過 8MB）`);
+        return;
+      }
+      pendingNoteImages.push(file);
+      pendingNoteImagePreviews.push(URL.createObjectURL(file));
+    });
+    if (rejected.length > 0) {
+      alert('以下檔案未加入：\n' + rejected.join('\n'));
+    }
+    input.value = '';
+    renderImagePreviews();
+  });
+
+  document.getElementById('notes-note-image-previews')?.addEventListener('click', async (e) => {
+    const target = e.target as HTMLElement;
+    const removeBtn = target.closest('.notes-image-preview-remove') as HTMLElement | null;
+    if (!removeBtn) return;
+
+    const pendingIndexAttr = removeBtn.dataset.pendingIndex;
+    if (pendingIndexAttr !== undefined) {
+      const idx = parseInt(pendingIndexAttr, 10);
+      URL.revokeObjectURL(pendingNoteImagePreviews[idx]);
+      pendingNoteImages.splice(idx, 1);
+      pendingNoteImagePreviews.splice(idx, 1);
+      renderImagePreviews();
+      return;
+    }
+
+    const existingMediaId = removeBtn.dataset.existingMediaId;
+    if (existingMediaId && editingNoteId) {
+      const list = mediaByNoteId.get(editingNoteId) || [];
+      const media = list.find((m) => m.id === existingMediaId);
+      if (!media) return;
+      const ok = confirm('刪除這張圖片？此動作無法復原。');
+      if (!ok) return;
+      const { data, error } = await supabase.from('note_media').delete().eq('id', existingMediaId).select();
+      if (error) {
+        alert('刪除圖片失敗：' + error.message);
+        return;
+      }
+      if (!data || data.length === 0) {
+        alert('沒有任何資料被刪除，可能已被刪除或沒有權限。');
+        return;
+      }
+      const { error: removeError } = await supabase.storage.from('note_media').remove([media.path]);
+      if (removeError) {
+        console.warn('storage remove failed:', removeError);
+      }
+      mediaByNoteId.set(
+        editingNoteId,
+        list.filter((m) => m.id !== existingMediaId)
+      );
+      renderImagePreviews();
+    }
+  });
+
+  async function resolveSignedUrls(paths: string[]) {
+    const missing = paths.filter((p) => !signedUrlCache.has(p));
+    if (missing.length === 0) return;
+    await Promise.all(
+      missing.map(async (path) => {
+        const { data, error } = await supabase.storage.from('note_media').createSignedUrl(path, 3600);
+        if (!error && data) {
+          signedUrlCache.set(path, data.signedUrl);
+        }
+      })
+    );
+  }
+
+  function noteHasContent(quote: string, thought: string) {
+    return quote.trim().length > 0 || thought.trim().length > 0;
+  }
+
+  async function renderNotesList() {
+    const container = document.getElementById('notes-list-container');
+    const emptyBox = document.getElementById('notes-state-empty');
+    if (!container) return;
+
+    if (notesCache.length === 0) {
+      container.innerHTML = '';
+      if (emptyBox) emptyBox.style.display = 'flex';
+      return;
+    }
+    if (emptyBox) emptyBox.style.display = 'none';
+
+    const allPaths = Array.from(mediaByNoteId.values())
+      .flat()
+      .map((m) => m.path);
+    await resolveSignedUrls(allPaths);
+
+    const sourceNameById = new Map(sourcesCache.map((s) => [s.id, s.title]));
+    const sortedTopics = [...topicsCache].sort((a, b) => a.sort_order - b.sort_order);
+
+    let html = '';
+    for (const topic of sortedTopics) {
+      const notesInTopic = notesCache.filter((n) => n.topic_id === topic.id);
+      if (notesInTopic.length === 0) continue;
+      html += `<div class="notes-topic-group">
+        <h3 class="notes-topic-group-title">${escapeHtml(topic.name)}</h3>
+        <div class="notes-card-grid">`;
+      for (const note of notesInTopic) {
+        const media = mediaByNoteId.get(note.id) || [];
+        const sourceName = note.source_id ? sourceNameById.get(note.source_id) : null;
+        html += `
+        <div class="notes-card" data-note-id="${note.id}">
+          <div class="notes-card-header">
+            ${note.title ? `<h4 class="notes-card-title">${escapeHtml(note.title)}</h4>` : ''}
+            <div class="notes-card-meta">
+              ${sourceName ? `<span class="notes-card-meta-item">📖 ${escapeHtml(sourceName)}</span>` : ''}
+              ${note.page_ref ? `<span class="notes-card-meta-item">📍 ${escapeHtml(note.page_ref)}</span>` : ''}
+            </div>
+          </div>
+          ${note.quote ? `<blockquote class="notes-card-quote">${escapeHtml(note.quote)}</blockquote>` : ''}
+          ${note.thought ? `<p class="notes-card-thought">${escapeHtml(note.thought)}</p>` : ''}
+          ${
+            media.length > 0
+              ? `<div class="notes-card-images">${media
+                  .map(
+                    (m, idx) =>
+                      `<button type="button" class="notes-photo" data-note-id="${note.id}" data-index="${idx}"><img src="${signedUrlCache.get(m.path) || ''}" alt="" /></button>`
+                  )
+                  .join('')}</div>`
+              : ''
+          }
+          <div class="notes-card-actions">
+            <button class="btn-notes-edit-note" data-id="${note.id}">編輯</button>
+            <button class="btn-notes-delete-note" data-id="${note.id}">刪除</button>
+          </div>
+        </div>`;
+      }
+      html += `</div></div>`;
+    }
+    container.innerHTML = html;
+  }
+
+  async function loadNotes() {
+    const [notesRes, mediaRes] = await Promise.all([
+      supabase.from('notes').select('*').order('created_at', { ascending: false }),
+      supabase.from('note_media').select('*').order('sort_order', { ascending: true }),
+    ]);
+    if (notesRes.error) {
+      console.warn('loadNotes failed:', notesRes.error);
+      return;
+    }
+    notesCache = notesRes.data || [];
+    mediaByNoteId = new Map();
+    if (!mediaRes.error && mediaRes.data) {
+      for (const m of mediaRes.data as NoteMediaRow[]) {
+        const list = mediaByNoteId.get(m.note_id) || [];
+        list.push(m);
+        mediaByNoteId.set(m.note_id, list);
+      }
+    }
+    await renderNotesList();
+  }
+
+  document.getElementById('notes-note-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const title = (document.getElementById('notes-note-title') as HTMLInputElement).value.trim() || null;
+    const pageRef = (document.getElementById('notes-note-page-ref') as HTMLInputElement).value.trim() || null;
+    const sourceId = (document.getElementById('notes-note-source') as HTMLSelectElement).value || null;
+    const topicId = (document.getElementById('notes-note-topic') as HTMLSelectElement).value;
+    const quote = (document.getElementById('notes-note-quote') as HTMLTextAreaElement).value;
+    const thought = (document.getElementById('notes-note-thought') as HTMLTextAreaElement).value;
+
+    if (!noteHasContent(quote, thought)) {
+      alert('原文引述與我的心得，至少要填一項。');
+      return;
+    }
+    if (!topicId) {
+      alert('請選擇主題。');
+      return;
+    }
+
+    const payload = {
+      title,
+      page_ref: pageRef,
+      source_id: sourceId,
+      topic_id: topicId,
+      quote: quote.trim() || null,
+      thought: thought.trim() || null,
+    };
+
+    let noteId: string;
+
+    if (editingNoteId) {
+      const { data, error } = await supabase.from('notes').update(payload).eq('id', editingNoteId).select();
+      if (error) {
+        alert('更新失敗：' + error.message);
+        return;
+      }
+      if (!data || data.length === 0) {
+        alert('沒有任何資料被更新，可能已被刪除或沒有權限。');
+        return;
+      }
+      noteId = editingNoteId;
+    } else {
+      const { data, error } = await supabase.from('notes').insert(payload).select();
+      if (error) {
+        alert('新增失敗：' + error.message);
+        return;
+      }
+      if (!data || data.length === 0) {
+        alert('新增失敗，沒有取得新資料。');
+        return;
+      }
+      noteId = data[0].id;
+    }
+
+    if (pendingNoteImages.length > 0) {
+      const failedUploads: string[] = [];
+      let sortOrderBase = (mediaByNoteId.get(noteId) || []).length;
+      for (const file of pendingNoteImages) {
+        const ext = file.name.split('.').pop() || 'jpg';
+        const fileName = `${Math.random().toString(36).slice(2)}.${ext}`;
+        const path = `${noteId}/${fileName}`;
+        const { error: uploadError } = await supabase.storage.from('note_media').upload(path, file);
+        if (uploadError) {
+          failedUploads.push(file.name);
+          continue;
+        }
+        const { error: insertError } = await supabase
+          .from('note_media')
+          .insert({ note_id: noteId, path, sort_order: sortOrderBase++ });
+        if (insertError) {
+          failedUploads.push(file.name);
+        }
+      }
+      if (failedUploads.length > 0) {
+        alert('筆記已儲存，但以下圖片上傳失敗：\n' + failedUploads.join('\n'));
+      }
+    }
+
+    resetNoteForm();
+    closeCurrentModal();
+    await loadNotes();
+  });
+
+  document.getElementById('btn-notes-note-cancel-edit')?.addEventListener('click', resetNoteForm);
+
+  document.getElementById('notes-list-container')?.addEventListener('click', async (e) => {
+    const target = e.target as HTMLElement;
+    const editBtn = target.closest('.btn-notes-edit-note') as HTMLElement | null;
+    const deleteBtn = target.closest('.btn-notes-delete-note') as HTMLElement | null;
+    const photoBtn = target.closest('.notes-photo') as HTMLElement | null;
+
+    if (photoBtn) {
+      const noteId = photoBtn.dataset.noteId;
+      const index = parseInt(photoBtn.dataset.index || '0', 10);
+      if (noteId) openLightbox(noteId, index);
+      return;
+    }
+
+    if (editBtn) {
+      const id = editBtn.dataset.id;
+      const note = notesCache.find((n) => n.id === id);
+      if (!note) return;
+      editingNoteId = note.id;
+      (document.getElementById('notes-note-title') as HTMLInputElement).value = note.title || '';
+      (document.getElementById('notes-note-page-ref') as HTMLInputElement).value = note.page_ref || '';
+      (document.getElementById('notes-note-quote') as HTMLTextAreaElement).value = note.quote || '';
+      (document.getElementById('notes-note-thought') as HTMLTextAreaElement).value = note.thought || '';
+      populateNoteFormSelects();
+      (document.getElementById('notes-note-source') as HTMLSelectElement).value = note.source_id || '';
+      (document.getElementById('notes-note-topic') as HTMLSelectElement).value = note.topic_id;
+      pendingNoteImages = [];
+      pendingNoteImagePreviews = [];
+      await resolveSignedUrls((mediaByNoteId.get(note.id) || []).map((m) => m.path));
+      renderImagePreviews();
+      const submitBtn = document.getElementById('btn-notes-note-submit');
+      if (submitBtn) submitBtn.textContent = '儲存修改';
+      const cancelBtn = document.getElementById('btn-notes-note-cancel-edit');
+      if (cancelBtn) cancelBtn.style.display = 'inline-block';
+      const titleEl = document.getElementById('notes-note-modal-title');
+      if (titleEl) titleEl.textContent = '編輯筆記';
+      const noteModal = document.getElementById('notes-note-modal');
+      if (noteModal) openModal(noteModal, resetNoteForm);
+      return;
+    }
+
+    if (deleteBtn) {
+      const id = deleteBtn.dataset.id;
+      const note = notesCache.find((n) => n.id === id);
+      if (!note || !id) return;
+      const ok = confirm('刪除這則筆記後，圖片也會一併移除，無法復原。確定要刪除嗎？');
+      if (!ok) return;
+      const paths = (mediaByNoteId.get(id) || []).map((m) => m.path);
+      const { data, error } = await supabase.from('notes').delete().eq('id', id).select();
+      if (error) {
+        alert('刪除失敗：' + error.message);
+        return;
+      }
+      if (!data || data.length === 0) {
+        alert('沒有任何資料被刪除，可能已被刪除或沒有權限。');
+        return;
+      }
+      if (paths.length > 0) {
+        const { error: removeError } = await supabase.storage.from('note_media').remove(paths);
+        if (removeError) {
+          console.warn('storage remove failed:', removeError);
+        }
+      }
+      if (editingNoteId === id) resetNoteForm();
+      await loadNotes();
+    }
+  });
+
+  // ============================================================
+  // 圖片燈箱
+  // ============================================================
+  let lightboxNoteId: string | null = null;
+  let lightboxIndex = 0;
+
+  function lightboxRender() {
+    if (!lightboxNoteId) return;
+    const media = mediaByNoteId.get(lightboxNoteId) || [];
+    const lightbox = document.getElementById('notes-lightbox');
+    const img = document.getElementById('notes-lightbox-img') as HTMLImageElement | null;
+    const counter = document.getElementById('notes-lightbox-counter');
+    if (!lightbox || !img || media.length === 0) return;
+    const m = media[lightboxIndex];
+    img.src = signedUrlCache.get(m.path) || '';
+    img.alt = `圖片 ${lightboxIndex + 1} / ${media.length}`;
+    if (counter) counter.textContent = `${lightboxIndex + 1} / ${media.length}`;
+    lightbox.classList.toggle('single', media.length <= 1);
+  }
+
+  function openLightbox(noteId: string, index: number) {
+    lightboxNoteId = noteId;
+    lightboxIndex = index;
+    lightboxRender();
+    document.getElementById('notes-lightbox')?.classList.add('show');
+    document.body.classList.add('modal-open');
+  }
+
+  function closeLightbox() {
+    document.getElementById('notes-lightbox')?.classList.remove('show');
+    document.body.classList.remove('modal-open');
+    lightboxNoteId = null;
+  }
+
+  function lightboxPrev() {
+    if (!lightboxNoteId) return;
+    const media = mediaByNoteId.get(lightboxNoteId) || [];
+    lightboxIndex = (lightboxIndex - 1 + media.length) % media.length;
+    lightboxRender();
+  }
+
+  function lightboxNext() {
+    if (!lightboxNoteId) return;
+    const media = mediaByNoteId.get(lightboxNoteId) || [];
+    lightboxIndex = (lightboxIndex + 1) % media.length;
+    lightboxRender();
+  }
+
+  document.getElementById('notes-lightbox-close')?.addEventListener('click', closeLightbox);
+  document.getElementById('notes-lightbox')?.addEventListener('click', (e) => {
+    if (e.target === document.getElementById('notes-lightbox')) closeLightbox();
+  });
+  document.addEventListener('keydown', (e) => {
+    const lightbox = document.getElementById('notes-lightbox');
+    if (!lightbox?.classList.contains('show')) return;
+    if (e.key === 'Escape') closeLightbox();
+    if (e.key === 'ArrowLeft') lightboxPrev();
+    if (e.key === 'ArrowRight') lightboxNext();
+  });
+  document.getElementById('notes-lightbox-prev')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    lightboxPrev();
+  });
+  document.getElementById('notes-lightbox-next')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    lightboxNext();
+  });
+
+  (function setupLightboxSwipe() {
+    const lightbox = document.getElementById('notes-lightbox');
+    if (!lightbox) return;
+    let touchStartX = 0;
+    let touchStartY = 0;
+    lightbox.addEventListener(
+      'touchstart',
+      (e) => {
+        const t = e.touches[0];
+        touchStartX = t.clientX;
+        touchStartY = t.clientY;
+      },
+      { passive: true }
+    );
+    lightbox.addEventListener(
+      'touchend',
+      (e) => {
+        const t = e.changedTouches[0];
+        const dx = t.clientX - touchStartX;
+        const dy = t.clientY - touchStartY;
+        if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+          if (dx < 0) lightboxNext();
+          else lightboxPrev();
+        }
+      },
+      { passive: true }
+    );
+  })();
+
+  // ============================================================
   // Modal 開關綁定
   // ============================================================
   const sourcesModal = document.getElementById('notes-sources-modal');
@@ -542,6 +1122,16 @@ import '../styles/notes.css';
     if (e.target === topicsModal) closeCurrentModal();
   });
 
+  const noteModal = document.getElementById('notes-note-modal');
+  document.getElementById('btn-open-note-modal')?.addEventListener('click', () => {
+    resetNoteForm();
+    if (noteModal) openModal(noteModal, resetNoteForm);
+  });
+  document.getElementById('btn-notes-note-close')?.addEventListener('click', closeCurrentModal);
+  noteModal?.addEventListener('click', (e) => {
+    if (e.target === noteModal) closeCurrentModal();
+  });
+
   // ============================================================
   // 登入 / 身分判斷（沿用 V3-1 既有邏輯）
   // ============================================================
@@ -559,6 +1149,7 @@ import '../styles/notes.css';
       if (session && session.user.email === adminEmail) {
         showEmpty(session.user.email);
         await Promise.all([loadSources(), loadTopics()]);
+        await loadNotes();
       } else {
         showLocked();
       }

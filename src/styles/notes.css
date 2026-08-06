@@ -30,7 +30,7 @@
 }
 
 .notes-container {
-  max-width: 640px;
+  max-width: 900px;
   margin: 0 auto;
 }
 
@@ -87,6 +87,17 @@
 
 .btn-notes-manage:hover {
   background: rgba(196, 149, 106, 0.3);
+}
+
+.btn-notes-manage-primary {
+  background: var(--notes-accent);
+  color: var(--notes-bg);
+  font-weight: 600;
+}
+
+.btn-notes-manage-primary:hover {
+  background: var(--notes-accent);
+  opacity: 0.9;
 }
 
 .notes-state-box {
@@ -376,5 +387,272 @@
 @media (max-width: 600px) {
   .notes-form-row {
     flex-direction: column;
+  }
+}
+
+/* ==========================================================
+   筆記 Modal（表單較長，用較寬版型）
+   ========================================================== */
+.notes-modal-box-wide {
+  max-width: 720px;
+}
+
+.notes-quote-input {
+  font-style: italic;
+}
+
+/* ==========================================================
+   圖片上傳預覽格
+   ========================================================== */
+.notes-image-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+.notes-image-preview-item {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(196, 149, 106, 0.3);
+}
+
+.notes-image-preview-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.notes-image-preview-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notes-image-preview-remove:hover {
+  background: rgba(0, 0, 0, 0.85);
+}
+
+/* ==========================================================
+   筆記列表：依主題分組 + 卡片
+   ========================================================== */
+.notes-topic-group {
+  margin-bottom: 2.5rem;
+  text-align: left;
+}
+
+.notes-topic-group-title {
+  color: var(--notes-accent);
+  font-size: 1.2rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  margin: 0 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(196, 149, 106, 0.2);
+}
+
+.notes-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.notes-card {
+  background: var(--notes-card-bg);
+  border: 1px solid rgba(196, 149, 106, 0.2);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.notes-card-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.notes-card-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+
+.notes-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  font-size: 0.78rem;
+  color: var(--notes-text-muted);
+}
+
+.notes-card-quote {
+  margin: 0;
+  padding: 0.6rem 0.9rem;
+  border-left: 3px solid var(--notes-accent);
+  font-style: italic;
+  color: var(--notes-text-primary);
+  background: rgba(196, 149, 106, 0.08);
+  border-radius: 0 6px 6px 0;
+  white-space: pre-wrap;
+}
+
+.notes-card-thought {
+  margin: 0;
+  color: var(--notes-text-primary);
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.notes-card-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.notes-photo {
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(196, 149, 106, 0.3);
+  padding: 0;
+  cursor: pointer;
+  background: none;
+}
+
+.notes-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.notes-card-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+}
+
+.notes-card-actions button {
+  background: transparent;
+  border: 1px solid rgba(196, 149, 106, 0.3);
+  color: var(--notes-text-muted);
+  padding: 4px 12px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-family: inherit;
+}
+
+.notes-card-actions button:hover {
+  color: var(--notes-accent);
+  border-color: var(--notes-accent);
+}
+
+/* ==========================================================
+   圖片燈箱（沿用 posts.css 的 .post-lightbox-* 精神，notes- 前綴）
+   ========================================================== */
+.notes-lightbox-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 15, 0.92);
+  z-index: 2000;
+  align-items: center;
+  justify-content: center;
+}
+
+.notes-lightbox-overlay.show {
+  display: flex;
+}
+
+.notes-lightbox-img {
+  max-width: 90vw;
+  max-height: 85vh;
+  object-fit: contain;
+  border-radius: 4px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.notes-lightbox-close {
+  position: absolute;
+  top: 1.2rem;
+  right: 1.5rem;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 2.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.3rem 0.6rem;
+}
+
+.notes-lightbox-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #fff;
+  font-size: 1.6rem;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.notes-lightbox-arrow:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.notes-lightbox-prev { left: 1rem; }
+.notes-lightbox-next { right: 1rem; }
+
+.notes-lightbox-overlay.single .notes-lightbox-arrow,
+.notes-lightbox-overlay.single .notes-lightbox-counter {
+  display: none;
+}
+
+.notes-lightbox-counter {
+  position: absolute;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+}
+
+@media (max-width: 640px) {
+  .notes-lightbox-arrow {
+    width: 2.4rem;
+    height: 2.4rem;
+    font-size: 1.3rem;
+  }
+  .notes-lightbox-close {
+    font-size: 1.8rem;
+    top: 0.8rem;
+    right: 1rem;
   }
 }
