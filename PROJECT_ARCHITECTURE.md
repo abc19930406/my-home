@@ -82,40 +82,29 @@ my-home/
 - API 路由必須加上 `export const prerender = false`
 - 單篇短文 `/posts/[id].astro` 為 SSR（無 prerender）
 
-### Supabase CDN 載入方式（重要，已更新版本鎖定）
+### Supabase 瀏覽器端載入方式（2026-07-16 正式改寫，取代舊版 CDN 動態注入規則）
 
-> ⚠️ **過渡性註記（2026-07-13）**：本節描述的 CDN 動態注入機制正在遷移至 npm 匯入（V2 階段 9 核心任務，第一至三波已完成，現於浸泡觀察期），**目前程式碼實際上已不再使用 CDN**，本節內容已過時，待第四波浸泡確認穩定後正式改寫為 npm 架構說明。過渡期間請以 `PROJECT_PROGRESS.md`「V2 階段 9 核心任務」章節的實際現況為準，不要依本節舊描述行動。
+走 npm 匯入，不再使用 CDN 動態注入（V2 階段 9 核心任務，四波遷移 + 浸泡期已滿確認穩定）。
 
-- **不能**在 `<script>` 裡直接 `import` CDN URL，Vite 會掃描並產生錯誤的 modulepreload
-- **正確做法**：Layout.astro 用 `<script is:inline>` 動態注入：
-  ```html
-  <script is:inline>
-    (function() {
-      const s = document.createElement('script');
-      s.type = 'module';
-      s.textContent = `
-        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.110.2/+esm';
-        window._supabaseCreateClient = createClient;
-        window.dispatchEvent(new Event('supabase-ready'));
-      `;
-      document.head.appendChild(s);
-    })();
-  </script>
-  ```
-  - ⚠️ **務必鎖定確切版號（如 `@2.110.2`），禁止浮動版號**：
-    - 曾因完全未鎖版號，jsdelivr 抓取最新版時，OAuth 流程觸發 SDK 內部延遲載入子模組（`@supabase/auth-js`、`functions-js`、`realtime-js` 等），子模組路徑在某些情況下被錯誤解析成本站路徑，導致大量 404 → 當時改鎖主版號 `@2`
-    - 2026-07-11 進一步凍結為確切版號 `@2.110.2`：主版號 `@2` 仍會隨 jsdelivr 自動升 minor/patch，SDK 版本自行變動是「6/22 登入 Heisenbug 故障、7/11 無法重現」的最可能解釋，鎖定確切版號以消除此不受控變數
-    - 升版視同依賴變更（安全紅線），須經使用者同意並於升版後實測登入流程
-- 各頁面等待 Supabase 就緒：
+- `src/lib/supabase-browser.js` 的 `getSupabaseBrowserClient()` 為單例入口：
   ```js
-  const waitForSupabase = () => new Promise(resolve => {
-    if (window._supabaseCreateClient) return resolve();
-    window.addEventListener('supabase-ready', resolve, { once: true });
-  });
-  await waitForSupabase();
-  const createClient = window._supabaseCreateClient;
+  import { createClient } from '@supabase/supabase-js';
+
+  let client = null;
+  export function getSupabaseBrowserClient() {
+    if (!client) {
+      const supabaseUrl = import.meta.env.PUBLIC_SUPABASE_URL ?? '';
+      const supabaseAnonKey = import.meta.env.PUBLIC_SUPABASE_ANON_KEY ?? '';
+      client = createClient(supabaseUrl, supabaseAnonKey);
+    }
+    return client;
+  }
   ```
-- 在 `/trip` 頁面（多元件共存），**不適用上述各自 createClient 的寫法**，請見下方「/trip 頁面 Supabase 單一入口架構」專章
+- 各頁面/元件一律 `import { getSupabaseBrowserClient } from '.../lib/supabase-browser.js'` 取得 client，**不得**自行 `createClient()`
+- **版本鎖定確切版號** `@supabase/supabase-js@2.110.2`（`package.json`/`package-lock.json`，2026-07-11 由 CDN 浮動版號沿用至此，禁止浮動）：
+  - 曾因完全未鎖版號，CDN 抓取最新版時，OAuth 流程觸發 SDK 內部延遲載入子模組路徑錯誤解析，導致大量 404
+  - 升版視同依賴變更（安全紅線），須經使用者同意並於升版後實測登入流程
+- 在 `/trip` 頁面（多元件共存），**不適用上述各自呼叫 `getSupabaseBrowserClient()` 的寫法**，請見下方「/trip 頁面 Supabase 單一入口架構」專章
 
 ### Script 寫法規則
 - `<script define:vars={{ var1, var2 }}>` 用來把 frontmatter 變數傳入客戶端
@@ -147,12 +136,6 @@ await new Promise((resolve, reject) => {
 - `manifest.json` 保留（加入主畫面功能正常）
 - **已移除 Service Worker**（避免快取問題）
 - Layout.astro 有主動 unregister 舊 SW 的程式碼
-
-### Vite 設定
-- `astro.config.mjs` 有 Vite plugin 移除所有 `<link rel="modulepreload">` 標籤
-- 已強化為 `transformIndexHtml: { order: 'post', handler }` 確保在最終輸出階段移除
-- 新增 `optimizeDeps: { exclude: ['@supabase/supabase-js'] } `，避免 Vite 預先打包 CDN 載入的套件造成衝突
-- 避免 CDN 路徑被錯誤解析成相對路徑
 
 ### 日期處理
 - 一律用本地時區，避免 UTC 偏移
@@ -224,9 +207,8 @@ if (!session) {
 
 ### 架構原則
 
-1. **trip.astro 是唯一的初始化入口**：
-   - 唯一執行 `waitForSupabase()` 等待 CDN 載入
-   - 唯一呼叫 `createClient()`，建立的 client 存於 `window.sharedSupabase`
+1. **trip.astro 是唯一的 auth 初始化入口**：
+   - 呼叫 `getSupabaseBrowserClient()` 取得單例 client（存於 `window.sharedSupabase`，與子元件各自呼叫 `getSupabaseBrowserClient()` 拿到的是同一個實例，因為該函式內部本身就是單例）
    - 唯一呼叫 `supabase.auth.getSession()` 取得初始 session
    - 唯一綁定 `supabase.auth.onAuthStateChange()`
 
@@ -235,20 +217,8 @@ if (!session) {
    - 同時將最新狀態寫入 `window.__latestAuthState = { event, session }`（全域快照），供子元件在綁定監聽器時補跑檢查，避免 Race Condition（見下方）
 
 3. **子元件（TripPlanner.astro / JapanCollection.astro）規則**：
-   - **絕不**自行呼叫 `createClient()` 或 `supabase.auth.getSession()`
-   - 若需要 supabase client 做資料讀寫（非 auth 相關），使用 `waitForSharedSupabase()` 輪詢取得：
-     ```js
-     const waitForSharedSupabase = () => new Promise(resolve => {
-       if (window.sharedSupabase) return resolve(window.sharedSupabase);
-       const check = setInterval(() => {
-         if (window.sharedSupabase) {
-           clearInterval(check);
-           resolve(window.sharedSupabase);
-         }
-       }, 50);
-     });
-     const supabase = await waitForSharedSupabase();
-     ```
+   - **絕不**自行呼叫 `supabase.auth.getSession()` 或 `onAuthStateChange()`（auth 狀態只能來自 trip.astro 的廣播，不得另外查詢）
+   - 若需要 supabase client 做資料讀寫（非 auth 相關），直接 `import { getSupabaseBrowserClient } from '../lib/supabase-browser.js'` 呼叫取得，不需要輪詢等待（npm 匯入下該模組保證同步可用，這是 CDN 時代才需要 `waitForSharedSupabase()` 輪詢的舊限制，已隨 npm 遷移移除）
    - UI 狀態（登入/登出按鈕等）一律透過監聽 `auth-state-changed` 事件更新，呼叫各自的 `updateAuthUI(session)` 函式
 
 ### Race Condition 防護（重要教訓）

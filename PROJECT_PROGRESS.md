@@ -828,6 +828,32 @@
 
 ---
 
+### ✅ V3-1:讀書筆記模組資料地基 + /notes 頁面骨架（2026-08-06）
+
+新模組「讀書筆記/知識庫」第一階段，設計依據 `PROJECT_NOTES_V3.md`。與 `/posts`（對外短文）完全分離，不共用表或頁面；全站權限最單純的模組，讀寫一律僅 `is_admin()`。
+
+- **資料庫（六張表，使用者於 Dashboard 執行）**：`topics`（含「未分類」預設項）、`sources`、`notes`、`tags`、`note_tags`、`note_media`。任務訊息原寫「五張表」，經確認 `PROJECT_NOTES_V3.md` 2.6 節與「設計已定案」段落皆要求 `note_media` 獨立建表，故六張表全數建立
+  - `notes.topic_id` 的孤兒重新指派：**原生 `ON DELETE SET DEFAULT`**，「未分類」seed 時用固定字面值 UUID（`00000000-0000-0000-0000-000000000001`）而非隨機產生，讓 `DEFAULT` 子句可直接引用；「不可刪除、唯一」這兩項 FK 語法管不到的保護，另外用 `topics` 表的 `BEFORE DELETE` trigger + partial unique index 補強——原生 FK 做重新指派、trigger 只補 FK 做不到的部分，兩者分工不重疊
+  - `note_media` 私有 bucket（`public=false`）+ `storage.objects` RLS，比照 `post_media` 私有媒體機制（`{note_id}/{檔名}` 路徑、`createSignedUrl`），但因本模組無公開/朋友分級，RLS 直接鎖 `is_admin()`，不需要 `post_media` 那套依 `visibility` 分支的邏輯
+  - 使用者已於 Dashboard 依序執行唯讀確認、正式建置、seed 三段 SQL，並回報「未分類」seed 成功、`is_admin()` 函式確認存在
+- **`/notes` 頁面骨架**：`src/pages/notes.astro`（`prerender = false`）、`src/styles/notes.css`。SSR frontmatter 不查詢任何資料（六張表 RLS 連 SELECT 都鎖管理員，SSR 用 anon key 查了也是 0 筆）；前端用 `getSupabaseBrowserClient()` 取得 session，比對 `PUBLIC_ADMIN_EMAIL`：未登入與已登入非管理員（含朋友帳號）**顯示同一組「僅管理員可用」畫面**，不透露差異；管理員登入顯示空狀態引導畫面
+- **追加修正（使用者驗收時發現）**：管理員登入後的畫面原本無法直接看出登入狀態，補上右上角「已登入：{email}」+ 登出按鈕，比照 `ledger.astro`/`admin.astro` 既有的 `top-right-auth-container` 慣例，方便測試時確認身分並原地登出重測
+- **明確排除本階段**：任何 CRUD、圖片上傳 UI、標籤/篩選、AI 彙整、匯出、首頁入口（待模組可用後再加，避免連到空頁）
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| 六張表 + RLS + note_media bucket 建立成功 | 使用者於 Dashboard 執行三段 SQL，回報「未分類」seed 成功 | ✅ |
+| a. 未登入開 `/notes` 顯示「僅管理員可用」，原始碼無資料 | fetch `/notes` 原始 HTML 確認無 `sources`/`notes`/`topic_id` 等字樣 | ✅ |
+| b. 朋友帳號登入同上；Console 對六張表查詢/寫入皆 0 筆或被拒 | 使用者於 `/trip` 頁面 Console 執行查詢，六表皆 0 筆；`INSERT` 測試收到 403 `new row violates row-level security policy` | ✅ |
+| c. 管理員登入顯示空狀態引導畫面，無錯誤 | 使用者實測確認，並回報「其他測試皆通過」 | ✅ |
+| d. 「未分類」存在且 `is_default=true`；嘗試刪除被擋 | 使用者查詢確認存在；trigger 刪除保護測試通過 | ✅ |
+| e. 手機與桌機版面骨架正常 | 使用者實測 + 本機瀏覽器 375px/桌機雙寬度確認 | ✅ |
+| commit + push 並貼出終端機輸出 | 見下方 | ✅ |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
@@ -906,10 +932,16 @@
 | trip_days | 每日行程（關聯 trips） | ✅ |
 | day_spots | 每天景點安排（關聯 trip_days + spots） | ✅ |
 | travel_coupons | 優惠券，全站共用 | ✅ 已建立，UI 已上線（2026-07-13） |
-| travel_subway_maps | 地鐵圖，全域分類庫（新增 category 欄位，trip_id 停用不刪） | ✅ 已建立，UI 已上線（2026-07-13） |
+| travel_subway_maps | 地鐵圖，全域分類庫（新增 category 欄位；trip_id 已於 2026-07-16 確認無引用後刪除） | ✅ 已建立，UI 已上線（2026-07-13） |
 | trip_subway_categories | trip_id + category，行程關聯的地鐵圖分類 | ✅ 已建立，UI 已上線（2026-07-13） |
 | spot_transport_routes | 景點間交通方式（origin/destination/mode/duration/cost/note/timetable_url/subway_map_category） | ✅ 已建立，UI 已上線（2026-07-13） |
 | trip_collaborators | trip_id + user_email + can_edit_wishlist + can_edit_itinerary | ✅ 已建立（2026-07-12），權限已全數落實（2026-07-13） |
+| topics | 讀書筆記主題分類，含不可刪除的「未分類」預設項（is_default） | ✅ 已建立（2026-08-06，V3-1） |
+| sources | 讀書筆記出處（書/課程/文章/其他） | ✅ 已建立（2026-08-06，V3-1） |
+| notes | 讀書筆記本體（quote/thought 分離、topic_id/source_id 皆可回溯） | ✅ 已建立（2026-08-06，V3-1） |
+| tags | 讀書筆記自由標籤 | ✅ 已建立（2026-08-06，V3-1） |
+| note_tags | notes 與 tags 的多對多關聯表 | ✅ 已建立（2026-08-06，V3-1） |
+| note_media | 讀書筆記圖片（獨立表，支援多圖排序），路徑對應 note_media 私有 bucket | ✅ 已建立（2026-08-06，V3-1） |
 
 ### Storage Buckets
 
@@ -921,6 +953,7 @@
 | travel_images | ✅ PUBLIC |
 | travel_coupons | ✅ PUBLIC，使用中（優惠券圖片，2026-07-13） |
 | travel_subway_maps | ✅ PUBLIC，使用中（地鐵圖圖片，2026-07-13） |
+| note_media | ✅ PRIVATE，2026-08-06 新增（V3-1），讀書筆記圖片專用，RLS 僅 is_admin() |
 
 ---
 

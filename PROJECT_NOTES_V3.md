@@ -74,7 +74,7 @@
 
 - quote 與 thought 分離（擴充建議 2）：AI 整理時能區分「原文」與「使用者詮釋」，演講素材更可靠。兩欄至少一欄有內容。
 - 圖片挂在筆記層（使用者確認）：一則筆記可配多張圖（書中圖表、手寫筆記照、投影片截圖等）。實作見 2.6。
-- ON DELETE SET DEFAULT 需資料庫層設定 topic_id 預設值為「未分類」的 id；若 SET DEFAULT 實作有困難，改用 trigger 或應用層保證，設計時擇一並記錄。
+- **✅ 2026-08-06 實作結果**：`topic_id` 的 `DEFAULT` 值直接寫死「未分類」的固定 UUID 字面值（seed 時不用 `gen_random_uuid()`，改用固定值 `00000000-0000-0000-0000-000000000001`），因此原生 `ON DELETE SET DEFAULT` 語法可直接使用，不需要 trigger 做這部分。「不可刪除、唯一」這兩個 FK 語法管不到的保護，另外用 `topics` 表的 `BEFORE DELETE` trigger（`is_default=true` 時 `RAISE EXCEPTION`）+ partial unique index（`WHERE is_default = true`）補強，兩種機制分工明確，非互斥。
 
 ### 2.4 note_tags + tags（自由標籤，擴充建議 1）
 
@@ -91,7 +91,7 @@
 - 路徑規則：{note_id}/{檔名}，第一層為所屬筆記 id（權限判斷依據）
 - 讀取一律 createSignedUrl（有效期 3600 秒），絕不 getPublicUrl
 - storage.objects 的 RLS：解析路徑第一層 note_id，此模組所有圖片讀寫皆僅 is_admin()（私人資料，無需跟隨主題/出處判斷）
-- 資料表記錄：note_media（id、note_id FK→notes ON DELETE CASCADE、path、sort_order、created_at），或沿用 notes 表既有 image 陣列欄位——實作時擇一，優先獨立表以支援多圖排序
+- **✅ 2026-08-06 實作結果**：採獨立表 `note_media`（id、note_id FK→notes ON DELETE CASCADE、path、sort_order、created_at），支援多圖排序
 
 ### 2.5 關係總結
 
@@ -159,7 +159,7 @@
 
 | 階段 | 內容 | 狀態 |
 |------|------|------|
-| V3-1 | 五張表 + RLS + 「未分類」seed；/notes 頁面骨架（SSR、登入判斷、空狀態） | 📋 |
+| V3-1 | 六張表（含 2.6 的 `note_media`）+ RLS + 「未分類」seed；/notes 頁面骨架（SSR、登入判斷、空狀態） | ✅ 2026-08-06 已完成 |
 | V3-2 | 出處與主題的管理 CRUD | 📋 |
 | V3-3 | 筆記 CRUD（引述/心得分離、頁碼、挂出處與主題）＋ note_media 私有圖片上傳 | 📋 |
 | V3-4 | 標籤系統 + 瀏覽/篩選/搜尋（含跨主題標籤檢索） | 📋 |
