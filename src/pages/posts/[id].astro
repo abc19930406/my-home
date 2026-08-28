@@ -191,7 +191,8 @@ const visibilityMap = {
 </script>
 
 <script>
-  import { supabase } from '../../lib/supabase-client';
+  import { getSupabaseBrowserClient } from '../../lib/supabase-browser.js';
+  const supabase = getSupabaseBrowserClient();
 
   // 燈箱：事件委派在 document 上，不論 .post-waterfall 是 SSR 渲染或前端動態注入皆能捕捉點擊
   // 三種關閉路徑（關閉鈕、點遮罩空白處、ESC）皆會清除 body.modal-open
