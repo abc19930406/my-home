@@ -27,7 +27,8 @@ import Layout from '../layouts/Layout.astro';
 </Layout>
 
 <script>
-  import { supabase } from '../lib/supabase-client';
+  import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
+  const supabase = getSupabaseBrowserClient();
 
   // 檢查是否已經登入
   supabase.auth.getSession().then(({ data: { session } }) => {
