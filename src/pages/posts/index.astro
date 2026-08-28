@@ -755,6 +755,8 @@ try {
   async function refreshPostsList() {
     const seq = ++postsRefreshSeq;
     const { data: { session } } = await supabase.auth.getSession();
+    // 登入/登出按鈕的顯示狀態不該受「有沒有 session」擋住，兩種情況都要更新
+    await checkAdmin();
     if (!session) return;
     const isAdmin = !!session;
 
