@@ -177,7 +177,8 @@ try {
 </script>
 
 <script>
-  import { supabase } from '../../lib/supabase-client';
+  import { getSupabaseBrowserClient } from '../../lib/supabase-browser.js';
+  const supabase = getSupabaseBrowserClient();
   const adminEmail = window.__ADMIN_EMAIL__ || '';
 
   // 觸發重新部署:改經後端 API 驗證管理員身分,hook 網址不再暴露於前端
