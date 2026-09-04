@@ -876,13 +876,35 @@
 
 ---
 
+### ✅ 全站 Pull to Refresh 誤觸修復：Modal 內捲動下拉時停用（2026-08-06，已結案）
+
+`/notes` 開發期間發現：Modal 內容捲到底繼續往下拉時，會被 `Layout.astro` 的下拉刷新腳本誤判成「頁面頂端下拉」，整頁重新整理。這是全站共用腳本的既有 bug（任何有長 Modal 的頁面都可能中招），不是 `/notes` 專屬。
+
+- **繞了一次彎路**：第一次診斷誤判為「內容短的頁面稍微往上滑也會誤觸」，改了 `touchmove` 判斷邏輯 + 加 `overscroll-behavior-y: contain`（commit `3b5cf39`）。使用者實機指出真正根因是「Modal 內捲動到底繼續下拉」，且新加的 `overscroll-behavior` 反而關掉了原生下拉刷新手感，於是完整還原該次改動（commit `22b97be`，`git diff` 確認與改動前逐字元相同）
+- **正確根因**：下拉刷新腳本判斷整個 `window.scrollY`，無法區分「頁面頂端下拉」與「Modal 內部捲動到底後繼續下拉」
+- **正確修法**（commit `35f09a4`）：`touchstart` 開頭加一個閘門，`body` 有 `modal-open` class（全站 Modal 開啟時的既有慣例）時直接放棄追蹤，不設 `isPulling`；`scrollY`/`deltaY` 既有判斷邏輯完全不動，不使用 `overscroll-behavior`
+- **已知落差，本次不處理**：`admin.astro`（原生 `<dialog>`）與 `ledger.astro`（三個 Modal 皆只切換 `display`）未設 `body.modal-open`，這次的閘門對它們無效，經使用者確認暫不處理，留待未來獨立任務
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| a. `/notes` 開 Modal、內部捲到底、往下拉不再誤觸重整 | 使用者實機測試 | ✅ |
+| b. `/notes` 無 Modal、頁面頂端下拉正常觸發重整 | 使用者實機測試 | ✅ |
+| c. 首頁等其他頁面下拉刷新正常 | 使用者實機測試 | ✅ |
+| d. 其他有 Modal 的頁面（短文/收藏/行程）開 Modal 下拉不誤觸 | 使用者實機測試 | ✅ |
+| commit + push 並貼出終端機輸出 | `3b5cf39`（誤判，已還原）→ `22b97be`（還原）→ `35f09a4`（正確修法） | ✅ |
+
+---
+
 ### ✅ 全站安全修復：短文/語錄/登入頁瀏覽器端誤用 SSR 專用 client（2026-08-29，已結案）
 
 V2 階段 9 npm 遷移時遺漏的 4 個瀏覽器端腳本，誤 `import { supabase } from '.../lib/supabase-client'`（SSR 專用、讀不到瀏覽器 session），導致對應頁面的登入狀態判斷失效。
 
 - **全站排查（唯讀，先於動工前回報）**：`grep` 全站所有 `from '.../lib/supabase-client'`，逐一比對落在 SSR frontmatter（正確，不動）或瀏覽器 `<script>`（需修正）。確認 4 處誤用：`posts/index.astro:178`、`posts/[id].astro:194`、`quotes/index.astro:180`、`login.astro:30`；`ledger.astro`/`polaroid.astro`/`admin.astro` 的瀏覽器端本來就正確使用 `getSupabaseBrowserClient()`，不受影響
 - **修法**：4 個檔案各自獨立 commit，僅換瀏覽器端 client 來源（`import { getSupabaseBrowserClient } from '.../lib/supabase-browser.js'; const supabase = getSupabaseBrowserClient();`），SSR frontmatter 的 `supabase-client.ts` 用法（build time 查詢）與 auth 邏輯、RLS、資料抓取流程完全未動
-- **追加修正（使用者實測時發現，同一根因的延伸案例）**：`posts/index.astro` 的 `refreshPostsList()` 在沒有 session 時提前 `return`，導致負責更新登入/登出按鈕的 `checkAdmin()`（透過 `bindActions()` 呼叫）完全沒機會執行，登出後兩顆按鈕卡在預設的 `display:none`，看起來像沒有登入入口。修法：把 `checkAdmin()` 呼叫移到提前 return 之前，讓按鈕顯示狀態不受「有無 session」擋住
+- **追加修正（使用者實測時發現，同一根因的延伸案例）**：`posts/index.astro` 的 `refreshPostsList()` 在沒有 session 時提前 `return`，導致負責更新登入/登出按鈕的 `checkAdmin()`（透過 `bindActions()` 呼叫）完全沒機會執行，登出後兩顆按鈕卡在預設的 `display:none`，看起來像沒有登入入口。修法：把 `checkAdmin()` 呼叫移到提前 return 之前，讓按鈕顯示狀態不受「有無 session」擋住（commit `069aa37`）
+- **同一模式的第二個案例**：使用者依「排查其他頁面」驗收時，發現 `quotes/index.astro` 的 `refreshQuotesList()` 有一模一樣的提前 return 問題，登出後語錄頁同樣不顯示登入按鈕。比照同樣手法修正（commit `8d663f2`）
 
 #### 自我驗收對照表
 
@@ -893,7 +915,9 @@ V2 階段 9 npm 遷移時遺漏的 4 個瀏覽器端腳本，誤 `import { supab
 | 未動 SSR client、RLS、auth 邏輯 | 逐檔 diff 確認僅換 import 來源 | ✅ |
 | a. 手機登入後點進 `/posts` 顯示已登入 | 使用者實機驗證 | ✅ |
 | 登出後 `/posts` 顯示登入按鈕（實測追加發現的延伸問題） | 修正 `refreshPostsList()`（`069aa37`），使用者手機/桌機皆驗證通過 | ✅ |
-| b-e（管理功能、其他頁面、桌機、visibility 顯示） | 使用者確認「手機與桌機皆已修正完成」 | ✅ |
+| c. 排查修正的其他頁面登入狀態正常 | 發現 `quotes` 同一根因的登出後無登入按鈕，修正（`8d663f2`）後使用者確認通過 | ✅ |
+| b、d（管理功能、桌機） | 使用者確認「手機與桌機皆已修正完成」 | ✅ |
+| e. 短文三級 visibility 顯示正確 | 使用者確認通過 | ✅ |
 
 ---
 
