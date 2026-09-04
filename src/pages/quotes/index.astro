@@ -448,6 +448,8 @@ try {
   async function refreshQuotesList() {
     const seq = ++quotesRefreshSeq;
     const { data: { session } } = await supabase.auth.getSession();
+    // 登入/登出按鈕的顯示狀態不該受「有沒有 session」擋住，兩種情況都要更新
+    await checkAdmin();
     if (!session) return;
 
     // 朋友帳號也會有 session，必須實際比對 email 才是真正的管理員，
