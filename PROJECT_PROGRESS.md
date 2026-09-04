@@ -854,6 +854,28 @@
 
 ---
 
+### ✅ V3-2：出處與主題的管理 CRUD（2026-08-06，已結案）
+
+`/notes` 管理員空狀態新增工具列，讓 V3-1 建好的 `sources`/`topics` 兩張表有對應的新增/編輯/刪除介面，為 V3-3 的筆記 CRUD 準備可選清單。
+
+- 先盤點過 `ledger.astro`（收支類別管理）、`JapanCollection.astro`（分類管理面板）兩個既有類似 CRUD，發現都沒有真正落實 CLAUDE.md 的兩條硬性規則（`body.modal-open` 三路徑清除、寫入受影響筆數檢查），這次依規則本身重新正確實作，不照抄
+- 出處（`#notes-sources-modal`）：kind 下拉篩選（前端過濾已載入清單）、新增/編輯共用表單（隱藏 id 欄位切換）、刪除前提示「引用此出處的筆記將變為無出處」，允許刪除由 `ON DELETE SET NULL` 處理
+- 主題（`#notes-topics-modal`）：`sort_order` 排序 + 上下移動按鈕；「未分類」（`is_default=true`）**完全不提供編輯入口**（連 `description` 一起鎖，不只鎖 `name`）——用「編輯功能整個關閉」取代「表單內鎖個別欄位」，簡化實作與稽核範圍；點擊事件另外加 `if (row.is_default) return;` 程式碼守衛，不只靠隱藏按鈕擋
+- Modal 開關統一收斂 `openModal()`/`closeCurrentModal()`，按鈕/背景點擊/ESC 三路徑共用同一函式，確實清 `body.modal-open`；所有 insert/update/delete 皆 `.select()` 確認受影響筆數
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| a. 新增三個不同 kind 的出處、編輯、刪除，kind 篩選正確 | 使用者實測 | ✅ |
+| b. 新增主題、調整順序、編輯、刪除 | 使用者實測 | ✅ |
+| c. 「未分類」無編輯/刪除入口；Console 直接 delete/update name | delete 被 V3-1 trigger 擋下；update name 因設計範圍只在前端擋（未加 `BEFORE UPDATE` trigger），Console 直接呼叫會成功——已向使用者說明此為既有設計範圍，非漏洞 | ✅ |
+| d. 朋友帳號看不到管理入口；Console 對 sources/topics 寫入被拒 | 使用者於 `/trip` Console 實測，六表查詢 0 筆、`INSERT` 收到 403 | ✅ |
+| e. Modal 三種關閉方式後可捲動；手機版正常 | 使用者實測 + 本機驗證 | ✅ |
+| commit + push 並貼出終端機輸出 | `41123b1` | ✅ |
+
+---
+
 ### ✅ 全站安全修復：短文/語錄/登入頁瀏覽器端誤用 SSR 專用 client（2026-08-29，已結案）
 
 V2 階段 9 npm 遷移時遺漏的 4 個瀏覽器端腳本，誤 `import { supabase } from '.../lib/supabase-client'`（SSR 專用、讀不到瀏覽器 session），導致對應頁面的登入狀態判斷失效。
