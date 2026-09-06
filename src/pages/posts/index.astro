@@ -447,6 +447,10 @@ try {
     container.innerHTML = allPill + pills;
   }
 
+  // 標籤一多會撐爆版面，預設只顯示前 N 個，其餘收在「更多標籤」後面
+  const TAG_FILTER_COLLAPSE_LIMIT = 10;
+  let tagFilterExpanded = false;
+
   function renderTagFilterPills() {
     const container = document.getElementById('posts-tag-filter');
     if (!container) return;
@@ -454,7 +458,24 @@ try {
       container.innerHTML = '<span class="posts-filter-empty">尚無標籤</span>';
       return;
     }
-    container.innerHTML = tagsCache.map((t) => `<button type="button" class="posts-filter-pill${selectedTagFilterIds.has(t.id) ? ' active' : ''}" data-tag-id="${t.id}">#${escapeHtml(t.name)}</button>`).join('');
+
+    const needsCollapse = tagsCache.length > TAG_FILTER_COLLAPSE_LIMIT;
+    // 收合狀態下預設只顯示前 N 個；但已選中的標籤即使排在後面，也一併強制顯示——
+    // 不能因為收合就讓使用者看不出「其實還有標籤被選中」
+    let visibleTags = tagsCache;
+    if (needsCollapse && !tagFilterExpanded) {
+      const head = tagsCache.slice(0, TAG_FILTER_COLLAPSE_LIMIT);
+      const headIds = new Set(head.map((t) => t.id));
+      const selectedButHidden = tagsCache.filter((t) => selectedTagFilterIds.has(t.id) && !headIds.has(t.id));
+      visibleTags = [...head, ...selectedButHidden];
+    }
+
+    const pillsHtml = visibleTags.map((t) => `<button type="button" class="posts-filter-pill${selectedTagFilterIds.has(t.id) ? ' active' : ''}" data-tag-id="${t.id}">#${escapeHtml(t.name)}</button>`).join('');
+    const toggleHtml = needsCollapse
+      ? `<button type="button" id="btn-toggle-tag-filter" class="posts-filter-toggle">${tagFilterExpanded ? '收合 ▴' : '更多標籤 ▾'}</button>`
+      : '';
+
+    container.innerHTML = pillsHtml + toggleHtml;
   }
 
   document.getElementById('posts-category-filter')?.addEventListener('click', (e) => {
@@ -467,6 +488,12 @@ try {
   });
 
   document.getElementById('posts-tag-filter')?.addEventListener('click', (e) => {
+    const toggleBtn = (e.target as HTMLElement).closest('#btn-toggle-tag-filter');
+    if (toggleBtn) {
+      tagFilterExpanded = !tagFilterExpanded;
+      renderTagFilterPills();
+      return;
+    }
     const btn = (e.target as HTMLElement).closest('.posts-filter-pill') as HTMLElement | null;
     if (!btn || !btn.dataset.tagId) return;
     const tagId = btn.dataset.tagId;
@@ -866,6 +893,8 @@ try {
     if (savePostBtn) (savePostBtn as HTMLButtonElement).disabled = true;
 
     const id = (document.getElementById('post-id') as HTMLInputElement).value;
+    const wasEditing = !!id;
+    const editedPostId = id;
     const title = (document.getElementById('post-title') as HTMLInputElement).value;
     const content = (document.getElementById('post-content') as HTMLTextAreaElement).value;
     const weather = (document.getElementById('post-weather') as HTMLInputElement).value;
@@ -1001,8 +1030,16 @@ try {
       resetForm();
       // 儲存成功後直接重新抓一次資料重繪，取代先前「手動一塊塊修 DOM」的做法——
       // 這樣分類/標籤徽章、排序、卡片內容都保證跟資料庫一致，也不用重新整理頁面就能看到最新狀態；
-      // 若目前有搜尋字串，refreshPostsList() 內部會重新套用，不會被洗掉
+      // 若目前有任一種篩選在生效，refreshPostsList() 內部會重新套用，不會被洗掉
       await refreshPostsList();
+
+      // 「編輯既有文章→更新」情境：畫面應停在該文章原本的位置，不要停在頁面最上方
+      // （點「編輯」時會先捲到頂部顯示表單，這是既有、刻意的行為，這裡只處理「儲存後」要不要捲回去）。
+      // 新發文（wasEditing 為 false）維持原行為，不做這段。
+      if (wasEditing) {
+        const el = document.querySelector(`.post-item[data-id="${CSS.escape(String(editedPostId))}"]`);
+        el?.scrollIntoView({ behavior: 'auto', block: 'center' });
+      }
     }
   });
 
@@ -1214,7 +1251,7 @@ try {
       }
       return true;
     });
-    renderPostsList(filtered, true);
+    return renderPostsList(filtered, true);
   }
 
   document.getElementById('posts-search-input')?.addEventListener('input', applyPostsFilters);
@@ -1255,7 +1292,7 @@ try {
     // 這支函式除了「使用者按下發布/刪除」會呼叫，Supabase 在視窗重新取得焦點時也可能重發
     // SIGNED_IN 事件間接觸發，若沒有這層保護，畫面會突然跳回顯示全部文章
     if (hasActiveFilter()) {
-      applyPostsFilters();
+      await applyPostsFilters();
     } else {
       await renderPostsList(postsCache, isAdmin);
     }
