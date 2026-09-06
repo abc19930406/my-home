@@ -73,9 +73,19 @@ try {
             <button id="open-category-modal" class="btn-manage-category">🏷️ 管理分類</button>
           </div>
 
-          <div class="posts-search-bar admin-only" style="display: none;">
-            <input type="text" id="posts-search-input" placeholder="🔍 搜尋標題／內文／分類／標籤..." />
-            <button type="button" id="posts-search-clear" class="btn-search-clear" style="display: none;">清除篩選</button>
+          <div class="posts-filter-bar admin-only" style="display: none;">
+            <div class="posts-search-bar">
+              <input type="text" id="posts-search-input" placeholder="🔍 搜尋標題／內文..." />
+              <button type="button" id="posts-search-clear" class="btn-search-clear" style="display: none;">清除篩選</button>
+            </div>
+            <div class="posts-filter-row">
+              <span class="posts-filter-row-label">分類：</span>
+              <div id="posts-category-filter" class="posts-filter-pills"></div>
+            </div>
+            <div class="posts-filter-row">
+              <span class="posts-filter-row-label">標籤（可多選，符合任一即顯示）：</span>
+              <div id="posts-tag-filter" class="posts-filter-pills"></div>
+            </div>
           </div>
 
           <!-- 管理員操作：新增短文表單 -->
@@ -412,6 +422,7 @@ try {
     categoriesCache = data || [];
     populateCategorySelect();
     renderCategoriesList();
+    renderCategoryFilterPills();
   }
 
   async function loadTags() {
@@ -419,7 +430,54 @@ try {
     if (error) { console.warn('loadTags failed:', error); return; }
     tagsCache = data || [];
     populateTagsDatalist();
+    renderTagFilterPills();
   }
+
+  // ============================================================
+  // 分類／標籤篩選（精確比對 id／關聯，不是名稱字串比對）
+  // ============================================================
+  let selectedCategoryFilter: string | null = null;
+  let selectedTagFilterIds: Set<string> = new Set();
+
+  function renderCategoryFilterPills() {
+    const container = document.getElementById('posts-category-filter');
+    if (!container) return;
+    const allPill = `<button type="button" class="posts-filter-pill${selectedCategoryFilter === null ? ' active' : ''}" data-category-id="">全部</button>`;
+    const pills = categoriesCache.map((c) => `<button type="button" class="posts-filter-pill${selectedCategoryFilter === c.id ? ' active' : ''}" data-category-id="${c.id}">${escapeHtml(c.name)}</button>`).join('');
+    container.innerHTML = allPill + pills;
+  }
+
+  function renderTagFilterPills() {
+    const container = document.getElementById('posts-tag-filter');
+    if (!container) return;
+    if (tagsCache.length === 0) {
+      container.innerHTML = '<span class="posts-filter-empty">尚無標籤</span>';
+      return;
+    }
+    container.innerHTML = tagsCache.map((t) => `<button type="button" class="posts-filter-pill${selectedTagFilterIds.has(t.id) ? ' active' : ''}" data-tag-id="${t.id}">#${escapeHtml(t.name)}</button>`).join('');
+  }
+
+  document.getElementById('posts-category-filter')?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.posts-filter-pill') as HTMLElement | null;
+    if (!btn) return;
+    const categoryId = btn.dataset.categoryId || '';
+    selectedCategoryFilter = categoryId || null;
+    renderCategoryFilterPills();
+    applyPostsFilters();
+  });
+
+  document.getElementById('posts-tag-filter')?.addEventListener('click', (e) => {
+    const btn = (e.target as HTMLElement).closest('.posts-filter-pill') as HTMLElement | null;
+    if (!btn || !btn.dataset.tagId) return;
+    const tagId = btn.dataset.tagId;
+    if (selectedTagFilterIds.has(tagId)) {
+      selectedTagFilterIds.delete(tagId);
+    } else {
+      selectedTagFilterIds.add(tagId);
+    }
+    renderTagFilterPills();
+    applyPostsFilters();
+  });
 
   async function loadTagMap() {
     const { data, error } = await supabase.from('post_tag_map').select('*');
@@ -984,12 +1042,12 @@ try {
   function renderCategoryTagBadges(post: any): string {
     const category = post.category_id ? categoriesCache.find((c) => c.id === post.category_id) : null;
     const tagIds = tagMapByPostId.get(String(post.id)) || [];
-    const tagNames = tagIds.map((tid) => tagsCache.find((t) => t.id === tid)?.name).filter(Boolean) as string[];
-    if (!category && tagNames.length === 0) return '';
+    const tags = tagIds.map((tid) => tagsCache.find((t) => t.id === tid)).filter(Boolean) as any[];
+    if (!category && tags.length === 0) return '';
     return `
       <div class="post-badges admin-only" style="display: flex;">
-        ${category ? `<button type="button" class="post-category-badge" data-filter="${escapeHtml(category.name)}">${escapeHtml(category.name)}</button>` : ''}
-        ${tagNames.map((n) => `<button type="button" class="post-tag-badge" data-filter="${escapeHtml(n)}">#${escapeHtml(n)}</button>`).join('')}
+        ${category ? `<button type="button" class="post-category-badge" data-category-id="${category.id}">${escapeHtml(category.name)}</button>` : ''}
+        ${tags.map((t) => `<button type="button" class="post-tag-badge" data-tag-id="${t.id}">#${escapeHtml(t.name)}</button>`).join('')}
       </div>
     `;
   }
@@ -1074,14 +1132,23 @@ try {
     }
 
     // 點分類／標籤徽章：把名稱填入搜尋框並觸發同一套搜尋（不另外維護一套篩選狀態）
-    const badge = target.closest('.post-category-badge, .post-tag-badge') as HTMLElement | null;
-    if (badge) {
-      const searchInput = document.getElementById('posts-search-input') as HTMLInputElement | null;
-      if (searchInput) {
-        searchInput.value = badge.dataset.filter || '';
-        searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-        searchInput.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }
+    // 點分類徽章：精確篩選成該分類（比對 id，不是名稱字串）
+    const categoryBadge = target.closest('.post-category-badge') as HTMLElement | null;
+    if (categoryBadge) {
+      selectedCategoryFilter = categoryBadge.dataset.categoryId || null;
+      renderCategoryFilterPills();
+      applyPostsFilters();
+      document.getElementById('posts-category-filter')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+
+    // 點標籤徽章：加入標籤篩選（多選聯集，比對 post_tag_map 關聯 id，不是名稱字串）
+    const tagBadge = target.closest('.post-tag-badge') as HTMLElement | null;
+    if (tagBadge && tagBadge.dataset.tagId) {
+      selectedTagFilterIds.add(tagBadge.dataset.tagId);
+      renderTagFilterPills();
+      applyPostsFilters();
+      document.getElementById('posts-tag-filter')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   });
 
@@ -1115,28 +1182,50 @@ try {
     container.innerHTML = itemsHtml.join('');
   }
 
-  // 搜尋範圍：標題 + 內文 + 分類名 + 標籤名，純前端比對 postsCache，不重新查詢
-  function applyPostsSearch() {
+  // 是否有任一種篩選正在生效（文字／分類／標籤），供「清除篩選」按鈕顯示與 refreshPostsList() 判斷是否要重新套用
+  function hasActiveFilter(): boolean {
+    const input = document.getElementById('posts-search-input') as HTMLInputElement | null;
+    return !!(input?.value.trim()) || selectedCategoryFilter !== null || selectedTagFilterIds.size > 0;
+  }
+
+  // 三種篩選各自精確比對、以 AND 疊加：
+  // - 文字：僅比對 title + content（模糊，不含分類/標籤名稱，避免誤命中）
+  // - 分類：精確比對 category_id（不是名稱字串）
+  // - 標籤：精確比對 post_tag_map 的關聯 id，多選為聯集（符合任一即算通過），再與其他條件 AND
+  function applyPostsFilters() {
     const input = document.getElementById('posts-search-input') as HTMLInputElement | null;
     const clearBtn = document.getElementById('posts-search-clear');
     const query = (input?.value || '').trim().toLowerCase();
-    if (clearBtn) clearBtn.style.display = query ? 'inline-block' : 'none';
+    const active = hasActiveFilter();
+    if (clearBtn) clearBtn.style.display = active ? 'inline-block' : 'none';
 
-    const filtered = !query ? postsCache : postsCache.filter((post) => {
-      const category = post.category_id ? categoriesCache.find((c) => c.id === post.category_id) : null;
-      const tagIds = tagMapByPostId.get(String(post.id)) || [];
-      const tagNames = tagIds.map((tid) => tagsCache.find((t) => t.id === tid)?.name).filter(Boolean) as string[];
-      const searchable = [post.title, post.content, category?.name, ...tagNames].filter(Boolean).join(' ').toLowerCase();
-      return searchable.includes(query);
+    const filtered = postsCache.filter((post) => {
+      if (query) {
+        const textSearchable = [post.title, post.content].filter(Boolean).join(' ').toLowerCase();
+        if (!textSearchable.includes(query)) return false;
+      }
+      if (selectedCategoryFilter !== null && post.category_id !== selectedCategoryFilter) {
+        return false;
+      }
+      if (selectedTagFilterIds.size > 0) {
+        const tagIds = tagMapByPostId.get(String(post.id)) || [];
+        const matchesAnySelectedTag = tagIds.some((tid) => selectedTagFilterIds.has(tid));
+        if (!matchesAnySelectedTag) return false;
+      }
+      return true;
     });
     renderPostsList(filtered, true);
   }
 
-  document.getElementById('posts-search-input')?.addEventListener('input', applyPostsSearch);
+  document.getElementById('posts-search-input')?.addEventListener('input', applyPostsFilters);
   document.getElementById('posts-search-clear')?.addEventListener('click', () => {
     const input = document.getElementById('posts-search-input') as HTMLInputElement | null;
     if (input) input.value = '';
-    applyPostsSearch();
+    selectedCategoryFilter = null;
+    selectedTagFilterIds = new Set();
+    renderCategoryFilterPills();
+    renderTagFilterPills();
+    applyPostsFilters();
   });
 
   async function refreshPostsList() {
@@ -1162,12 +1251,11 @@ try {
 
     if (seq !== postsRefreshSeq) return;
 
-    // 若目前有搜尋字串，重新套用搜尋（而不是直接整批重繪），避免搜尋結果被覆蓋掉——
+    // 若目前有任一種篩選在生效（文字／分類／標籤），重新套用而不是直接整批重繪，避免篩選結果被覆蓋掉——
     // 這支函式除了「使用者按下發布/刪除」會呼叫，Supabase 在視窗重新取得焦點時也可能重發
-    // SIGNED_IN 事件間接觸發，若沒有這層保護，正在打字搜尋時畫面會突然跳回顯示全部文章
-    const searchInput = document.getElementById('posts-search-input') as HTMLInputElement | null;
-    if (searchInput && searchInput.value.trim()) {
-      applyPostsSearch();
+    // SIGNED_IN 事件間接觸發，若沒有這層保護，畫面會突然跳回顯示全部文章
+    if (hasActiveFilter()) {
+      applyPostsFilters();
     } else {
       await renderPostsList(postsCache, isAdmin);
     }
