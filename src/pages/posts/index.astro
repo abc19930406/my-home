@@ -426,9 +426,12 @@ try {
     if (error) { console.warn('loadTagMap failed:', error); return; }
     tagMapByPostId = new Map();
     for (const row of data || []) {
-      const list = tagMapByPostId.get(row.post_id) || [];
+      // posts.id 是 bigint，Supabase 回傳是 number；統一轉成 string 當 Map key，
+      // 避免跟 HTML input（.value 永遠是 string）比對時因型別不同而永遠查不到
+      const key = String(row.post_id);
+      const list = tagMapByPostId.get(key) || [];
       list.push(row.tag_id);
-      tagMapByPostId.set(row.post_id, list);
+      tagMapByPostId.set(key, list);
     }
   }
 
@@ -476,6 +479,8 @@ try {
     }
     resetCategoryForm();
     await loadCategories();
+    // 分類名稱可能已顯示在文章卡片徽章上，一併重繪保持同步
+    await refreshPostsList();
   });
 
   document.getElementById('post-categories-list')?.addEventListener('click', async (e) => {
@@ -509,6 +514,8 @@ try {
       if (!data || data.length === 0) { alert('沒有任何資料被刪除，可能已被刪除或沒有權限。'); return; }
       if (editingCategoryId === id) resetCategoryForm();
       await loadCategories();
+      // 該分類下的文章 category_id 已被資料庫的 ON DELETE SET NULL 改掉，重繪讓徽章跟著消失
+      await refreshPostsList();
       return;
     }
 
@@ -596,7 +603,10 @@ try {
   });
 
   // 比對編輯前後的標籤 id 清單，刪除被移除的關聯、新增新加入的關聯；新文章（beforeIds 為空陣列）則全部新增
-  async function syncPostTags(postId: string, beforeIds: string[]) {
+  async function syncPostTags(postIdRaw: string | number, beforeIds: string[]) {
+    // postsCache/DB 回傳的 post.id 是 number（bigint），表單 hidden input 讀出來是 string；
+    // 統一轉成 string 再操作，避免與 tagMapByPostId 的 string key 型別不一致而誤判成「沒有變化」
+    const postId = String(postIdRaw);
     const afterIds = pendingTagIds;
     const toRemove = beforeIds.filter((id) => !afterIds.includes(id));
     const toAdd = afterIds.filter((id) => !beforeIds.includes(id));
@@ -851,36 +861,6 @@ try {
       triggerDeploy();
 
       if (id) {
-        // 更新 UI
-        const item = document.querySelector(`.post-item[data-id="${id}"]`);
-        if (item) {
-          const postToUpdate = { id, ...postData, created_at: (item as any).dataset.createdAt || new Date().toISOString() };
-          item.querySelector('.post-title-link')!.textContent = title;
-          item.querySelector('.post-meta')!.innerHTML = `
-            ${weather ? `<span>${weather} ・ </span>` : ''}
-            <span>${new Date(postToUpdate.created_at).toLocaleDateString('zh-TW')}</span>
-            <span> ・ 閱讀約 ${reading_time} 分鐘</span>
-          `;
-          item.querySelector('.post-preview')!.textContent = content.replace(/[*_#\[\]()]/g, '').substring(0, 80) + '...';
-          const editBtn = item.querySelector('.btn-inline-edit') as HTMLElement;
-          editBtn.dataset.post = JSON.stringify(postToUpdate);
-
-          // 更新封面縮圖
-          const { coverUrl, photoCount } = await getCoverInfo(currentImagePaths);
-          let coverEl = item.querySelector('.post-cover');
-          if (coverUrl) {
-            if (!coverEl) {
-              coverEl = document.createElement('div');
-              coverEl.className = 'post-cover';
-              item.insertBefore(coverEl, item.firstChild);
-            }
-            coverEl.innerHTML = `<img src="${coverUrl}" alt="${title}" width="400" height="300" loading="lazy" />` +
-              (photoCount > 1 ? `<span class="post-cover-badge">${photoCount} 張</span>` : '');
-          } else if (coverEl) {
-            coverEl.remove();
-          }
-        }
-
         // 同步媒體項目：先刪除被移除的，已存在的更新排序，新增的寫入資料庫
         for (const delId of deletedMediaIds) {
           await supabase.from('post_media_items').delete().eq('id', delId);
@@ -911,10 +891,6 @@ try {
 
         // 同步標籤關聯
         await syncPostTags(id, tagMapByPostId.get(id) || []);
-
-        // 同步記憶體 cache（供搜尋使用），避免下次搜尋時資料過期
-        const cacheIdx = postsCache.findIndex((p) => p.id === id);
-        if (cacheIdx !== -1) postsCache[cacheIdx] = { ...postsCache[cacheIdx], ...postData };
 
         showToast('已更新');
       } else if (newPost) {
@@ -961,21 +937,14 @@ try {
         // 同步標籤關聯（新文章，先前沒有任何關聯）
         await syncPostTags(newPost.id, []);
 
-        // 同步記憶體 cache（供搜尋使用）
-        postsCache.unshift(newPost);
-
-        // 新增 UI
-        const { data: { session } } = await supabase.auth.getSession();
-        const { coverUrl, photoCount } = await getCoverInfo(newPost.image_urls || []);
-        const html = createPostHtml(newPost, !!session, coverUrl, photoCount);
-        const container = document.getElementById('posts-container');
-        const emptyMsg = document.getElementById('empty-msg');
-        if (emptyMsg) emptyMsg.style.display = 'none';
-        container?.insertAdjacentHTML('afterbegin', html);
         showToast('已發布');
       }
 
       resetForm();
+      // 儲存成功後直接重新抓一次資料重繪，取代先前「手動一塊塊修 DOM」的做法——
+      // 這樣分類/標籤徽章、排序、卡片內容都保證跟資料庫一致，也不用重新整理頁面就能看到最新狀態；
+      // 若目前有搜尋字串，refreshPostsList() 內部會重新套用，不會被洗掉
+      await refreshPostsList();
     }
   });
 
@@ -1014,7 +983,7 @@ try {
   // 點擊徽章會把該名稱填入搜尋框並觸發同一套搜尋，不另外維護一套篩選狀態
   function renderCategoryTagBadges(post: any): string {
     const category = post.category_id ? categoriesCache.find((c) => c.id === post.category_id) : null;
-    const tagIds = tagMapByPostId.get(post.id) || [];
+    const tagIds = tagMapByPostId.get(String(post.id)) || [];
     const tagNames = tagIds.map((tid) => tagsCache.find((t) => t.id === tid)?.name).filter(Boolean) as string[];
     if (!category && tagNames.length === 0) return '';
     return `
@@ -1042,7 +1011,7 @@ try {
       (document.getElementById('post-created-at') as HTMLInputElement).value = post.created_at
         ? toDatetimeLocalValue(new Date(post.created_at))
         : toDatetimeLocalValue(new Date());
-      pendingTagIds = [...(tagMapByPostId.get(post.id) || [])];
+      pendingTagIds = [...(tagMapByPostId.get(String(post.id)) || [])];
       renderTagChips();
 
       // 載入圖片陣列：資料庫存的是路徑，先轉成簽名網址才能預覽
@@ -1098,10 +1067,8 @@ try {
       } else {
         showToast('已刪除');
         triggerDeploy();
-        const item = target.closest('.post-item');
-        item?.remove();
-        postsCache = postsCache.filter((p) => p.id !== id);
         tagMapByPostId.delete(id as string);
+        await refreshPostsList();
       }
       return;
     }
@@ -1157,7 +1124,7 @@ try {
 
     const filtered = !query ? postsCache : postsCache.filter((post) => {
       const category = post.category_id ? categoriesCache.find((c) => c.id === post.category_id) : null;
-      const tagIds = tagMapByPostId.get(post.id) || [];
+      const tagIds = tagMapByPostId.get(String(post.id)) || [];
       const tagNames = tagIds.map((tid) => tagsCache.find((t) => t.id === tid)?.name).filter(Boolean) as string[];
       const searchable = [post.title, post.content, category?.name, ...tagNames].filter(Boolean).join(' ').toLowerCase();
       return searchable.includes(query);
@@ -1194,7 +1161,16 @@ try {
     postsCache = data;
 
     if (seq !== postsRefreshSeq) return;
-    await renderPostsList(postsCache, isAdmin);
+
+    // 若目前有搜尋字串，重新套用搜尋（而不是直接整批重繪），避免搜尋結果被覆蓋掉——
+    // 這支函式除了「使用者按下發布/刪除」會呼叫，Supabase 在視窗重新取得焦點時也可能重發
+    // SIGNED_IN 事件間接觸發，若沒有這層保護，正在打字搜尋時畫面會突然跳回顯示全部文章
+    const searchInput = document.getElementById('posts-search-input') as HTMLInputElement | null;
+    if (searchInput && searchInput.value.trim()) {
+      applyPostsSearch();
+    } else {
+      await renderPostsList(postsCache, isAdmin);
+    }
 
     bindActions();
   }
