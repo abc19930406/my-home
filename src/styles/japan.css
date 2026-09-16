@@ -219,6 +219,154 @@
 }
 
 /* ==========================================================
+   國家切換器 (Country Switcher，MC-2 多國家擴充)
+   比照行程頁 .trips-scroll-container/.trip-tab 的互動樣式，配色改用 --japan-* 變數
+   ========================================================== */
+.countries-scroll-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.countries-list {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 4px 8px 4px;
+  scroll-behavior: smooth;
+  flex-grow: 1;
+  -webkit-overflow-scrolling: touch;
+}
+
+.countries-list::-webkit-scrollbar {
+  height: 4px;
+}
+.countries-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.countries-list::-webkit-scrollbar-thumb {
+  background: rgba(112, 144, 184, 0.2);
+  border-radius: 4px;
+}
+
+.country-tab {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 20px;
+  border: 1px solid var(--japan-border);
+  background-color: rgba(255, 255, 255, 0.6);
+  color: var(--japan-text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.country-tab:hover {
+  border-color: var(--japan-primary);
+  background-color: var(--japan-primary-light);
+}
+
+.country-tab.active {
+  background-color: var(--japan-primary);
+  border-color: var(--japan-primary);
+  color: white;
+  box-shadow: 0 4px 12px rgba(112, 144, 184, 0.3);
+}
+
+.btn-manage-countries {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: 1px dashed var(--japan-primary);
+  background-color: transparent;
+  color: var(--japan-primary);
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-manage-countries:hover {
+  background-color: var(--japan-primary-light);
+}
+
+/* 國家管理 Modal 內的清單列，比照分類管理面板的 .category-row 視覺語彙 */
+.country-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.country-manage-list {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.country-manage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--japan-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.country-manage-row-name {
+  font-size: 0.9rem;
+  color: var(--japan-text);
+}
+
+.country-manage-row-name em {
+  font-style: normal;
+  color: var(--japan-text-muted);
+  font-size: 0.78rem;
+  margin-left: 4px;
+}
+
+.country-manage-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.country-manage-row-actions button {
+  background: transparent;
+  border: 1px solid var(--japan-border);
+  color: var(--japan-text-muted);
+  padding: 3px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.78rem;
+  transition: all 0.2s;
+}
+
+.country-manage-row-actions button:hover:not(:disabled) {
+  border-color: var(--japan-primary);
+  color: var(--japan-primary);
+}
+
+.country-manage-row-actions button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* ==========================================================
    /trip 收藏分頁 Mobile 版面修正
    （/trip 的 Mobile/Desktop 分界為 767px，與 trip.css 一致）
    - 登入/登出按鈕原本與 Mobile 版頂部漢堡選單重疊，改為固定在頂部列下方
@@ -233,9 +381,23 @@
     z-index: 95;
   }
 
-  .japan-filter-bar {
+  /* 國家切換器固定在最上方，行程頁面搜尋列(.japan-filter-bar)的 top 需相應下移，
+     避免兩個固定區塊互相重疊 */
+  .countries-scroll-container {
     position: fixed;
     top: 56px;
+    left: 0;
+    right: 0;
+    z-index: 91;
+    margin: 0;
+    padding: 10px 16px;
+    background: #E8EEF5;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.6);
+  }
+
+  .japan-filter-bar {
+    position: fixed;
+    top: 132px;
     left: 0;
     right: 0;
     z-index: 90;
@@ -289,9 +451,10 @@
   }
 
   .japan-container {
-    /* 需容納「管理員 + 子分類展開」的最高情況（實測約 236px），
-       避免固定區塊在該情況下蓋住卡片 */
-    padding-top: 216px;
+    /* 需容納「國家切換器 + 管理員 + 子分類展開」的最高情況，
+       避免固定區塊在該情況下蓋住卡片；以瀏覽器實測校正(模擬管理員展開子分類的
+       最高情況，量測 .japan-filter-bar 實際 bottom 後回推) */
+    padding-top: 300px;
   }
 }
 

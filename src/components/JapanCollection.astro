@@ -78,8 +78,16 @@ const items = initialItems;
 
   <div class="japan-body">
     <div class="japan-container">
-      
 
+      <!-- 國家切換器：每個國家獨立收藏世界，比照行程頁的 trip 切換 UI -->
+      <section class="countries-scroll-container">
+        <div class="countries-list" id="countries-tab-list">
+          <!-- JS 動態渲染 -->
+        </div>
+        <button id="btn-manage-countries" class="btn-manage-countries admin-only" style="display: none;">
+          <i class="ti ti-settings"></i> 管理國家
+        </button>
+      </section>
 
       <!-- 探索日本搜尋區 -->
       <section class="explore-section" id="explore-japan-section" data-explore-public={String(initialStatus.japan_explore_public)} style={initialStatus.japan_explore_public ? '' : 'display: none;'}>
@@ -253,7 +261,15 @@ const items = initialItems;
                 </select>
               </div>
 
-              <!-- 歸屬行程(選填，預設一般收藏) -->
+              <!-- 國家(新增時預設為目前切換中的國家，可調整；編輯時帶入該品項現有國家) -->
+              <div class="form-group">
+                <label for="form-item-country">國家</label>
+                <select id="form-item-country">
+                  <!-- JS 動態插入 -->
+                </select>
+              </div>
+
+              <!-- 歸屬行程(選填，預設一般收藏；選項僅列出上方「國家」下的行程) -->
               <div class="form-group">
                 <label for="form-item-trip">歸屬</label>
                 <select id="form-item-trip">
@@ -329,6 +345,34 @@ const items = initialItems;
     </div>
   </div>
 
+  <!-- 國家管理 Modal（僅管理員） -->
+  <div id="japan-country-modal" class="japan-modal-overlay modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>🌏 管理國家</h3>
+        <button type="button" class="btn-modal-close" id="btn-japan-country-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="japan-country-form">
+          <input type="hidden" id="japan-country-id" />
+          <div class="form-group">
+            <label for="japan-country-name">國家名稱 <span style="color: var(--japan-danger)">*</span></label>
+            <input type="text" id="japan-country-name" required placeholder="例如：韓國" />
+          </div>
+          <div class="form-group">
+            <label for="japan-country-emoji">Emoji（選填）</label>
+            <input type="text" id="japan-country-emoji" placeholder="🇰🇷" maxlength="8" />
+          </div>
+          <div class="country-form-actions">
+            <button type="button" id="btn-japan-country-cancel-edit" class="btn-action" style="display: none;">取消編輯</button>
+            <button type="submit" id="btn-japan-country-submit" class="btn-action-primary">新增國家</button>
+          </div>
+        </form>
+        <div id="japan-countries-list" class="country-manage-list"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- 訪客登入 Modal -->
   <div id="auth-modal" class="japan-modal-overlay modal-overlay" style="display:none;">
     <div class="modal-box" style="max-width: 400px;">
@@ -394,6 +438,10 @@ const items = initialItems;
   let isAllowedUser = false;
   let currentUser = null;
   let tripsCache = [];
+  // 多國家擴充(MC-2)：countries 快取、目前切換中的國家(預設 is_default 國家)、國家管理 Modal 編輯狀態
+  let countriesCache = [];
+  let selectedCountryId = null;
+  let editingCountryId = null;
   // trip_id -> { can_edit_wishlist, can_edit_itinerary }（V2 階段 4 任務三：協作者的行程收藏願望清單權限）
   // 本元件自己查一次，不與 TripPlanner.astro 共用快取
   let collaboratorTripPermissions = {};
@@ -443,12 +491,16 @@ const items = initialItems;
     const { data: cats } = await supabase.from('japan_categories').select('*').order('sort_order', { ascending: true });
     const { data: items } = await supabase.from('japan_items').select('*').order('created_at', { ascending: false });
     const { data: wishlists } = await supabase.from('wishlist_items').select('*');
-    const { data: trips } = await supabase.from('trips').select('id, name').order('created_at', { ascending: true });
+    const { data: trips } = await supabase.from('trips').select('id, name, country_id').order('created_at', { ascending: true });
 
     categoriesCache = cats || [];
     itemsCache = items || [];
     allWishlistItems = wishlists || [];
     tripsCache = trips || [];
+
+    // 多國家擴充(MC-2)：載入國家清單；首次載入時預設選中 is_default 國家(日本)，
+    // 之後每次 init() 重跑(登入/登出、儲存後刷新)都保留使用者目前切換的國家，不重置
+    await loadCountries();
 
     // 2. 身分驗證與即時探索隱私狀態檢查
     const { data: statusObj } = await supabase.from('status').select('japan_explore_public').eq('id', 1).single();
@@ -498,6 +550,7 @@ const items = initialItems;
       // 載入管理選單與 Modal 相關下拉
       renderManageCategoryRows();
       populateMainCategoryDropdown();
+      populateCountryDropdown(selectedCountryId);
       populateTripDropdown();
 
       // 管理員：不論公開或私人均保持可見以進行設定
@@ -557,6 +610,43 @@ const items = initialItems;
     filterAndRenderItems();
   }
 
+  // --- 多國家擴充(MC-2)：countries 載入與切換器 ---
+  async function loadCountries() {
+    const { data, error } = await supabase.from('countries').select('*').order('sort_order', { ascending: true });
+    if (error) { console.warn('loadCountries failed:', error); return; }
+    countriesCache = data || [];
+    if (!selectedCountryId || !countriesCache.some(c => String(c.id) === String(selectedCountryId))) {
+      // 首次載入，或目前選中的國家已被刪除：回退到 is_default 國家(日本)
+      const defaultCountry = countriesCache.find(c => c.is_default) || countriesCache[0];
+      selectedCountryId = defaultCountry ? String(defaultCountry.id) : null;
+    }
+    renderCountrySwitcher();
+  }
+
+  function renderCountrySwitcher() {
+    const container = document.getElementById('countries-tab-list');
+    if (!container) return;
+    container.innerHTML = countriesCache.map(c => `
+      <button class="country-tab ${String(c.id) === String(selectedCountryId) ? 'active' : ''}" data-country-id="${c.id}">
+        <span>${c.emoji || '🌍'}</span> ${c.name}
+      </button>
+    `).join('');
+
+    container.querySelectorAll('.country-tab').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.countryId;
+        if (!id || id === selectedCountryId) return;
+        selectedCountryId = id;
+        // 國家是收藏的最上層維度：切換國家時，既有的「依行程篩選」重置為「全部」，
+        // 在新國家範圍內重新運作(國家 → 該國行程 → 品項)
+        selectedTripFilterId = 'all';
+        renderCountrySwitcher();
+        renderFilterBar();
+        filterAndRenderItems();
+      });
+    });
+  }
+
   function updateHeaderAuthUI() {
     const authGuest = document.getElementById('auth-guest');
     const authUser = document.getElementById('auth-user');
@@ -606,10 +696,12 @@ const items = initialItems;
       html += `<div class="friend-filter-container"><select class="friend-select" id="friend-filter-select">${friendOpts}</select></div>`;
     }
 
-    // 收藏依行程篩選：任何人(管理員、朋友、訪客)皆可使用，與「行程」分頁目前選中的行程無關
+    // 收藏依行程篩選：任何人(管理員、朋友、訪客)皆可使用，與「行程」分頁目前選中的行程無關；
+    // 國家為上層維度，此下拉只列出「目前切換中的國家」底下的行程(國家 → 該國行程 → 品項)
+    const tripsInCountry = tripsCache.filter(trip => String(trip.country_id) === String(selectedCountryId));
     let tripFilterOpts = `<option value="all" ${selectedTripFilterId === 'all' ? 'selected' : ''}>全部</option>`;
     tripFilterOpts += `<option value="general" ${selectedTripFilterId === 'general' ? 'selected' : ''}>一般收藏</option>`;
-    tripsCache.forEach(trip => {
+    tripsInCountry.forEach(trip => {
       tripFilterOpts += `<option value="${trip.id}" ${selectedTripFilterId === String(trip.id) ? 'selected' : ''}>${trip.name}</option>`;
     });
     html += `<div class="trip-scope-filter-container"><select class="trip-scope-select" id="trip-scope-filter-select">${tripFilterOpts}</select></div>`;
@@ -657,14 +749,16 @@ const items = initialItems;
     let subs = [];
 
     if (currentMainFilter === 'wishlist') {
+      // 國家為最上層維度：子分類選項只計算目前切換中國家的品項，與 filterAndRenderItems() 的範圍一致
+      const itemsInCountry = itemsCache.filter(item => String(item.country_id) === String(selectedCountryId));
       let wishlistItems = [];
       if (isAdminUser) {
-        wishlistItems = itemsCache.filter(item => item.owner_wishlist === true);
+        wishlistItems = itemsInCountry.filter(item => item.owner_wishlist === true);
       } else if (isAllowedUser && currentUser) {
         const userWishlistIds = allWishlistItems
           .filter(w => w.user_id === currentUser.id)
           .map(w => String(w.japan_item_id));
-        wishlistItems = itemsCache.filter(item => userWishlistIds.includes(String(item.id)));
+        wishlistItems = itemsInCountry.filter(item => userWishlistIds.includes(String(item.id)));
       }
       const catIds = [...new Set(wishlistItems.map(item => String(item.category_id)))];
       subs = catIds.map(id => categoriesCache.find(c => String(c.id) === id)).filter(Boolean);
@@ -745,6 +839,11 @@ const items = initialItems;
     if (!grid) return;
 
     let filtered = [...itemsCache];
+
+    // 國家為最上層維度：每個國家獨立收藏世界，精確篩選出目前切換中的國家(比對 country_id，不做聯集)
+    if (selectedCountryId) {
+      filtered = filtered.filter(item => String(item.country_id) === String(selectedCountryId));
+    }
 
     // 依行程篩選：獨立於「行程」分頁目前選中的行程，任何人皆可選擇
     if (selectedTripFilterId === 'general') {
@@ -1086,15 +1185,176 @@ const items = initialItems;
     mainCatSelect.innerHTML = html;
   }
 
-  // --- 新增/編輯品項 Modal 的「歸屬」下拉：一般收藏 + 行程清單 ---
-  function populateTripDropdown() {
+  // --- 新增/編輯品項 Modal 的「歸屬」下拉：一般收藏 + 行程清單，僅列出指定國家底下的行程 ---
+  function populateTripDropdown(countryId = selectedCountryId) {
     if (!tripSelect) return;
+    const scopedTrips = tripsCache.filter(trip => String(trip.country_id) === String(countryId));
     let html = '<option value="">一般收藏</option>';
-    tripsCache.forEach(trip => {
+    scopedTrips.forEach(trip => {
       html += `<option value="${trip.id}">${trip.name}</option>`;
     });
     tripSelect.innerHTML = html;
   }
+
+  // --- 新增/編輯品項 Modal 的「國家」下拉 ---
+  function populateCountryDropdown(selectedId) {
+    if (!countrySelect) return;
+    countrySelect.innerHTML = countriesCache.map(c =>
+      `<option value="${c.id}" ${String(c.id) === String(selectedId) ? 'selected' : ''}>${c.emoji ? c.emoji + ' ' : ''}${c.name}</option>`
+    ).join('');
+  }
+
+  // ============================================================
+  // 國家管理 CRUD(MC-2，僅管理員)：新增/編輯/刪除國家，比照短文分類管理的既有模式
+  // ============================================================
+  function resetCountryForm() {
+    editingCountryId = null;
+    document.getElementById('japan-country-form')?.reset();
+    const submitBtn = document.getElementById('btn-japan-country-submit');
+    if (submitBtn) submitBtn.textContent = '新增國家';
+    const cancelBtn = document.getElementById('btn-japan-country-cancel-edit');
+    if (cancelBtn) cancelBtn.style.display = 'none';
+  }
+
+  function renderCountriesManageList() {
+    const container = document.getElementById('japan-countries-list');
+    if (!container) return;
+    container.innerHTML = countriesCache.map((c, idx) => `
+      <div class="country-manage-row" data-id="${c.id}">
+        <span class="country-manage-row-name">${c.emoji ? c.emoji + ' ' : ''}${c.name}${c.is_default ? '<em>（預設）</em>' : ''}</span>
+        <div class="country-manage-row-actions">
+          <button type="button" class="btn-country-up" data-id="${c.id}" ${idx === 0 ? 'disabled' : ''}>↑</button>
+          <button type="button" class="btn-country-down" data-id="${c.id}" ${idx === countriesCache.length - 1 ? 'disabled' : ''}>↓</button>
+          <button type="button" class="btn-country-edit" data-id="${c.id}">編輯</button>
+          <button type="button" class="btn-country-delete" data-id="${c.id}" ${c.is_default ? 'disabled title="預設國家不可刪除"' : ''}>刪除</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  function closeCountryModal() {
+    const m = document.getElementById('japan-country-modal');
+    if (m) {
+      m.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    }
+    resetCountryForm();
+  }
+
+  document.getElementById('btn-manage-countries')?.addEventListener('click', () => {
+    const m = document.getElementById('japan-country-modal');
+    if (!m) return;
+    renderCountriesManageList();
+    m.style.display = 'flex';
+    document.body.classList.add('modal-open');
+  });
+  document.getElementById('btn-japan-country-close')?.addEventListener('click', closeCountryModal);
+  document.getElementById('btn-japan-country-cancel-edit')?.addEventListener('click', resetCountryForm);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const m = document.getElementById('japan-country-modal');
+    if (m && m.style.display === 'flex') closeCountryModal();
+  });
+
+  document.getElementById('japan-country-form')?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('japan-country-name').value.trim();
+    const emoji = document.getElementById('japan-country-emoji').value.trim();
+    if (!name) return;
+
+    if (editingCountryId) {
+      const { data, error } = await supabase.from('countries').update({ name, emoji: emoji || null }).eq('id', editingCountryId).select();
+      if (error) { alert('更新失敗：' + error.message); return; }
+      if (!data || data.length === 0) { alert('沒有任何資料被更新，可能已被刪除或沒有權限。'); return; }
+    } else {
+      const maxOrder = countriesCache.reduce((max, c) => Math.max(max, c.sort_order || 0), 0);
+      const { data, error } = await supabase.from('countries').insert({ name, emoji: emoji || null, sort_order: maxOrder + 1 }).select();
+      if (error) { alert('新增失敗：' + error.message); return; }
+      if (!data || data.length === 0) { alert('新增失敗，沒有取得新資料。'); return; }
+    }
+    resetCountryForm();
+    await loadCountries();
+    renderCountriesManageList();
+    showToast('已儲存');
+  });
+
+  document.getElementById('japan-countries-list')?.addEventListener('click', async (e) => {
+    const target = e.target;
+    const editBtn = target.closest('.btn-country-edit');
+    const deleteBtn = target.closest('.btn-country-delete');
+    const upBtn = target.closest('.btn-country-up');
+    const downBtn = target.closest('.btn-country-down');
+
+    if (editBtn) {
+      const id = editBtn.dataset.id;
+      const row = countriesCache.find(c => String(c.id) === String(id));
+      if (!row) return;
+      editingCountryId = row.id;
+      document.getElementById('japan-country-name').value = row.name;
+      document.getElementById('japan-country-emoji').value = row.emoji || '';
+      const submitBtn = document.getElementById('btn-japan-country-submit');
+      if (submitBtn) submitBtn.textContent = '儲存修改';
+      const cancelBtn = document.getElementById('btn-japan-country-cancel-edit');
+      if (cancelBtn) cancelBtn.style.display = 'inline-block';
+      return;
+    }
+
+    if (deleteBtn) {
+      if (deleteBtn.disabled) return;
+      const id = deleteBtn.dataset.id;
+      const row = countriesCache.find(c => String(c.id) === String(id));
+      if (!row || !id) return;
+      // 「日本」(is_default) 保護：無論底下有沒有資料，一律不可刪除，避免 MC-1 建立的
+      // country_id DEFAULT(寫死指向這一列的 uuid)在它被刪除後變成懸空參照
+      if (row.is_default) {
+        alert('預設國家（日本）不可刪除。');
+        return;
+      }
+      const ok = confirm(`確定要刪除國家「${row.name}」嗎？`);
+      if (!ok) return;
+      const { data, error } = await supabase.from('countries').delete().eq('id', id).select();
+      if (error) {
+        // 23503 = FK ON DELETE RESTRICT 擋下：底下仍有收藏品或行程掛著這個國家，轉成友善提示
+        if (error.code === '23503') {
+          alert(`無法刪除「${row.name}」：這個國家底下仍有收藏品或行程，請先清空或轉移後再刪除。`);
+        } else {
+          alert('刪除失敗：' + error.message);
+        }
+        return;
+      }
+      if (!data || data.length === 0) {
+        alert('沒有任何資料被刪除，可能已被刪除或沒有權限。');
+        return;
+      }
+      showToast('國家已刪除');
+      if (editingCountryId === id) resetCountryForm();
+      await loadCountries();
+      renderCountriesManageList();
+      filterAndRenderItems();
+      return;
+    }
+
+    if (upBtn || downBtn) {
+      const id = (upBtn || downBtn).dataset.id;
+      const idx = countriesCache.findIndex(c => String(c.id) === String(id));
+      if (idx === -1) return;
+      const swapIdx = upBtn ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= countriesCache.length) return;
+      const a = countriesCache[idx];
+      const b = countriesCache[swapIdx];
+      const [resA, resB] = await Promise.all([
+        supabase.from('countries').update({ sort_order: b.sort_order }).eq('id', a.id).select(),
+        supabase.from('countries').update({ sort_order: a.sort_order }).eq('id', b.id).select(),
+      ]);
+      if (resA.error || resB.error) {
+        alert('排序更新失敗：' + (resA.error?.message || resB.error?.message));
+        return;
+      }
+      await loadCountries();
+      renderCountriesManageList();
+    }
+  });
 
   mainCatSelect?.addEventListener('change', () => {
     const mainId = mainCatSelect.value;
@@ -1188,7 +1448,20 @@ const items = initialItems;
   const itemIdInput = document.getElementById('form-item-id');
   const itemNameInput = document.getElementById('form-item-name');
   const itemNoteInput = document.getElementById('form-item-note');
+  const countrySelect = document.getElementById('form-item-country');
   const tripSelect = document.getElementById('form-item-trip');
+
+  // 國家改變時，「歸屬」的行程下拉要重新限定在新選的國家範圍內；
+  // 若原本選的行程不屬於新國家，重置為「一般收藏」，避免 item.country_id 與 item.trip_id 所屬國家對不上
+  countrySelect?.addEventListener('change', () => {
+    const newCountryId = countrySelect.value;
+    const prevTripId = tripSelect ? tripSelect.value : '';
+    populateTripDropdown(newCountryId);
+    if (tripSelect) {
+      const stillValid = prevTripId && tripsCache.some(trip => String(trip.id) === String(prevTripId) && String(trip.country_id) === String(newCountryId));
+      tripSelect.value = stillValid ? prevTripId : '';
+    }
+  });
 
   function openModal(isEdit = false, item = null) {
     if (!modal) return;
@@ -1206,6 +1479,9 @@ const items = initialItems;
       itemNameInput.value = item.name;
       itemNoteInput.value = item.note || '';
       imageUrlInput.value = item.image_url || '';
+      // 國家帶入該品項現有國家，行程下拉隨之限定在同一國家範圍內，才能正確帶入現有的歸屬行程
+      populateCountryDropdown(item.country_id);
+      populateTripDropdown(item.country_id);
       if (tripSelect) tripSelect.value = item.trip_id ? String(item.trip_id) : '';
 
       if (item.image_url) {
@@ -1228,6 +1504,9 @@ const items = initialItems;
       }
     } else {
       if (modalTitle) modalTitle.textContent = '新增品項';
+      // 新增品項：國家預設為目前切換中的國家，行程下拉對應限定在該國範圍
+      populateCountryDropdown(selectedCountryId);
+      populateTripDropdown(selectedCountryId);
     }
 
     modal.style.display = 'flex';
@@ -1278,12 +1557,15 @@ const items = initialItems;
 
     // 歸屬行程：空字串代表一般收藏，存 null
     const tripIdValue = tripSelect && tripSelect.value ? tripSelect.value : null;
+    // 國家：下拉一律有值(populateCountryDropdown 已預先選好)，萬一沒有則退回目前切換中的國家
+    const countryIdValue = countrySelect && countrySelect.value ? countrySelect.value : selectedCountryId;
 
     const itemData = {
       name,
       note: note || null,
       image_url: image_url || null,
       category_id,
+      country_id: countryIdValue,
       trip_id: tripIdValue
     };
 
@@ -1518,13 +1800,11 @@ const items = initialItems;
     if (btnEdit) {
       const card = btnEdit.closest('.japan-card');
       if (!card) return;
-      const item = {
-        id: card.dataset.id,
-        name: card.dataset.name,
-        category_id: card.dataset.categoryId,
-        note: card.dataset.note,
-        image_url: card.dataset.imageUrl
-      };
+      // 從 itemsCache 取完整品項物件(含 trip_id、country_id)，而不是從卡片 dataset 重組——
+      // dataset 沒有帶 trip_id/country_id，重組會遺漏這兩個欄位，編輯時無法正確帶入現有的歸屬行程與國家
+      const id = card.dataset.id;
+      const item = itemsCache.find(i => String(i.id) === String(id));
+      if (!item) return;
       openModal(true, item);
     }
 
@@ -1637,7 +1917,9 @@ const items = initialItems;
     
     // 背景點擊關閉邏輯
     if (target.classList.contains('modal-overlay')) {
-      if (target.id === 'auth-modal' || target.id === 'wishlist-names-modal' || target.id === 'item-modal' || target.id === 'collect-modal') {
+      if (target.id === 'japan-country-modal') {
+        closeCountryModal();
+      } else if (target.id === 'auth-modal' || target.id === 'wishlist-names-modal' || target.id === 'item-modal' || target.id === 'collect-modal') {
         target.style.display = 'none';
         document.body.classList.remove('modal-open');
       }
