@@ -3,7 +3,7 @@
 
 > 記錄「收藏／行程從日本專屬擴充為多國家」的架構決策。
 > 與 PROJECT_ARCHITECTURE.md、PROJECT_ARCHITECTURE_V2.md 並行。
-> 狀態：🔶 進行中（MC-1 資料地基建置中，2026-09-16 開工）
+> 狀態：🔶 進行中（MC-1 已完成，2026-09-16；MC-2 待拆任務）
 
 ---
 
@@ -88,14 +88,15 @@
 
 ## 五、開發階段（草案）
 
-| 階段 | 內容 | 風險 |
-|------|------|------|
-| MC-1 | countries 表 + seed 日本；japan_items/trips 加 country_id + 既有資料回填為日本（試算→備份→執行）；RLS | 中（動既有資料，走安全遷移流程） |
-| MC-2 | 收藏頁國家切換器 + 新增收藏品的國家選擇 + 國家管理 CRUD | 低 |
-| MC-3 | 行程頁依國家分組 + 新增行程選國家 | 低 |
-| MC-4 | 行程→收藏的國家連動（trip-changed 帶 country_id） | 低 |
+| 階段 | 內容 | 風險 | 狀態 |
+|------|------|------|------|
+| MC-1 | countries 表 + seed 日本；japan_items/trips 加 country_id + 既有資料回填為日本（試算→備份→執行）；RLS | 中（動既有資料，走安全遷移流程） | ✅ 2026-09-16 已完成，a-e 驗收全數通過，詳見 PROJECT_PROGRESS.md「MC-1」章節 |
+| MC-2 | 收藏頁國家切換器 + 新增收藏品的國家選擇 + 國家管理 CRUD | 低 | 📋 |
+| MC-3 | 行程頁依國家分組 + 新增行程選國家 | 低 | 📋 |
+| MC-4 | 行程→收藏的國家連動（trip-changed 帶 country_id） | 低 | 📋 |
 
 - MC-1 完成後建議回 Fable 覆核（涉及既有資料遷移與 RLS）；其餘前端階段使用者實測即可。
+- **MC-1 實作備註（2026-09-16）**：`japan_items.country_id`/`trips.country_id` 設為 `NOT NULL` 後，額外補上 `DEFAULT`（指向日本那一列的固定 uuid），因為既有四個寫入點（新增行程、新增收藏品兩處、AI 助手 `add_japan_item`）在 MC-2 前端做出國家選擇 UI 之前都不會帶 `country_id`，若無預設值會直接被 `NOT NULL` 擋下。MC-2 開發時若前端已一律明確帶入 `country_id`，可評估是否移除此 `DEFAULT`（非必要，保留也不影響功能）。
 
 ---
 

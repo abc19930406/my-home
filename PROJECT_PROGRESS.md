@@ -921,6 +921,35 @@ V2 階段 9 npm 遷移時遺漏的 4 個瀏覽器端腳本，誤 `import { supab
 
 ---
 
+### ✅ MC-1：多國家擴充資料地基——countries 表 + japan_items/trips 加 country_id（2026-09-16，已結案）
+
+收藏／行程從日本專屬擴充為多國家的第一階段，設計依據 `PROJECT_NOTES_MULTICOUNTRY.md`。本階段只建資料地基，前端 UI（國家切換器、國家選擇下拉、國家管理 CRUD）留待 MC-2/MC-3，完成後系統行為與遷移前完全一致（所有既有資料都歸日本）。
+
+- **開工前確認現有結構**：`trips.id` 為 `uuid`（`trip_collaborators.trip_id` 已是 uuid FK 佐證）、`japan_items.id` 為 `bigint`（`can_wishlist_item()` 函式註解已載明）；`country_id` 是新欄位指向新表 `countries.id`（uuid），不會重演先前 posts 那次 bigint/uuid 外鍵型別不符的問題，仍以唯讀查詢實際核對過一次（`information_schema.columns`），非僅憑文件記憶
+- **安全遷移流程（強制，逐步執行）**：
+  1. 建 `countries` 表 + seed「日本」（`is_default=true`）+ RLS（SELECT 開放、寫入僅 `is_admin()`，重用既有函式）——無風險，直接執行
+  2. 試算查詢：確認 `country_id` 目前不存在於兩表（避免撞名）、`japan_items`=167 筆、`trips`=2 筆（回填基準）
+  3. 使用者於 Dashboard 對兩表各自 Export CSV 備份，確認完成才進下一步
+  4. 分四小步執行且逐步回報：① 加欄位（可空，FK→`countries.id`，`ON DELETE RESTRICT`）② 回填為日本 id ③ 驗證零 NULL 殘留、筆數與基準一致（167/2）、零錯配國家 ④ 設 `NOT NULL`
+- **⚠️ 遷移過程中發現並修正的坑**：`country_id` 設 `NOT NULL` 後若無預設值，既有四個寫入點（`TripPlanner.astro` 新增行程、`JapanCollection.astro` 兩處新增收藏品、`/api/ai-assistant.ts` 的 `add_japan_item` 工具）都還沒有國家欄位（UI 要到 MC-2 才做），INSERT 會被 `NOT NULL` 約束直接擋下，新增功能整個壞掉，不符合「系統行為與遷移前一致」的目標。比照 V3 讀書筆記模組 `topics`「未分類」的既有慣例，額外對兩表的 `country_id` 補上 `DEFAULT`（日本那一列的固定 uuid 字面值），任何沒有明確指定 `country_id` 的寫入自動歸類日本
+- **明確排除本階段**：不做國家切換 UI（MC-2）、不做行程分組（MC-3）、不做連動（MC-4）、不改任何既有命名、不動 `japan_items`/`trips` 既有 RLS、分類系統（`japan_categories`）不動
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| countries 表 + seed 日本 + RLS 建立成功 | 使用者於 Dashboard 執行 SQL，查詢確認「日本」`is_default=true` | ✅ |
+| 試算與撞名確認 | `country_id` 遷移前確認兩表皆不存在；基準筆數 japan_items=167、trips=2 | ✅ |
+| 兩表資料備份 | 使用者於 Table Editor 各自 Export CSV，確認完成 | ✅ |
+| a. countries 有「日本」且 is_default=true | 查詢確認 | ✅ |
+| b. japan_items 全部 country_id=日本，無 NULL，筆數與遷移前一致 | 驗證查詢：null_count=0、row_count=167、wrong_country=0 | ✅ |
+| c. trips 全部 country_id=日本，無 NULL，筆數與遷移前一致 | 驗證查詢：null_count=0、row_count=2、wrong_country=0 | ✅ |
+| d. 前端 /trip 收藏與行程功能與遷移前一致（含新增，驗證 DEFAULT 生效） | 使用者實測新增行程、新增收藏品，皆正常無錯誤 | ✅ |
+| e. countries 寫入鎖 is_admin（朋友帳號 Console 寫入被拒） | 朋友帳號於 `/trip` Console 對 `countries` INSERT，收到 403 `42501`，`data` 為 `null` | ✅ |
+| commit + push 並貼出終端機輸出 | `ca957bf`（文件開工）；本次結案 commit 見下方 | ✅ |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
@@ -931,6 +960,12 @@ V2 階段 9 npm 遷移時遺漏的 4 個瀏覽器端腳本，誤 `import { supab
 3. ~~**AI 助手分頁**：`/api/ai-assistant` Serverless API，讀取行程/收藏資料回答問題 + tool use 寫入功能（add_spot / assign_spot_to_day / update_spot / delete_spot / reorder_day_spots / add_transport_route / toggle_wishlist / update_wishlist_quantity / add_japan_item）~~ **✅ 2026-07-13 全部已上線**，詳見上方「V2 階段 7」「V2 階段 8 第一批」「V2 階段 8 第二批」
 4. ~~**舊頁面下線評估**：待 /trip 完全穩定後，評估是否移除 /travel 與 /japan~~ **✅ 2026-07-13 已執行退役,a-c 驗收項目全數通過**(V2 階段 9 第一個任務):原網址 301 轉址 /trip、檔案封存 src/_archived/ 不刪除,詳見上方「V2 階段 9」
 5. **程式碼清理階段**（獨立規劃，待全部功能穩定後執行）：統一 Modal 開關/CSS class 命名規則、移除殘留冗餘邏輯
+
+### 多國家擴充（詳見 PROJECT_NOTES_MULTICOUNTRY.md）
+1. ~~**MC-1：countries 表 + japan_items/trips 加 country_id，既有資料回填日本**~~ **✅ 2026-09-16 已完成**，詳見上方「MC-1」章節
+2. **MC-2**：收藏頁國家切換器 + 新增收藏品的國家選擇 + 國家管理 CRUD
+3. **MC-3**：行程頁依國家分組 + 新增行程選國家
+4. **MC-4**：行程→收藏的國家連動（trip-changed 事件帶 country_id）
 
 ### 其他規劃中功能
 - 讀書筆記、食記、年度回顧、作品集、書籤收藏、習慣打卡
@@ -989,10 +1024,10 @@ V2 階段 9 npm 遷移時遺漏的 4 個瀏覽器端腳本，誤 `import { supab
 | income_categories | 收入來源（動態管理） | ✅ |
 | expense_categories | 支出分類（動態管理） | ✅ |
 | japan_categories | 日本收藏分類（兩層） | ✅ |
-| japan_items | 日本收藏品項（含 owner_wishlist、owner_quantity、trip_id） | ✅ |
+| japan_items | 日本收藏品項（含 owner_wishlist、owner_quantity、trip_id、country_id） | ✅（2026-09-16 新增 country_id，MC-1） |
 | allowed_users | 日本收藏白名單 | ✅ |
 | wishlist_items | 朋友/家人願望清單（含 quantity） | ✅ |
-| trips | 旅行行程 | ✅ |
+| trips | 旅行行程（含 country_id） | ✅（2026-09-16 新增 country_id，MC-1） |
 | spots | 旅行景點（含 spot_type_id、spot_subtype_id、place_id） | ✅ |
 | spot_types | 景點主類型（含 is_chain_store） | ✅ |
 | spot_subtypes | 景點子類型（含 is_chain_store） | ✅ |
@@ -1009,6 +1044,7 @@ V2 階段 9 npm 遷移時遺漏的 4 個瀏覽器端腳本，誤 `import { supab
 | tags | 讀書筆記自由標籤 | ✅ 已建立（2026-08-06，V3-1） |
 | note_tags | notes 與 tags 的多對多關聯表 | ✅ 已建立（2026-08-06，V3-1） |
 | note_media | 讀書筆記圖片（獨立表，支援多圖排序），路徑對應 note_media 私有 bucket | ✅ 已建立（2026-08-06，V3-1） |
+| countries | 多國家擴充：國家清單（id/name/emoji/sort_order/is_default），seed 一筆「日本」 | ✅ 已建立（2026-09-16，MC-1） |
 
 ### Storage Buckets
 

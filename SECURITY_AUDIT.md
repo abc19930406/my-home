@@ -28,9 +28,9 @@
 |---|---|---|
 | **posts** | ✅ 2026-07-11 已修復:[posts/index.astro:13](src/pages/posts/index.astro:13) `SELECT *`,`.eq('visibility','public')` 過濾,prerender=true(僅烘公開文章)<br>[posts/\[id\].astro](src/pages/posts/[id].astro) SSR 改為查不到即渲染無內容外殼,不再無過濾渲染全文,詳見 PROJECT_PROGRESS.md「隱私修復任務 B」 | UPDATE/INSERT/DELETE 皆在 [posts/index.astro](src/pages/posts/index.astro:313)(313/316/412 行);RLS 已收緊為僅管理員可寫入 |
 | **quotes** | ✅ 2026-07-11 已修復:[quotes/index.astro:11](src/pages/quotes/index.astro:11) `SELECT *`,有 `.eq('visibility','public')` 過濾,prerender=true | UPDATE/INSERT/DELETE 在 [quotes/index.astro](src/pages/quotes/index.astro)(update/insert/delete 呼叫點);RLS 已收緊為僅 `is_admin()`;前端 `fetchPrivateQuotes` 的 `isAdmin` 判斷已改為真正比對 email,朋友帳號不再誤顯示編輯/刪除按鈕 |
-| **japan_items** | [JapanCollection.astro:24](src/components/JapanCollection.astro:24)、[japan.astro:25](src/pages/japan.astro:25) `SELECT *`,無過濾,prerender=true(嵌入 /trip 與 /japan)——**SELECT 為刻意保留的公開展示設計,不動** | ✅ 2026-07-11 已修復:SELECT/UPDATE/INSERT/DELETE 遍布 JapanCollection.astro、japan.astro(願望清單、數量、收藏品 CRUD),寫入(INSERT/UPDATE/DELETE)RLS 已收緊為僅 `is_admin()` |
+| **japan_items** | [JapanCollection.astro:24](src/components/JapanCollection.astro:24)、[japan.astro:25](src/pages/japan.astro:25) `SELECT *`,無過濾,prerender=true(嵌入 /trip 與 /japan)——**SELECT 為刻意保留的公開展示設計,不動** | ✅ 2026-07-11 已修復:SELECT/UPDATE/INSERT/DELETE 遍布 JapanCollection.astro、japan.astro(願望清單、數量、收藏品 CRUD),寫入(INSERT/UPDATE/DELETE)RLS 已收緊為僅 `is_admin()`。2026-09-16(MC-1)新增 `country_id`(uuid,FK→countries,`ON DELETE RESTRICT`,回填全數為日本並設 `NOT NULL`,`DEFAULT` 為日本 id),既有 RLS 未異動,詳見下方「countries」小節 |
 | **japan_categories** | [JapanCollection.astro:14](src/components/JapanCollection.astro:14)、[japan.astro:15](src/pages/japan.astro:15) `SELECT *`,prerender=true——**SELECT 為刻意保留的公開展示設計,不動** | ✅ 2026-07-11 已修復:DELETE/INSERT 在 JapanCollection.astro、japan.astro(分類管理),寫入 RLS 已收緊為僅 `is_admin()` |
-| **trips** | [TripPlanner.astro:13](src/components/TripPlanner.astro:13)、[travel.astro:14](src/pages/travel.astro:14) `SELECT *`,prerender=true | INSERT/UPDATE 在 TripPlanner.astro、travel.astro(行程管理) |
+| **trips** | [TripPlanner.astro:13](src/components/TripPlanner.astro:13)、[travel.astro:14](src/pages/travel.astro:14) `SELECT *`,prerender=true | INSERT/UPDATE 在 TripPlanner.astro、travel.astro(行程管理)。2026-09-16(MC-1)新增 `country_id`(uuid,FK→countries,`ON DELETE RESTRICT`,回填全數為日本並設 `NOT NULL`,`DEFAULT` 為日本 id),既有 RLS 未異動,詳見下方「countries」小節 |
 | **spots** | [TripPlanner.astro:23](src/components/TripPlanner.astro:23)、[travel.astro:24](src/pages/travel.astro:24) `SELECT *`,prerender=true | INSERT/UPDATE/DELETE 遍布(景點 CRUD) |
 | **spot_types / spot_subtypes** | 無 frontmatter 查詢 | SELECT/DELETE/UPSERT 在 TripPlanner.astro、travel.astro(類型管理) |
 | **day_spots / trip_days** | 無 frontmatter 查詢 | SELECT/INSERT/UPDATE/DELETE 在 TripPlanner.astro、travel.astro(每日行程) |
@@ -59,6 +59,13 @@
 - INSERT/UPDATE 的 `WITH CHECK` 另加跨行程完整性:起點與終點的 `spots.trip_id` 必須相等,防止把 A 行程的景點與 B 行程的景點湊成一筆路線;`trip_id` 為 NULL 的遺留景點因 NULL 比較特性(`NULL = NULL` 恆為 false)自然無法建立路線,是預期行為非漏洞
 - `CHECK(origin_spot_id <> destination_spot_id)` 約束擋下自己到自己的路線;SELECT/INSERT/UPDATE/DELETE 在 TripPlanner.astro(交通查詢子分頁)
 - 使用者已實測驗證:管理員/協作者權限分流正確、跨行程完整性檢查正確擋下、朋友與訪客僅能查詢無編輯入口
+
+### countries(新增,2026-09-16,MC-1,建表當下即設計 RLS)
+
+- 多國家擴充第一階段,詳見 `PROJECT_NOTES_MULTICOUNTRY.md`。SELECT 開放所有人;INSERT/UPDATE/DELETE 重用既有 `public.is_admin()`,未新建函式
+- Seed 一筆「日本」,`is_default=true`;`japan_items`/`trips` 新增 `country_id`(uuid,FK→`countries.id`,`ON DELETE RESTRICT`)並回填為日本,回填後設 `NOT NULL`——選擇 `RESTRICT` 而非 `CASCADE`/`SET NULL`,是刻意讓「刪除仍有收藏品/行程掛著的國家」這個操作直接被資料庫擋下,避免誤刪
+- ⚠️ **回填當下發現的坑(已修正)**:`country_id` 設為 `NOT NULL` 後,若沒有預設值,既有前端「新增行程」(`TripPlanner.astro`)、「新增收藏品」(`JapanCollection.astro` 兩處、`/api/ai-assistant.ts` 的 `add_japan_item` 工具)這四個寫入點因為都還沒有國家欄位(國家選擇 UI 要到 MC-2 才做),INSERT 會直接被 `NOT NULL` 約束擋下、新增功能整個壞掉。修法:比照 V3 讀書筆記模組 `topics` 表「未分類」的既有慣例,把 `country_id` 的 `DEFAULT` 設為日本那一列的固定 uuid 字面值,任何沒有明確指定 `country_id` 的寫入自動歸類日本,行為與遷移前一致
+- 使用者已實測驗證:管理員可正常新增行程/收藏品(驗證 DEFAULT 生效);朋友帳號於 Console 對 `countries` 執行 INSERT 收到 `403`/`42501`(`new row violates row-level security policy`),`data` 為 `null`,寫入正確被拒
 
 ---
 
@@ -146,13 +153,14 @@ order by tablename, cmd;
 | **trip_subway_categories**(新增,2026-07-13,建表當下即設計) | 否 | 否 | 🟢 全表可讀(任何人可查詢行程關聯了哪些分類) | 🟢 INSERT/DELETE 用 `can_edit_trip()`(管理員或該行程 can_edit_itinerary 協作者),UPDATE 不開放 | 建表當下即收斂,無歷史包袱 |
 | **spot_transport_routes**(新增,2026-07-13,建表當下即設計) | 否 | 否 | 🟢 全表可讀(任何人可查詢已儲存的交通方式) | 🟢 INSERT/UPDATE/DELETE 用 `can_edit_trip(起點所屬行程)`,INSERT/UPDATE 另加跨行程完整性檢查(起訖點須同屬一行程) | 建表當下即收斂,無歷史包袱;使用者已實測驗證跨行程完整性檢查生效 |
 | **trip_collaborators**(新增,2026-07-12,建表當下即設計) | 否 | 否 | 🟢 僅讀得到自己那一列(`lower(user_email)=lower(auth.jwt()->>'email')`),非管理員讀不到別人的授權列 | 🟢 INSERT/UPDATE/DELETE 一律僅 `is_admin()` | 建表當下即收斂,無歷史包袱;`can_edit_itinerary`(見上方 spots/trips/trip_days/day_spots 列)與 `can_edit_wishlist`(見上方 wishlist_items 列)均已於 2026-07-13 生效,V2 階段 4 協作者權限系統結案 |
+| **countries**(新增,2026-09-16,MC-1,建表當下即設計) | 🟢 全表可讀(國家清單,設計上本就公開) | 否 | 全表可讀(不變) | 🟢 INSERT/UPDATE/DELETE 一律僅 `is_admin()`,已實測朋友帳號寫入被拒(403/42501) | 建表當下即收斂,無歷史包袱 |
 
 🔴 嚴重 / 🟡 中等 / 🟢 設計合理或已正確收斂
 
 ### 明確回答:未登入的陌生人現在能讀到哪些表、寫入哪些表
 
 **能讀(不需要任何帳號,直接呼叫 API 或查看靜態頁面原始碼即可)**:
-~~`posts`(含私人與朋友限定文章的完整內容)~~(✅ 2026-07-11 已修復,現況見下方)、`japan_items`、`japan_categories`、`spots`、`trips`、`trip_days`、`day_spots`、`spot_types`、`spot_subtypes`、`expense_categories`、`income_categories`、`cards`、`status`、`daily`、~~`quotes`~~(僅 public 標記的,✅ 已修復,非 public 現況見下方)、`travel_coupons`、`travel_subway_maps`、`trip_subway_categories`、`spot_transport_routes`(皆為新增表,刻意設計為公開可讀)。
+~~`posts`(含私人與朋友限定文章的完整內容)~~(✅ 2026-07-11 已修復,現況見下方)、`japan_items`、`japan_categories`、`spots`、`trips`、`trip_days`、`day_spots`、`spot_types`、`spot_subtypes`、`expense_categories`、`income_categories`、`cards`、`status`、`daily`、~~`quotes`~~(僅 public 標記的,✅ 已修復,非 public 現況見下方)、`travel_coupons`、`travel_subway_maps`、`trip_subway_categories`、`spot_transport_routes`、`countries`(皆為新增表,刻意設計為公開可讀)。
 
 **posts 現況(2026-07-11 起)**:匿名者只能讀到 `visibility='public'` 的文章;`friends`/`private` 一律讀不到。
 
