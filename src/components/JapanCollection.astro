@@ -1726,13 +1726,17 @@ const items = initialItems;
 
   function openModal(isEdit = false, item = null) {
     if (!modal) return;
-    
+
     form.reset();
     itemIdInput.value = '';
     imageUrlInput.value = '';
     if (previewDiv) previewDiv.style.display = 'none';
     if (previewImg) previewImg.src = '';
     if (subCatGroup) subCatGroup.style.display = 'none';
+    // 主分類下拉每次開啟 Modal 都重新填充(而不是只靠 init() 裡僅限管理員分支的一次性呼叫)：
+    // japan_categories 的 SELECT 對所有人開放，categoriesCache 本來就有資料，被授權協作者
+    // 也應該能選用既有分類——純粹補齊「選用」的下拉填充，不涉及分類新增/編輯/刪除(仍維持 admin-only)
+    populateMainCategoryDropdown();
 
     if (isEdit && item) {
       if (modalTitle) modalTitle.textContent = '編輯品項';
