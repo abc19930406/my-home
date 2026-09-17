@@ -6,6 +6,7 @@ import '../styles/travel.css';
 // 1. Build Time: 靜態抓取所有行程與景點資料，確保極速載入
 let initialTrips = [];
 let initialSpots = [];
+let initialCountries = [];
 
 try {
   // 抓取行程列表
@@ -13,7 +14,7 @@ try {
     .from('trips')
     .select('*')
     .order('created_at', { ascending: true });
-  
+
   if (!tripsError && tripsData) {
     initialTrips = tripsData;
   }
@@ -26,6 +27,16 @@ try {
 
   if (!spotsError && spotsData) {
     initialSpots = spotsData;
+  }
+
+  // 多國家擴充(MC-3)：抓取國家清單，供行程清單依國家分組
+  const { data: countriesData, error: countriesError } = await supabase
+    .from('countries')
+    .select('*')
+    .order('sort_order', { ascending: true });
+
+  if (!countriesError && countriesData) {
+    initialCountries = countriesData;
   }
 } catch (err) {
   console.warn('⚠️ Build Warning: 旅行地圖 Supabase 讀取失敗，使用備用資料。', err);
@@ -57,6 +68,30 @@ const fallbackSpots = [
 
 const trips = initialTrips.length > 0 ? initialTrips : fallbackTrips;
 const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
+
+// 多國家擴充(MC-3)：行程清單依 country_id 分組，分組順序依 countries.sort_order；
+// 找不到對應國家的行程(理論上不會發生，country_id 有 FK 約束)歸類到最後一組，不遺漏
+function groupTripsByCountry(tripList, countryList) {
+  const groups = [];
+  const byCountryId = new Map();
+  countryList.forEach((c) => byCountryId.set(String(c.id), { country: c, trips: [] }));
+  const orphanGroup = { country: null, trips: [] };
+  tripList.forEach((trip) => {
+    const g = byCountryId.get(String(trip.country_id));
+    if (g) g.trips.push(trip);
+    else orphanGroup.trips.push(trip);
+  });
+  countryList.forEach((c) => {
+    const g = byCountryId.get(String(c.id));
+    if (g.trips.length > 0) groups.push(g);
+  });
+  if (orphanGroup.trips.length > 0) groups.push(orphanGroup);
+  return groups;
+}
+
+// 只有一組時(通常是只有日本)不顯示分組標題，外觀與 MC-3 之前的單一橫向列表一致
+const tripGroups = initialCountries.length > 0 ? groupTripsByCountry(trips, initialCountries) : [{ country: null, trips }];
+const showTripGroupHeaders = tripGroups.length > 1;
 
 ---
 
@@ -125,19 +160,30 @@ const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
       <!-- 子分頁面板：行程（既有全部內容，預設顯示） -->
       <div id="trip-subtab-pane-itinerary" class="trip-subtab-pane active">
 
-      <!-- 2. 行程切換列 (橫向滾動) -->
+      <!-- 2. 行程切換列 (橫向滾動)：依國家分組(MC-3)，只有一組時不顯示分組標題，外觀與分組前一致 -->
       <section class="trips-scroll-container">
-        <div class="trips-list" id="trips-tab-list">
+        <div class="trips-groups" id="trips-tab-list">
           <!-- JS 動態或 HTML 靜態生成 -->
-          {trips.map((trip, idx) => (
-            <button
-              class={`trip-tab ${idx === 0 ? 'active' : ''}`}
-              data-trip-id={trip.id}
-              data-trip-name={trip.name}
-              data-trip-desc={trip.description || ''}
-            >
-              <span>{trip.emoji}</span> {trip.name}
-            </button>
+          {tripGroups.map((group) => (
+            <div class="trip-group" data-country-id={group.country?.id || ''}>
+              {showTripGroupHeaders && (
+                <div class="trip-group-header">
+                  <span>{group.country?.emoji || '🌍'}</span> {group.country?.name || '未分類'}
+                </div>
+              )}
+              <div class="trips-list">
+                {group.trips.map((trip) => (
+                  <button
+                    class={`trip-tab ${trip.id === trips[0]?.id ? 'active' : ''}`}
+                    data-trip-id={trip.id}
+                    data-trip-name={trip.name}
+                    data-trip-desc={trip.description || ''}
+                  >
+                    <span>{trip.emoji}</span> {trip.name}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
         </div>
 
@@ -393,6 +439,14 @@ const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
           <div class="form-group">
             <label for="trip-name">行程名稱 <span style="color: var(--color-danger)">*</span></label>
             <input type="text" id="trip-name" required placeholder="例如：2026 東京春櫻之旅" autocomplete="off" />
+          </div>
+
+          <!-- 國家(多國家擴充 MC-3，必填) -->
+          <div class="form-group">
+            <label for="trip-country">國家 <span style="color: var(--color-danger)">*</span></label>
+            <select id="trip-country" required>
+              <!-- JS 動態插入 -->
+            </select>
           </div>
 
           <!-- Emoji 選擇 -->
@@ -847,6 +901,7 @@ const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
 
     // 全域快取狀態
     let tripsCache = [];
+    let countriesCache = []; // 多國家擴充(MC-3)：行程清單依此分組，新增/編輯行程的「國家」下拉也用這份快取
     let spotsCache = [];
     let spotTypesCache = [];
     let spotSubtypesCache = [];
@@ -1928,6 +1983,51 @@ const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
 
     }
 
+    // --- 多國家擴充(MC-3)：行程清單依 country_id 分組重繪；只有一組(通常只有日本)時不顯示分組標題，
+    // 外觀與分組前的單一橫向列表一致；沿用既有的委派點擊監聽(綁在 #trips-tab-list 本身，不受
+    // innerHTML 整批替換影響，不需要重新綁定) ---
+    function renderTripsTabList() {
+      const listEl = document.getElementById('trips-tab-list');
+      if (!listEl) return;
+
+      const byCountryId = new Map();
+      countriesCache.forEach(c => byCountryId.set(String(c.id), { country: c, trips: [] }));
+      const orphanGroup = { country: null, trips: [] };
+      tripsCache.forEach(trip => {
+        const g = byCountryId.get(String(trip.country_id));
+        if (g) g.trips.push(trip); else orphanGroup.trips.push(trip);
+      });
+      const groups = [];
+      countriesCache.forEach(c => {
+        const g = byCountryId.get(String(c.id));
+        if (g.trips.length > 0) groups.push(g);
+      });
+      if (orphanGroup.trips.length > 0) groups.push(orphanGroup);
+      const showHeaders = groups.length > 1;
+
+      listEl.innerHTML = groups.map(group => `
+        <div class="trip-group" data-country-id="${group.country?.id || ''}">
+          ${showHeaders ? `<div class="trip-group-header"><span>${group.country?.emoji || '🌍'}</span> ${group.country?.name || '未分類'}</div>` : ''}
+          <div class="trips-list">
+            ${group.trips.map(t => `
+              <button class="trip-tab" data-trip-id="${t.id}" data-trip-name="${t.name}" data-trip-desc="${t.description || ''}">
+                <span>${t.emoji}</span> ${t.name}
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // --- 新增/編輯行程 Modal 的「國家」下拉 ---
+    function populateTripCountrySelect(selectedId) {
+      const select = document.getElementById('trip-country');
+      if (!select) return;
+      select.innerHTML = countriesCache.map(c =>
+        `<option value="${c.id}" ${String(c.id) === String(selectedId) ? 'selected' : ''}>${c.emoji ? c.emoji + ' ' : ''}${c.name}</option>`
+      ).join('');
+    }
+
     // --- 切換行程行程標籤 ---
     function selectTrip(tripId) {
       currentTripId = tripId;
@@ -1970,11 +2070,16 @@ const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
       const { data: spots } = await supabase.from('spots').select('*').order('created_at', { ascending: false });
       const { data: spotTypes } = await supabase.from('spot_types').select('*').order('created_at', { ascending: true });
       const { data: spotSubtypes } = await supabase.from('spot_subtypes').select('*').order('created_at', { ascending: true });
+      const { data: countries } = await supabase.from('countries').select('*').order('sort_order', { ascending: true });
 
       tripsCache = trips || [];
       spotsCache = spots || [];
       spotTypesCache = spotTypes || [];
       spotSubtypesCache = spotSubtypes || [];
+      countriesCache = countries || [];
+
+      // 多國家擴充(MC-3)：以最新資料重繪行程分組列表，取代 build time 的靜態版本
+      renderTripsTabList();
 
       renderCategoryFilters();
       renderSpotCategoryOptions();
@@ -3573,6 +3678,13 @@ const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
         tripForm.reset();
         document.getElementById('form-trip-id').value = '';
         if (tripModalTitle) tripModalTitle.textContent = '＋ 新增旅行行程';
+        // 國家預設帶入目前檢視中行程的國家，沒有目前行程時退回 is_default 國家(日本)，再不然第一個國家
+        const currentTrip = tripsCache.find(t => String(t.id) === String(currentTripId));
+        const defaultCountryId = (currentTrip && currentTrip.country_id)
+          || countriesCache.find(c => c.is_default)?.id
+          || (countriesCache[0] && countriesCache[0].id)
+          || '';
+        populateTripCountrySelect(defaultCountryId);
         tripSelectedEmojiInput.value = '🌸';
         tripEmojiGroup?.querySelectorAll('.emoji-option').forEach(opt => {
           opt.classList.remove('selected');
@@ -3596,7 +3708,8 @@ const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
         
         document.getElementById('trip-name').value = trip.name || '';
         document.getElementById('trip-description').value = trip.description || '';
-        
+        populateTripCountrySelect(trip.country_id);
+
         const emojiToSelect = trip.emoji || '🌸';
         tripSelectedEmojiInput.value = emojiToSelect;
         
@@ -3645,10 +3758,15 @@ const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
         const name = document.getElementById('trip-name').value.trim();
         const emoji = tripSelectedEmojiInput.value;
         const description = document.getElementById('trip-description').value.trim();
+        const countryId = document.getElementById('trip-country').value;
 
         if (!name) return;
+        if (!countryId) {
+          alert('請選擇國家');
+          return;
+        }
 
-        const payload = { name, emoji, description };
+        const payload = { name, emoji, description, country_id: countryId };
 
         try {
           let savedTrip;
@@ -3683,17 +3801,8 @@ const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
 
           closeTripModal();
 
-          // 重新繪製行程滾動條
-          let tabsHtml = '';
-          tripsCache.forEach(t => {
-            tabsHtml += `
-              <button class="trip-tab" data-trip-id="${t.id}" data-trip-name="${t.name}" data-trip-desc="${t.description || ''}">
-                <span>${t.emoji}</span> ${t.name}
-              </button>
-            `;
-          });
-          const listEl = document.getElementById('trips-tab-list');
-          if (listEl) listEl.innerHTML = tabsHtml;
+          // 重新繪製行程分組列表(依國家分組，MC-3)
+          renderTripsTabList();
 
           // 選中新建立/更新的行程
           selectTrip(savedTrip.id);
@@ -3733,17 +3842,8 @@ const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
           tripsCache = tripsCache.filter(t => String(t.id) !== String(tripId));
           closeTripModal();
 
-          // 重新繪製行程滾動條
-          let tabsHtml = '';
-          tripsCache.forEach(t => {
-            tabsHtml += `
-              <button class="trip-tab" data-trip-id="${t.id}" data-trip-name="${t.name}" data-trip-desc="${t.description || ''}">
-                <span>${t.emoji}</span> ${t.name}
-              </button>
-            `;
-          });
-          const listEl = document.getElementById('trips-tab-list');
-          if (listEl) listEl.innerHTML = tabsHtml;
+          // 重新繪製行程分組列表(依國家分組，MC-3)
+          renderTripsTabList();
 
           showToast('行程已刪除');
 

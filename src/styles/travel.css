@@ -97,10 +97,37 @@
    ========================================================================== */
 .trips-scroll-container {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   margin-bottom: 24px;
   position: relative;
+}
+
+/* 多國家擴充(MC-3)：行程依國家分組的外層容器；只有一組(通常是只有日本)時
+   內層只有一個 .trip-group、不顯示 .trip-group-header，外觀與分組前的單一橫向列表一致 */
+.trips-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  flex-grow: 1;
+  min-width: 0; /* flex 子項預設 min-width:auto 會讓內層橫向捲動失效，這裡明確歸零 */
+}
+
+.trip-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.trip-group-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 2px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--travel-text-muted);
 }
 
 .trips-list {
@@ -110,6 +137,7 @@
   padding: 4px 4px 8px 4px;
   scroll-behavior: smooth;
   flex-grow: 1;
+  min-width: 0;
   -webkit-overflow-scrolling: touch;
 }
 
