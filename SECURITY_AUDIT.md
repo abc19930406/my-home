@@ -28,7 +28,7 @@
 |---|---|---|
 | **posts** | ✅ 2026-07-11 已修復:[posts/index.astro:13](src/pages/posts/index.astro:13) `SELECT *`,`.eq('visibility','public')` 過濾,prerender=true(僅烘公開文章)<br>[posts/\[id\].astro](src/pages/posts/[id].astro) SSR 改為查不到即渲染無內容外殼,不再無過濾渲染全文,詳見 PROJECT_PROGRESS.md「隱私修復任務 B」 | UPDATE/INSERT/DELETE 皆在 [posts/index.astro](src/pages/posts/index.astro:313)(313/316/412 行);RLS 已收緊為僅管理員可寫入 |
 | **quotes** | ✅ 2026-07-11 已修復:[quotes/index.astro:11](src/pages/quotes/index.astro:11) `SELECT *`,有 `.eq('visibility','public')` 過濾,prerender=true | UPDATE/INSERT/DELETE 在 [quotes/index.astro](src/pages/quotes/index.astro)(update/insert/delete 呼叫點);RLS 已收緊為僅 `is_admin()`;前端 `fetchPrivateQuotes` 的 `isAdmin` 判斷已改為真正比對 email,朋友帳號不再誤顯示編輯/刪除按鈕 |
-| **japan_items** | [JapanCollection.astro:24](src/components/JapanCollection.astro:24)、[japan.astro:25](src/pages/japan.astro:25) `SELECT *`,無過濾,prerender=true(嵌入 /trip 與 /japan)——**SELECT 為刻意保留的公開展示設計,不動** | ✅ 2026-07-11 已修復:SELECT/UPDATE/INSERT/DELETE 遍布 JapanCollection.astro、japan.astro(願望清單、數量、收藏品 CRUD),寫入(INSERT/UPDATE/DELETE)RLS 已收緊為僅 `is_admin()`。2026-09-16(MC-1)新增 `country_id`(uuid,FK→countries,`ON DELETE RESTRICT`,回填全數為日本並設 `NOT NULL`,`DEFAULT` 為日本 id),既有 RLS 未異動,詳見下方「countries」小節 |
+| **japan_items** | [JapanCollection.astro:24](src/components/JapanCollection.astro:24)、[japan.astro:25](src/pages/japan.astro:25) `SELECT *`,無過濾,prerender=true(嵌入 /trip 與 /japan)——**SELECT 為刻意保留的公開展示設計,不動** | ✅ 2026-07-11 已修復:SELECT/UPDATE/INSERT/DELETE 遍布 JapanCollection.astro、japan.astro(願望清單、數量、收藏品 CRUD),寫入(INSERT/UPDATE/DELETE)RLS 已收緊為僅 `is_admin()`。2026-09-16(MC-1)新增 `country_id`(uuid,FK→countries,`ON DELETE RESTRICT`,回填全數為日本並設 `NOT NULL`,`DEFAULT` 為日本 id),既有 RLS 未異動,詳見下方「countries」小節。2026-09-17(MC-5a)新增 `created_by`(uuid 可空,FK→auth.users,既有 167 筆回填為管理員 uid);寫入政策(INSERT/UPDATE/DELETE)改用 `ALTER POLICY` 取代原本單純的 `is_admin()`,詳見下方「country_collaborators」小節 |
 | **japan_categories** | [JapanCollection.astro:14](src/components/JapanCollection.astro:14)、[japan.astro:15](src/pages/japan.astro:15) `SELECT *`,prerender=true——**SELECT 為刻意保留的公開展示設計,不動** | ✅ 2026-07-11 已修復:DELETE/INSERT 在 JapanCollection.astro、japan.astro(分類管理),寫入 RLS 已收緊為僅 `is_admin()` |
 | **trips** | [TripPlanner.astro:13](src/components/TripPlanner.astro:13)、[travel.astro:14](src/pages/travel.astro:14) `SELECT *`,prerender=true | INSERT/UPDATE 在 TripPlanner.astro、travel.astro(行程管理)。2026-09-16(MC-1)新增 `country_id`(uuid,FK→countries,`ON DELETE RESTRICT`,回填全數為日本並設 `NOT NULL`,`DEFAULT` 為日本 id),既有 RLS 未異動,詳見下方「countries」小節 |
 | **spots** | [TripPlanner.astro:23](src/components/TripPlanner.astro:23)、[travel.astro:24](src/pages/travel.astro:24) `SELECT *`,prerender=true | INSERT/UPDATE/DELETE 遍布(景點 CRUD) |
@@ -66,6 +66,20 @@
 - Seed 一筆「日本」,`is_default=true`;`japan_items`/`trips` 新增 `country_id`(uuid,FK→`countries.id`,`ON DELETE RESTRICT`)並回填為日本,回填後設 `NOT NULL`——選擇 `RESTRICT` 而非 `CASCADE`/`SET NULL`,是刻意讓「刪除仍有收藏品/行程掛著的國家」這個操作直接被資料庫擋下,避免誤刪
 - ⚠️ **回填當下發現的坑(已修正)**:`country_id` 設為 `NOT NULL` 後,若沒有預設值,既有前端「新增行程」(`TripPlanner.astro`)、「新增收藏品」(`JapanCollection.astro` 兩處、`/api/ai-assistant.ts` 的 `add_japan_item` 工具)這四個寫入點因為都還沒有國家欄位(國家選擇 UI 要到 MC-2 才做),INSERT 會直接被 `NOT NULL` 約束擋下、新增功能整個壞掉。修法:比照 V3 讀書筆記模組 `topics` 表「未分類」的既有慣例,把 `country_id` 的 `DEFAULT` 設為日本那一列的固定 uuid 字面值,任何沒有明確指定 `country_id` 的寫入自動歸類日本,行為與遷移前一致
 - 使用者已實測驗證:管理員可正常新增行程/收藏品(驗證 DEFAULT 生效);朋友帳號於 Console 對 `countries` 執行 INSERT 收到 `403`/`42501`(`new row violates row-level security policy`),`data` 為 `null`,寫入正確被拒
+
+### country_collaborators(新增,2026-09-17,MC-5a,建表當下即設計 RLS)
+
+- 國家級協作授權,詳見 `PROJECT_NOTES_MULTICOUNTRY.md` 附錄 MC-5。開工當下發現此表、其 RLS、`can_add_country_item()` 函式已存在於資料庫,逐項核對(欄位結構、政策文字、`pg_get_functiondef` 函式定義)與設計完全相符,判斷為先前已建置,直接沿用,未重複建置
+- SELECT:`is_admin() OR lower(user_email)=lower(auth.jwt()->>'email')`(本人查得到自己的授權列,供前端判斷是否顯示新增入口;非管理員讀不到別人的授權列);INSERT/UPDATE/DELETE 一律僅 `is_admin()`
+- 新函式 `public.can_add_country_item(p_country_id uuid)`:`is_admin() OR EXISTS(該國 country_collaborators 中比對 email 的那一列)`,供下方 `japan_items` 新寫入政策與擴充後的 `can_wishlist_item()` 共用
+- **`japan_items` 寫入政策調整(取代任務 G 版本,SELECT 公開政策不動)**:新增 `created_by`(uuid 可空,FK→`auth.users`,既有 167 筆回填為管理員 uid,回填用 `(SELECT id FROM auth.users WHERE email=...)` 子查詢即時取得,未要求人工貼 UUID、未寫死來歷不明的值)。用 `ALTER POLICY` 原地修改既有三條政策(不改名稱、不動 SELECT):
+  - INSERT `WITH CHECK`:`can_add_country_item(country_id) AND (is_admin() OR created_by = auth.uid())`
+  - UPDATE `USING`/`WITH CHECK`:`is_admin() OR (can_add_country_item(country_id) AND created_by = auth.uid())`
+  - DELETE `USING`:`is_admin() OR (can_add_country_item(country_id) AND created_by = auth.uid())`
+  - ⚠️ **超出設計文件字面規定的收斂**:附錄只明訂 UPDATE 的 `USING`,未提及 `WITH CHECK`;若留空,Postgres 會預設沿用 `USING`,效果雖然相同,但為求明確,已直接把 `WITH CHECK` 寫死為與 `USING` 相同條件,避免被授權朋友透過 UPDATE 把自己建立的品項的 `country_id`/`created_by` 改到規則檢查不到的地方(例如轉移到自己未被授權的國家、或轉嫁給別人),此為收斂而非放寬,不影響 `is_admin()` 分支
+- **`can_wishlist_item()` 擴充(V2 階段 4 K3 之上)**:純 `OR` 新增第四個分支(該品項所屬國家的 `country_collaborators` 授權朋友亦可標願望),前三個既有分支(`is_admin()`、一般收藏白名單 `is_friend()`、行程協作 `can_edit_wishlist`)逐字元未變,已用實際部署後的函式定義文字比對確認未被改動
+- **現況(尚無授權朋友)**:`country_collaborators` 為空表,`can_add_country_item()` 對任何非管理員恆為 `false`,三條新政策實際效果退化為等價於原本的 `is_admin()`,系統行為與 MC-5a 之前完全一致
+- 使用者已實測驗證:管理員新增/編輯/刪除收藏品、標願望清單皆與調整前一致;朋友帳號於 Console 對 `japan_items` 執行 INSERT 收到 `403`/`42501`,`data` 為 `null`;白名單朋友對一般收藏(`trip_id` 為空)標願望清單正常。行程協作分支(`trip_collaborators.can_edit_wishlist`)因使用者目前未設定任何行程協作者,無實測對象,改以函式定義文字比對確認該分支未被改動
 
 ---
 
@@ -139,7 +153,7 @@ order by tablename, cmd;
 |---|---|---|---|---|---|
 | **posts**(✅ 2026-07-11 已修復,見上方說明) | ~~🔴 全表無條件可讀~~(`Anyone can read post metadata`,qual=true,與 visibility 無關) | 否 | ~~全表可讀~~ | ~~🔴 任何登入帳號可 INSERT/UPDATE/DELETE 任何人的貼文~~ | ~~CRITICAL~~ → 已收斂為 public/is_admin()/is_friend() 判斷,寫入僅 is_admin() |
 | **transactions**(✅ 2026-07-11 已修復) | 否 | 否 | ~~🔴 任何登入帳號可讀全部財務明細~~ | ~~🔴 任何登入帳號可 INSERT/UPDATE/DELETE~~ | ~~CRITICAL~~ → 已收斂為僅 `is_admin()` 可讀寫 |
-| **japan_items**(✅ 2026-07-11 寫入已修復,SELECT 維持公開設計) | 🟡 全表可讀(含 owner_wishlist/owner_quantity,刻意保留) | 否 | 全表可讀(不變) | ~~🔴 任何登入帳號可 CRUD 全部品項~~ → 已收斂為僅 `is_admin()` 可寫入 | 寫入已收斂,SELECT 維持設計原狀 |
+| **japan_items**(✅ 2026-07-11 寫入已修復,SELECT 維持公開設計;2026-09-17 MC-5a 寫入政策再調整) | 🟡 全表可讀(含 owner_wishlist/owner_quantity,刻意保留) | 否 | 全表可讀(不變) | ~~🔴 任何登入帳號可 CRUD 全部品項~~ → 已收斂為僅 `is_admin()` 可寫入;2026-09-17 再放寬為 `is_admin() OR (can_add_country_item(country_id) AND created_by=auth.uid())`(國家級協作者僅能動自己建立、且被授權該國的品項),`country_collaborators` 空表時實際效果仍等價於 `is_admin()`,已實測確認 | 寫入已收斂,SELECT 維持設計原狀;新版政策非放寬給任何登入帳號,是有條件地放寬給「管理員明確授權的特定國家協作者」,且僅限其自建品項 |
 | **japan_categories**(✅ 2026-07-11 寫入已修復,SELECT 維持公開設計) | 🟡 全表可讀(taxonomy,刻意保留) | 否 | 全表可讀(不變) | ~~🔴 任何登入帳號可 CRUD~~ → 已收斂為僅 `is_admin()` 可寫入 | 寫入已收斂,SELECT 維持設計原狀 |
 | **quotes**(✅ 2026-07-11 已修復) | 🟢 僅 `visibility='public'` | 否 | ~~🟡 任何登入帳號可讀全部語錄~~ | ~~🔴 任何登入帳號可 INSERT/UPDATE/DELETE 任何人的語錄~~ | ~~HIGH~~ → 已收斂為 public/is_admin()/is_friend() 判斷,寫入僅 is_admin() |
 | **allowed_users**(白名單,✅ 2026-07-11 已修復) | 否 | 否 | ~~🔴 任何登入帳號可讀/改/刪整份白名單~~ | ~~同左(ALL)~~ | ~~HIGH~~ → 已收斂為管理員全讀/非管理員僅讀自己那一列,寫入僅 `is_admin()` |
@@ -154,6 +168,7 @@ order by tablename, cmd;
 | **spot_transport_routes**(新增,2026-07-13,建表當下即設計) | 否 | 否 | 🟢 全表可讀(任何人可查詢已儲存的交通方式) | 🟢 INSERT/UPDATE/DELETE 用 `can_edit_trip(起點所屬行程)`,INSERT/UPDATE 另加跨行程完整性檢查(起訖點須同屬一行程) | 建表當下即收斂,無歷史包袱;使用者已實測驗證跨行程完整性檢查生效 |
 | **trip_collaborators**(新增,2026-07-12,建表當下即設計) | 否 | 否 | 🟢 僅讀得到自己那一列(`lower(user_email)=lower(auth.jwt()->>'email')`),非管理員讀不到別人的授權列 | 🟢 INSERT/UPDATE/DELETE 一律僅 `is_admin()` | 建表當下即收斂,無歷史包袱;`can_edit_itinerary`(見上方 spots/trips/trip_days/day_spots 列)與 `can_edit_wishlist`(見上方 wishlist_items 列)均已於 2026-07-13 生效,V2 階段 4 協作者權限系統結案 |
 | **countries**(新增,2026-09-16,MC-1,建表當下即設計) | 🟢 全表可讀(國家清單,設計上本就公開) | 否 | 全表可讀(不變) | 🟢 INSERT/UPDATE/DELETE 一律僅 `is_admin()`,已實測朋友帳號寫入被拒(403/42501) | 建表當下即收斂,無歷史包袱 |
+| **country_collaborators**(新增,2026-09-17,MC-5a,建表當下即設計) | 否 | 否 | 🟢 僅讀得到自己那一列(`lower(user_email)=lower(auth.jwt()->>'email')`),非管理員讀不到別人的授權列 | 🟢 INSERT/UPDATE/DELETE 一律僅 `is_admin()` | 建表當下即收斂,無歷史包袱;`can_add_country_item()` 已生效於 `japan_items` 寫入政策與 `can_wishlist_item()`,詳見上方「country_collaborators」小節 |
 
 🔴 嚴重 / 🟡 中等 / 🟢 設計合理或已正確收斂
 

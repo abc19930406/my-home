@@ -3,7 +3,7 @@
 
 > 記錄「收藏／行程從日本專屬擴充為多國家」的架構決策。
 > 與 PROJECT_ARCHITECTURE.md、PROJECT_ARCHITECTURE_V2.md 並行。
-> 狀態：🔶 進行中（MC-1 已完成，2026-09-16；MC-2 待拆任務）
+> 狀態：🔶 進行中（MC-1／MC-2／MC-5a 已完成，2026-09-17；MC-3／MC-4／MC-5b 待拆任務）
 
 ---
 
@@ -91,12 +91,13 @@
 | 階段 | 內容 | 風險 | 狀態 |
 |------|------|------|------|
 | MC-1 | countries 表 + seed 日本；japan_items/trips 加 country_id + 既有資料回填為日本（試算→備份→執行）；RLS | 中（動既有資料，走安全遷移流程） | ✅ 2026-09-16 已完成，a-e 驗收全數通過，詳見 PROJECT_PROGRESS.md「MC-1」章節 |
-| MC-2 | 收藏頁國家切換器 + 新增收藏品的國家選擇 + 國家管理 CRUD | 低 | 📋 |
+| MC-2 | 收藏頁國家切換器 + 新增收藏品的國家選擇 + 國家管理 CRUD | 低 | ✅ 2026-09-17 已完成，a-g 驗收全數通過，詳見 PROJECT_PROGRESS.md「MC-2」章節 |
 | MC-3 | 行程頁依國家分組 + 新增行程選國家 | 低 | 📋 |
 | MC-4 | 行程→收藏的國家連動（trip-changed 帶 country_id） | 低 | 📋 |
 
 - MC-1 完成後建議回 Fable 覆核（涉及既有資料遷移與 RLS）；其餘前端階段使用者實測即可。
 - **MC-1 實作備註（2026-09-16）**：`japan_items.country_id`/`trips.country_id` 設為 `NOT NULL` 後，額外補上 `DEFAULT`（指向日本那一列的固定 uuid），因為既有四個寫入點（新增行程、新增收藏品兩處、AI 助手 `add_japan_item`）在 MC-2 前端做出國家選擇 UI 之前都不會帶 `country_id`，若無預設值會直接被 `NOT NULL` 擋下。MC-2 開發時若前端已一律明確帶入 `country_id`，可評估是否移除此 `DEFAULT`（非必要，保留也不影響功能）。
+- MC-5（國家級協作授權）另見下方附錄，子階段 MC-5a 已完成。
 
 ---
 
@@ -107,3 +108,74 @@
 - 不動收藏／行程既有的 RLS 與協作者權限。
 - 不做收藏→行程的反向國家連動（僅行程→收藏單向）。
 - 不做各國獨立分類（若未來需要，另案）。
+
+---
+
+## 附錄:MC-5 國家級協作授權 + 收藏頁多國文字動態化
+
+> 2026-09-16 與使用者敲定。排在 MC-2 之後、MC-3 之前(同動收藏頁)。
+
+### A. 背景與目標
+
+現況:收藏品(japan_items)寫入權限為「全有或全無」——僅管理員可新增/編輯/刪除(任務 G 鎖定),朋友只能對品項標願望清單(白名單機制)。
+目標:引入**國家級協作授權**——管理員可針對特定國家,授權特定朋友「新增該國品項」;被授權者能新增、並管理自己新增的品項。同時將收藏頁寫死的「日本」介面文字改為跟隨當前國家。
+
+### B. 使用者已定案的權限規則
+
+1. **新增品項**:管理員恆可;該國被授權朋友可(新增時自動記 created_by=自己)
+2. **編輯/刪除品項**:管理員可改任何;被授權朋友僅能改 created_by 為自己的品項
+3. **標想買 + 填自己的數量**:管理員恆可;被授權朋友對該國品項可(沿用現有 wishlist 機制,授權範圍由「白名單」擴大為「該國被授權朋友」)
+4. **看全體想買明細(誰想買、各數量、總數)**:僅管理員(維持現狀不變)
+5. **可見性**:新增即公開(維持收藏頁公開展示現況,不審核)——使用者已知悉此為「將部分內容發布權交給被授權朋友」的信任邊界
+
+### C. 資料結構變更
+
+#### C.1 新表 country_collaborators
+
+| 欄位 | 型別 | 說明 |
+|------|------|------|
+| id | uuid pk gen_random_uuid() | |
+| country_id | uuid NOT NULL FK→countries ON DELETE CASCADE | |
+| user_email | text NOT NULL | 被授權朋友 email(存入前 trim+小寫) |
+| created_at | timestamptz default now() | |
+| — | | UNIQUE(country_id, user_email) |
+
+- 本表 RLS:SELECT 允許 is_admin() OR lower(user_email)=lower(auth.jwt()->>'email')(朋友查得到自己的授權,前端據以顯示新增 UI);INSERT/UPDATE/DELETE 僅 is_admin()
+
+#### C.2 japan_items 加 created_by
+
+- 新增 created_by uuid 可空(記錄品項建立者的 auth uid);既有 167 筆回填為管理員 uid,走安全遷移(試算→備份→執行);新增品項時由前端寫入當前使用者 uid
+- 不設 NOT NULL(容許歷史或管理員建立時的彈性),但新寫入一律帶值
+
+#### C.3 輔助函式
+
+- public.can_add_country_item(p_country_id uuid):is_admin() OR EXISTS(SELECT 1 FROM country_collaborators WHERE country_id=p_country_id AND lower(user_email)=lower(auth.jwt()->>'email'))
+
+### D. japan_items RLS 調整(重點,取代任務 G 的寫入政策)
+
+- SELECT:維持公開(不動)
+- INSERT:WITH CHECK 為 can_add_country_item(country_id) AND (is_admin() OR created_by = auth.uid())——非管理員新增時 created_by 必須是自己,杜絕冒名
+- UPDATE / DELETE:USING 為 is_admin() OR (can_add_country_item(country_id) AND created_by = auth.uid())——被授權朋友僅能改自己該國建立的品項
+- wishlist_items 的既有 can_wishlist_item 函式(V2 階段 4 K3)需擴充:對有 country 的品項,除既有條件外,增加「該品項所屬國家的 country_collaborators 授權朋友」亦可——實作時重用 can_add_country_item 或並列條件,確保規則 3 成立
+
+### E. 收藏頁前端
+
+- 國家協作管理 UI(僅管理員):在國家管理面板中,每個國家可設定被授權朋友清單(email + 新增/移除),比照 trip_collaborators 的既有管理模式
+- 被授權朋友登入:在其被授權的國家,顯示「新增品項」入口;非授權國家不顯示;其只能編輯/刪除自己建立的品項(卡片操作鈕依 created_by 判斷)
+- 介面文字動態化:所有寫死「日本」的可見字串改為當前國家名——探索標題(explore-title-text)、搜尋提示與結果標題、加入成功訊息(showToast)等(見盤點清單:JapanCollection.astro 行 92/95/2002/2018/2176 等);預設國家不可刪除的提示保留「日本」為實際國名動態代入
+
+### F. 明確排除
+
+- 不做審核機制(新增即公開)
+- 不改「看全體願望明細僅管理員」的現況
+- 不改命名(japan_items 等)
+- 協作授權僅收藏品(japan_items),不涉及行程協作(trip_collaborators 為獨立系統)
+
+### G. 開發子階段
+
+| 階段 | 內容 | 風險 | 狀態 |
+|------|------|------|------|
+| MC-5a | country_collaborators 表 + japan_items 加 created_by(回填,安全遷移)+ RLS 調整 + can_add_country_item 函式 + wishlist 函式擴充 | 中(動既有資料與權限,回 Fable 覆核) | ✅ 2026-09-17 已完成，a-e 驗收全數通過，詳見 PROJECT_PROGRESS.md「MC-5a」章節 |
+| MC-5b | 收藏頁協作管理 UI + 被授權朋友的新增/自管 UI + 介面文字動態化 | 低 | 📋 |
+
+- **MC-5a 執行備註(2026-09-17)**：開工時發現 `country_collaborators` 表、RLS、`can_add_country_item` 函式已存在於資料庫(結構與本文件設計逐項核對完全相符)，判斷為先前已執行過，跳過重建，直接沿用。`japan_items` RLS 調整採 `ALTER POLICY` 原地修改既有三條政策(不改名稱、不動 SELECT)，UPDATE 政策額外把 `WITH CHECK` 明確設為與 `USING` 相同條件(附錄 D 只寫了 USING)，避免被授權朋友透過 UPDATE 把自己建立的品項的 `country_id`/`created_by` 改到規則檢查不到的地方；`can_wishlist_item` 用純 `OR` 新增第四個分支，前三個既有分支逐字元未變，已用實際部署後的函式定義文字比對確認。

@@ -950,6 +950,61 @@ V2 階段 9 npm 遷移時遺漏的 4 個瀏覽器端腳本，誤 `import { supab
 
 ---
 
+### ✅ MC-2：收藏頁國家切換器 + 國家管理 CRUD（2026-09-17，已結案）
+
+MC-1 資料地基之上，在 `JapanCollection.astro`（/trip 收藏分頁）實作前端：國家切換器、收藏品的國家選擇、國家管理 Modal。
+
+- **國家切換器**：頁面頂部橫向切換列，比照行程頁 `.trip-tab` 的互動樣式（視覺改用 `--japan-*` 配色）；預設選中 `is_default` 國家（日本），選中狀態跨 `init()` 重跑（登入/登出、儲存後刷新）保留，不會被重置
+- **精確篩選**：`filterAndRenderItems()` 最先以 `country_id` 篩選，每個國家是獨立收藏世界（比對 id，不是聯集）；願望清單子分類選項、行程篩選下拉皆同步限定在目前國家範圍內（國家 → 該國行程 → 品項）；切換國家時既有的行程篩選重置為「全部」
+- **新增/編輯收藏品表單**加「國家」下拉：新增時預設目前切換中的國家，編輯時帶入品項現有國家；國家改變會連動重新限定「歸屬」行程下拉的選項，避免存出 `country_id` 與 `trip_id` 所屬國家對不上的資料
+- **國家管理 Modal**（僅管理員，`japan-` 前綴隔離）：新增/編輯/上下排序/刪除，比照短文分類管理的既有模式；「日本」（`is_default`）一律禁止刪除（保護 MC-1 建立的 `country_id` `DEFAULT` 不會變成懸空參照）；其餘國家若因 `ON DELETE RESTRICT` 被資料庫擋下（仍有收藏品/行程），攔截 `23503` 錯誤轉換成友善提示
+- **順手修正的既有缺陷**：編輯品項原本從卡片 dataset 重組品項物件，未帶 `trip_id`/`country_id` 兩個欄位，導致編輯時「歸屬行程」從未正確帶入；改為直接從 `itemsCache` 取完整物件，一併修正
+- **行動版版面**：新增的國家切換器與既有 `.japan-filter-bar` 一樣在小螢幕改為 `position:fixed` 疊加顯示；`.japan-container` 的 `padding-top` 用瀏覽器實際量測（模擬管理員展開子分類的最高情況）重新校正，避免固定區塊互相重疊或蓋住卡片列表
+- **明確排除本階段**：不做行程分組（MC-3）、不做連動（MC-4）、不改任何既有命名、不動 `japan_items`/`countries` 既有 RLS
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| a. 現況（只有日本）：預設顯示日本收藏，與 MC-1 前一致 | 使用者實測確認 | ✅ |
+| b. 新增韓國並切換：韓國為空清單，切回日本 167 筆都在 | 使用者實測確認 | ✅ |
+| c. 新增一筆收藏到韓國：只在韓國看得到 | 使用者實測確認 | ✅ |
+| d. 國家內行程篩選正常運作，切換國家時行程篩選重置 | 使用者實測確認 | ✅ |
+| e. 刪除日本（仍有收藏品）被擋且提示友善；刪除空的測試國家成功 | 使用者實測確認 | ✅ |
+| f. 朋友帳號看得到國家切換與收藏，無管理入口；Console 對 countries 寫入被拒 | 使用者實測確認 | ✅ |
+| g. 手機桌機、Modal 開關（按鈕/背景/ESC）正常 | 使用者實測確認 | ✅ |
+| commit + push 並貼出終端機輸出 | `3ae2fec` | ✅ |
+
+---
+
+### ✅ MC-5a：國家協作授權地基——country_collaborators + created_by + RLS 調整（2026-09-17，已結案）
+
+多國家擴充的協作授權第一階段，設計依據 `PROJECT_NOTES_MULTICOUNTRY.md` 附錄 MC-5 C/D 節。目標是讓管理員能授權特定朋友「新增特定國家的收藏品」，本階段只建資料與權限地基，前端協作管理 UI 留待 MC-5b，完成後系統行為與現在完全一致（尚無授權朋友、既有品項 `created_by` 皆為管理員）。
+
+- **開工前發現 `country_collaborators` 表、RLS、`can_add_country_item` 函式已存在於資料庫**：逐項核對欄位結構、RLS 政策文字、函式定義（`pg_get_functiondef`）皆與附錄設計完全相符，判斷為先前已執行過，跳過重建、直接沿用，未重複動作
+- **`japan_items` 加 `created_by`**：uuid 可空、FK→`auth.users(id)`，刻意不設 `NOT NULL`（附錄明訂保留彈性）；既有 167 筆回填為管理員的 `auth.users` uid，寫法用 `(SELECT id FROM auth.users WHERE email = '...')` 子查詢即時取得，不要求使用者手動貼 UUID、也不寫死來歷不明的值；驗證零 NULL 殘留、筆數與基準一致（167）
+- **`japan_items` 寫入 RLS 調整（取代任務 G 政策）**：用 `ALTER POLICY` 原地修改既有三條政策的條件，不改政策名稱、不動 SELECT 公開政策：
+  - INSERT `WITH CHECK`：`can_add_country_item(country_id) AND (is_admin() OR created_by = auth.uid())`
+  - UPDATE `USING`/`WITH CHECK`：`is_admin() OR (can_add_country_item(country_id) AND created_by = auth.uid())`
+  - DELETE `USING`：`is_admin() OR (can_add_country_item(country_id) AND created_by = auth.uid())`
+  - **超出附錄字面規定的判斷**：附錄 D 只寫了 UPDATE 的 `USING`，UPDATE 的 `WITH CHECK` 額外明訂為與 `USING` 相同條件（而非留空讓 Postgres 預設沿用），目的是避免被授權朋友透過 UPDATE 把自己建立的品項的 `country_id`/`created_by` 改到規則檢查不到的地方，屬收斂而非放寬，不影響管理員分支
+- **`can_wishlist_item` 函式擴充**：純 `OR` 新增第四個分支（該品項所屬國家的 `country_collaborators` 授權朋友亦可標願望），前三個既有分支（`is_admin()`、一般收藏白名單、行程協作 `can_edit_wishlist`）逐字元未變，已用實際部署後的函式定義文字比對確認未被改動
+- **現況推算**：`country_collaborators` 目前是空表，`can_add_country_item()` 對任何非管理員恆為 `false`，三條新政策實際效果退化為等價於 `is_admin()`，與 MC-5a 之前完全一致
+- **明確排除本階段**：不做前端協作管理 UI 與文字動態化（MC-5b）、不改任何命名、不動 SELECT 公開政策、不動 `trip_collaborators`（獨立系統）
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| a. country_collaborators 建立，RLS 正確（朋友只查得到自己的列） | 查詢確認結構、RLS 政策、函式定義與設計相符 | ✅ |
+| b. japan_items 每筆 created_by 有值，筆數與遷移前一致（167） | 驗證查詢：still_null=0、total=167 | ✅ |
+| c. 現況（尚無授權朋友）：管理員新增/編輯/刪除收藏品、標願望，全部與 MC-5a 前一致 | 使用者實測確認 | ✅ |
+| d. 朋友帳號（未被授權任何國家）：無法新增品項（Console 寫入被拒）；一般收藏願望清單既有行為不變 | Console INSERT 收到 403 `42501`；白名單朋友一般收藏標願望正常 | ✅ |
+| e. can_wishlist_item 擴充未破壞既有：一般收藏白名單、行程協作分支不變 | 前者實測正常；後者無測試對象（使用者目前未設定任何 trip_collaborators），改用部署後函式定義逐字元比對確認未變 | ✅ |
+| commit + push 並貼出終端機輸出 | 見下方 | ✅ |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
@@ -963,9 +1018,11 @@ V2 階段 9 npm 遷移時遺漏的 4 個瀏覽器端腳本，誤 `import { supab
 
 ### 多國家擴充（詳見 PROJECT_NOTES_MULTICOUNTRY.md）
 1. ~~**MC-1：countries 表 + japan_items/trips 加 country_id，既有資料回填日本**~~ **✅ 2026-09-16 已完成**，詳見上方「MC-1」章節
-2. **MC-2**：收藏頁國家切換器 + 新增收藏品的國家選擇 + 國家管理 CRUD
+2. ~~**MC-2：收藏頁國家切換器 + 新增收藏品的國家選擇 + 國家管理 CRUD**~~ **✅ 2026-09-17 已完成**，詳見上方「MC-2」章節
 3. **MC-3**：行程頁依國家分組 + 新增行程選國家
 4. **MC-4**：行程→收藏的國家連動（trip-changed 事件帶 country_id）
+5. ~~**MC-5a：country_collaborators 表 + japan_items 加 created_by + RLS 調整 + can_wishlist_item 擴充**~~ **✅ 2026-09-17 已完成**，詳見上方「MC-5a」章節
+6. **MC-5b**：收藏頁協作管理 UI + 被授權朋友的新增/自管 UI + 介面文字動態化（見 PROJECT_NOTES_MULTICOUNTRY.md 附錄 MC-5 E 節）
 
 ### 其他規劃中功能
 - 讀書筆記、食記、年度回顧、作品集、書籤收藏、習慣打卡
@@ -1024,7 +1081,7 @@ V2 階段 9 npm 遷移時遺漏的 4 個瀏覽器端腳本，誤 `import { supab
 | income_categories | 收入來源（動態管理） | ✅ |
 | expense_categories | 支出分類（動態管理） | ✅ |
 | japan_categories | 日本收藏分類（兩層） | ✅ |
-| japan_items | 日本收藏品項（含 owner_wishlist、owner_quantity、trip_id、country_id） | ✅（2026-09-16 新增 country_id，MC-1） |
+| japan_items | 日本收藏品項（含 owner_wishlist、owner_quantity、trip_id、country_id、created_by） | ✅（2026-09-16 新增 country_id，MC-1；2026-09-17 新增 created_by，MC-5a） |
 | allowed_users | 日本收藏白名單 | ✅ |
 | wishlist_items | 朋友/家人願望清單（含 quantity） | ✅ |
 | trips | 旅行行程（含 country_id） | ✅（2026-09-16 新增 country_id，MC-1） |
@@ -1045,6 +1102,7 @@ V2 階段 9 npm 遷移時遺漏的 4 個瀏覽器端腳本，誤 `import { supab
 | note_tags | notes 與 tags 的多對多關聯表 | ✅ 已建立（2026-08-06，V3-1） |
 | note_media | 讀書筆記圖片（獨立表，支援多圖排序），路徑對應 note_media 私有 bucket | ✅ 已建立（2026-08-06，V3-1） |
 | countries | 多國家擴充：國家清單（id/name/emoji/sort_order/is_default），seed 一筆「日本」 | ✅ 已建立（2026-09-16，MC-1） |
+| country_collaborators | 多國家擴充：國家級協作授權（country_id + user_email），供 can_add_country_item()/can_wishlist_item() 判斷 | ✅ 已建立（2026-09-17，MC-5a） |
 
 ### Storage Buckets
 
