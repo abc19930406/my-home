@@ -450,6 +450,14 @@ const items = initialItems;
 
   const supabase = getSupabaseBrowserClient();
 
+  // 多國家擴充(MC-4)：行程→收藏單向連動，提前綁定監聽器(在任何 await 之前)，
+  // 比照本專案 Race Condition 防護慣例；實際處理邏輯(applyTripCountryLink)在下方定義，
+  // 因為是一般 function 宣告會被提升(hoisting)，此處引用時尚未執行到定義處也不影響
+  window.addEventListener('trip-changed', (e) => {
+    const { tripId, countryId } = e.detail || {};
+    applyTripCountryLink(tripId, countryId);
+  });
+
   const toast = document.getElementById('japan-toast');
 
   // 本地快取狀態
@@ -739,6 +747,25 @@ const items = initialItems;
         filterAndRenderItems();
       });
     });
+  }
+
+  // 多國家擴充(MC-4)：行程→收藏單向連動。切換行程時自動把國家切換器切到該行程所屬國家，
+  // 並套用該行程的收藏篩選(沿用既有 V2 階段 3 的行程篩選邏輯，比對 id)。
+  // 邊界：countryId 為空、或對應不到 countriesCache 內任何國家(例如收藏頁的 countries 還沒載入完成，
+  // 或理論上不存在的情況)時，維持目前國家不動，不報錯不清空——只有真正找得到才切換。
+  // 單向：這裡只有「行程→收藏」，收藏頁手動切換國家不會回頭觸發行程切換。
+  function applyTripCountryLink(tripId, countryId) {
+    if (!countryId) return;
+    const countryExists = countriesCache.some(c => String(c.id) === String(countryId));
+    if (!countryExists) return;
+
+    selectedCountryId = String(countryId);
+    selectedTripFilterId = tripId ? String(tripId) : 'all';
+    renderCountrySwitcher();
+    updateCollectionAdminActionsUI();
+    updateExploreSectionVisibility();
+    renderFilterBar();
+    filterAndRenderItems();
   }
 
   function updateHeaderAuthUI() {

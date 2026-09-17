@@ -2032,7 +2032,10 @@ const showTripGroupHeaders = tripGroups.length > 1;
     function selectTrip(tripId) {
       currentTripId = tripId;
       window.currentTripId = tripId;
-      window.dispatchEvent(new CustomEvent('trip-changed', { detail: { tripId } }));
+      // 多國家擴充(MC-4)：payload 帶上該行程的 country_id，供收藏頁做行程→收藏的單向國家連動
+      const selectedTripData = tripsCache.find(t => String(t.id) === String(tripId));
+      const countryId = selectedTripData ? selectedTripData.country_id : null;
+      window.dispatchEvent(new CustomEvent('trip-changed', { detail: { tripId, countryId } }));
 
       // 1. 更新行程標籤 UI
       const tabsList = document.getElementById('trips-tab-list');
