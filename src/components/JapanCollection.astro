@@ -473,6 +473,9 @@ const items = initialItems;
   let myAuthorizedCountryIds = new Set();
   // 國家協作者管理 Modal 目前操作中的國家 id/名稱
   let managingCollaboratorsCountryId = null;
+  // 探索/搜尋功能目前僅日本專屬(不做多國適配)，此區塊需同時滿足「公開或管理員」與「目前切換中的國家是日本」；
+  // 快取 status.japan_explore_public 的查詢結果，切換國家時不必重查資料庫
+  let exploreIsPublic = false;
   // trip_id -> { can_edit_wishlist, can_edit_itinerary }（V2 階段 4 任務三：協作者的行程收藏願望清單權限）
   // 本元件自己查一次，不與 TripPlanner.astro 共用快取
   let collaboratorTripPermissions = {};
@@ -540,6 +543,21 @@ const items = initialItems;
     if (openAddBtn) openAddBtn.style.display = (isAdminUser || canAdd) ? 'inline-flex' : 'none';
   }
 
+  // 探索/搜尋功能目前僅日本專屬(不做多國適配)：用 is_default 判斷「目前切換中的國家是不是日本」，
+  // 不寫死國名字串比對(國家名稱可被管理員改名，is_default 才是穩定的判斷依據)；
+  // 非日本一律隱藏整塊，是日本才回到原本「管理員恆可見／訪客看公開開關」的邏輯
+  function updateExploreSectionVisibility() {
+    const exploreSection = document.getElementById('explore-japan-section');
+    if (!exploreSection) return;
+    const currentCountry = countriesCache.find(c => String(c.id) === String(selectedCountryId));
+    const isJapan = !!(currentCountry && currentCountry.is_default);
+    if (!isJapan) {
+      exploreSection.style.display = 'none';
+      return;
+    }
+    exploreSection.style.display = (isAdminUser || exploreIsPublic) ? 'block' : 'none';
+  }
+
   async function loadCollaboratorPermissions(email) {
     try {
       const { data, error } = await supabase
@@ -576,6 +594,7 @@ const items = initialItems;
     // 2. 身分驗證與即時探索隱私狀態檢查
     const { data: statusObj } = await supabase.from('status').select('japan_explore_public').eq('id', 1).single();
     const isPublic = statusObj ? !!statusObj.japan_explore_public : false;
+    exploreIsPublic = isPublic; // 快取供 updateExploreSectionVisibility() 在切換國家時重用，不必重查資料庫
 
     if (session) {
       currentUser = session.user;
@@ -614,7 +633,6 @@ const items = initialItems;
 
     updateHeaderAuthUI();
 
-    const exploreSection = document.getElementById('explore-japan-section');
     const toggleCheckbox = document.getElementById('explore-toggle-checkbox');
     const toggleLabel = document.getElementById('explore-toggle-label');
 
@@ -630,9 +648,6 @@ const items = initialItems;
       populateMainCategoryDropdown();
       populateCountryDropdown(selectedCountryId);
       populateTripDropdown();
-
-      // 管理員：不論公開或私人均保持可見以進行設定
-      if (exploreSection) exploreSection.style.display = 'block';
 
       // 初始化開關狀態
       if (toggleCheckbox) {
@@ -676,12 +691,10 @@ const items = initialItems;
           }
         }
       });
-    } else {
-      // 訪客端：根據 Supabase 真實狀態即時控制探索日本區塊的顯隱
-      if (exploreSection) {
-        exploreSection.style.display = isPublic ? 'block' : 'none';
-      }
     }
+
+    // 探索/搜尋功能僅日本專屬：不論管理員或訪客，只有目前切換中的國家是日本才顯示
+    updateExploreSectionVisibility();
 
     // 3. 重繪篩選器與卡片 (確保 Client Side 最新)
     updateCollectionAdminActionsUI();
@@ -721,6 +734,7 @@ const items = initialItems;
         selectedTripFilterId = 'all';
         renderCountrySwitcher();
         updateCollectionAdminActionsUI();
+        updateExploreSectionVisibility();
         renderFilterBar();
         filterAndRenderItems();
       });
@@ -2407,11 +2421,13 @@ const items = initialItems;
         category_id: parseInt(categoryId),
         name: pendingCollectItem.name,
         note: '網友推薦',
-        image_url: '' // 網友推薦不帶實體圖片
+        image_url: '', // 網友推薦不帶實體圖片
+        country_id: selectedCountryId // 探索區目前僅日本可見，此欄位理論上恆為日本，明確帶上避免依賴 DB 端 DEFAULT
       });
 
       if (!error) {
-        showToast('🎉 成功加入日本收藏！');
+        // 加入收藏是全國家通用功能，訊息改中性文字，不寫死「日本」(即使此按鈕目前只會在探索區出現，僅限日本可觸發)
+        showToast('🎉 已成功加入收藏！');
         closeCollectModal();
         init(); // 靜默刷新列表與快取
         triggerBuildWebhook(); // 觸發 Vercel 生產端重建
