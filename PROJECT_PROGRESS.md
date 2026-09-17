@@ -1036,6 +1036,30 @@ MC-5a 權限地基之上，在 `JapanCollection.astro` 實作對應前端，設�
 
 ---
 
+### ✅ MC-3：行程頁依國家分組 + 新增行程選國家（2026-09-17，已結案）
+
+在 `TripPlanner.astro` 實作行程清單依國家分組顯示，設計依據 `PROJECT_NOTES_MULTICOUNTRY.md` 3.2 節。無新 SQL，`trips.country_id` 已於 MC-1 建立並回填。
+
+- **行程清單依國家分組**：新增 `groupTripsByCountry()`（build time）與對應的 `renderTripsTabList()`（client-side），分組順序依 `countries.sort_order`；只有一組（通常只有日本）時不顯示分組標題，外觀與 MC-3 之前完全一致，多組時才出現「emoji+國名」標題列
+- **開工時發現的既有落差**：`initAuthAndData()` 原本完全不會重繪初始的行程標籤列表（只挑第一筆行程當預選），畫面顯示的其實是 build time 產出的靜態 SSR 版本；這次補上載入 `countries` 快取後立即重繪，分組邏輯在初次載入時就生效，不必等到登入或 CRUD 之後
+- **新增/編輯行程 Modal** 加「國家」下拉（必填）：新增時預設帶入目前檢視中行程的國家，沒有目前行程則退回 `is_default` 國家（日本）；編輯時帶入該行程現有國家，可調整
+- **重繪邏輯統一**：新增/更新/刪除行程後的重繪，統一改呼叫 `renderTripsTabList()`，取代原本兩處重複的 flat `tabsHtml` 拼接邏輯
+- **明確排除本階段**：不做行程→收藏連動（MC-4）、不動 `trips` 既有 RLS 與 `trip_collaborators` 協作者權限、不改命名
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| a. 現況（行程皆日本）：正常顯示於「日本」分組下，與 MC-3 前一致 | 使用者實測確認 | ✅ |
+| b. 新增韓國行程：出現在「韓國」分組下，與日本分開 | 使用者實測確認 | ✅ |
+| c. 行程切換器正常切換，地圖與每日行程正常載入 | 使用者實測確認 | ✅ |
+| d. 編輯行程改國家：該行程移到對應分組 | 使用者實測確認 | ✅ |
+| e. 協作者權限不受影響 | 使用者實測確認 | ✅ |
+| f. 手機桌機、Modal 正常 | 使用者實測確認 | ✅ |
+| commit + push 並貼出終端機輸出 | `0c8fee8` | ✅ |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
@@ -1050,7 +1074,7 @@ MC-5a 權限地基之上，在 `JapanCollection.astro` 實作對應前端，設�
 ### 多國家擴充（詳見 PROJECT_NOTES_MULTICOUNTRY.md）
 1. ~~**MC-1：countries 表 + japan_items/trips 加 country_id，既有資料回填日本**~~ **✅ 2026-09-16 已完成**，詳見上方「MC-1」章節
 2. ~~**MC-2：收藏頁國家切換器 + 新增收藏品的國家選擇 + 國家管理 CRUD**~~ **✅ 2026-09-17 已完成**，詳見上方「MC-2」章節
-3. **MC-3**：行程頁依國家分組 + 新增行程選國家
+3. ~~**MC-3：行程頁依國家分組 + 新增行程選國家**~~ **✅ 2026-09-17 已完成**，詳見上方「MC-3」章節
 4. **MC-4**：行程→收藏的國家連動（trip-changed 事件帶 country_id）
 5. ~~**MC-5a：country_collaborators 表 + japan_items 加 created_by + RLS 調整 + can_wishlist_item 擴充**~~ **✅ 2026-09-17 已完成**，詳見上方「MC-5a」章節
 6. ~~**MC-5b：收藏頁協作管理 UI + 被授權朋友的新增/自管 UI + 探索功能改為日本專屬**~~ **✅ 2026-09-17 已完成**，詳見上方「MC-5b」章節

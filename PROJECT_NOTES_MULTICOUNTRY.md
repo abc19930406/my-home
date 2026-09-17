@@ -3,7 +3,7 @@
 
 > 記錄「收藏／行程從日本專屬擴充為多國家」的架構決策。
 > 與 PROJECT_ARCHITECTURE.md、PROJECT_ARCHITECTURE_V2.md 並行。
-> 狀態：🔶 進行中（MC-1／MC-2／MC-5a／MC-5b 已完成，2026-09-17；MC-3／MC-4 待拆任務）
+> 狀態：🔶 進行中（MC-1／MC-2／MC-3／MC-5a／MC-5b 已完成，2026-09-17；MC-4 待拆任務）
 
 ---
 
@@ -92,12 +92,13 @@
 |------|------|------|------|
 | MC-1 | countries 表 + seed 日本；japan_items/trips 加 country_id + 既有資料回填為日本（試算→備份→執行）；RLS | 中（動既有資料，走安全遷移流程） | ✅ 2026-09-16 已完成，a-e 驗收全數通過，詳見 PROJECT_PROGRESS.md「MC-1」章節 |
 | MC-2 | 收藏頁國家切換器 + 新增收藏品的國家選擇 + 國家管理 CRUD | 低 | ✅ 2026-09-17 已完成，a-g 驗收全數通過，詳見 PROJECT_PROGRESS.md「MC-2」章節 |
-| MC-3 | 行程頁依國家分組 + 新增行程選國家 | 低 | 📋 |
+| MC-3 | 行程頁依國家分組 + 新增行程選國家 | 低 | ✅ 2026-09-17 已完成，a-f 驗收全數通過，詳見 PROJECT_PROGRESS.md「MC-3」章節 |
 | MC-4 | 行程→收藏的國家連動（trip-changed 帶 country_id） | 低 | 📋 |
 
 - MC-1 完成後建議回 Fable 覆核（涉及既有資料遷移與 RLS）；其餘前端階段使用者實測即可。
 - **MC-1 實作備註（2026-09-16）**：`japan_items.country_id`/`trips.country_id` 設為 `NOT NULL` 後，額外補上 `DEFAULT`（指向日本那一列的固定 uuid），因為既有四個寫入點（新增行程、新增收藏品兩處、AI 助手 `add_japan_item`）在 MC-2 前端做出國家選擇 UI 之前都不會帶 `country_id`，若無預設值會直接被 `NOT NULL` 擋下。MC-2 開發時若前端已一律明確帶入 `country_id`，可評估是否移除此 `DEFAULT`（非必要，保留也不影響功能）。
 - MC-5（國家級協作授權）另見下方附錄，子階段 MC-5a 已完成。
+- **MC-3 執行備註（2026-09-17）**：開工時發現 `TripPlanner.astro` 的 `initAuthAndData()` 原本完全不會重繪初始的行程標籤列表(只挑第一筆行程當預選)，畫面顯示的其實是 build time 產出的靜態 SSR 版本；這次補上載入 `countries` 快取後立即呼叫 `renderTripsTabList()` 重繪，才讓分組邏輯在初次載入時也生效，不只是登入或 CRUD 之後。分組只在多國情境下才顯示標題列，只有一組時外觀與 MC-3 之前的單一橫向列表完全一致。
 
 ---
 
