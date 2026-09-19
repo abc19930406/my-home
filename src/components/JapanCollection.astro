@@ -490,6 +490,8 @@ const items = initialItems;
   // 收藏依行程篩選：'all'(全部,預設) / 'general'(僅一般收藏) / 某個行程的 id(該行程＋一般收藏)
   // 獨立於「行程」分頁目前選中的行程，任何人(管理員、朋友、訪客)皆可使用
   let selectedTripFilterId = 'all';
+  // 備註「展開」狀態(以品項 id 記錄)：整批重繪(init/篩選)後仍保留使用者已展開的備註，不會被折回去
+  const expandedNoteIds = new Set();
 
   // --- Utility Functions ---
   function showToast(message) {
@@ -954,6 +956,81 @@ const items = initialItems;
     }
   }
 
+  // ============================================================
+  // 備註折疊(展開/收合)
+  // ============================================================
+  const NOTE_COLLAPSE_LINES = 7; // 超過幾行才折疊；同步寫入 CSS 變數 --note-max-lines，判斷與樣式共用同一個值
+
+  // 【獨立的判斷邏輯】這則備註「是否需要折疊」。日後若折疊後的行為要改(例如改成點擊彈出 Modal 顯示全文)，
+  // 只需要換掉下方 handleNoteToggle() 的行為，這個判斷不必動。
+  // 用實際「顯示行數」而非字數判斷：中英文、換行造成的字數差異很大，行數才準；
+  // 行數 = 內容總高度 ÷ 行高，內容高度取 scrollHeight(不受目前是否已被 line-clamp 截斷影響)。
+  // 回傳 null 代表目前量不到(元素被隱藏在其他分頁、寬度為 0)，呼叫端應維持原狀，等可見後再重新判斷。
+  function noteNeedsCollapse(noteEl) {
+    if (!noteEl || noteEl.clientWidth === 0) return null;
+    const style = getComputedStyle(noteEl);
+    const lineHeight = parseFloat(style.lineHeight);
+    if (!lineHeight || Number.isNaN(lineHeight)) return null;
+    const contentHeight = noteEl.scrollHeight - parseFloat(style.paddingTop || '0') - parseFloat(style.paddingBottom || '0');
+    const lineCount = contentHeight / lineHeight;
+    return lineCount > NOTE_COLLAPSE_LINES + 0.5;
+  }
+
+  // 依實際行數決定每則備註要不要顯示展開鈕；渲染後、視窗尺寸改變、分頁切換為可見時都會呼叫
+  function refreshNoteToggles() {
+    const grid = document.getElementById('japan-items-grid');
+    if (!grid) return;
+    grid.style.setProperty('--note-max-lines', String(NOTE_COLLAPSE_LINES));
+    grid.querySelectorAll('.card-note-wrap').forEach(wrap => {
+      const noteEl = wrap.querySelector('.card-note');
+      const btn = wrap.querySelector('.note-toggle');
+      if (!noteEl || !btn) return;
+      const needs = noteNeedsCollapse(noteEl);
+      if (needs === null) return;
+      // 7 行以內：整段顯示，不出現任何展開鈕(不對短備註加多餘 UI)
+      btn.style.display = needs ? '' : 'none';
+    });
+  }
+
+  // 目前的折疊行為：卡片原地展開/收合(手風琴式)，只切換 class，不重繪清單，卡片位置不變
+  function handleNoteToggle(btn) {
+    const wrap = btn.closest('.card-note-wrap');
+    const noteEl = wrap?.querySelector('.card-note');
+    const card = btn.closest('.japan-card');
+    if (!noteEl || !card) return;
+    const id = String(card.dataset.id);
+    const expanding = noteEl.classList.contains('note-clamped');
+
+    // 記下按鈕在視窗中的位置：收合時內容變短，按鈕會往上移，捲動位置若不補償，
+    // 畫面就會跑到卡片下方別的內容(看起來像跳位)
+    const topBefore = btn.getBoundingClientRect().top;
+
+    noteEl.classList.toggle('note-clamped', !expanding);
+    btn.textContent = expanding ? '收合' : '⋯展開';
+    if (expanding) expandedNoteIds.add(id); else expandedNoteIds.delete(id);
+
+    if (!expanding) {
+      const delta = btn.getBoundingClientRect().top - topBefore;
+      if (Math.abs(delta) > 1) window.scrollBy({ top: delta, left: 0, behavior: 'instant' });
+    }
+  }
+
+  // 視窗寬度改變(含手機轉向)、分頁從隱藏切為可見時，行數會變，需要重新判斷；用 rAF 合併連續觸發
+  {
+    let noteRefreshQueued = false;
+    const queueNoteRefresh = () => {
+      if (noteRefreshQueued) return;
+      noteRefreshQueued = true;
+      requestAnimationFrame(() => { noteRefreshQueued = false; refreshNoteToggles(); });
+    };
+    const noteGrid = document.getElementById('japan-items-grid');
+    if (noteGrid && typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(queueNoteRefresh).observe(noteGrid);
+    }
+    window.addEventListener('resize', queueNoteRefresh);
+    document.fonts?.ready.then(queueNoteRefresh);
+  }
+
   // --- 卡片過濾與繪製 (磚牆式 Masonry) ---
   function filterAndRenderItems() {
     const grid = document.getElementById('japan-items-grid');
@@ -1054,7 +1131,15 @@ const items = initialItems;
           </div>
         `;
 
-      const noteTag = item.note ? `<p class="card-note">${item.note}</p>` : '';
+      // 備註預設帶折疊樣式(note-clamped)；是否真的超過門檻、要不要顯示展開鈕，
+      // 由 refreshNoteToggles() 在畫面渲染後依實際行數判斷(見 noteNeedsCollapse)
+      const noteExpanded = expandedNoteIds.has(String(item.id));
+      const noteTag = item.note
+        ? `<div class="card-note-wrap">
+            <p class="card-note ${noteExpanded ? '' : 'note-clamped'}">${item.note}</p>
+            <button type="button" class="note-toggle" style="display: none;">${noteExpanded ? '收合' : '⋯展開'}</button>
+          </div>`
+        : '';
 
       const isOwnerWishlisted = item.owner_wishlist === true;
       let adminCheckboxHtml = '';
@@ -1151,6 +1236,7 @@ const items = initialItems;
     });
 
     grid.innerHTML = html;
+    refreshNoteToggles();
   }
 
   // --- 管理分類面板渲染 ---
@@ -1882,6 +1968,13 @@ const items = initialItems;
     const footerCount = target.closest('.wishlist-footer');
     const btnQtyMinus = target.closest('.btn-qty-minus') || target.closest('[data-action="qty-minus"]');
     const btnQtyPlus = target.closest('.btn-qty-plus') || target.closest('[data-action="qty-plus"]');
+    const btnNoteToggle = target.closest('.note-toggle');
+
+    // 備註展開/收合：只切換該備註區塊，不觸及卡片其他操作
+    if (btnNoteToggle) {
+      handleNoteToggle(btnNoteToggle);
+      return;
+    }
 
     if (btnQtyMinus || btnQtyPlus) {
       const btn = (btnQtyMinus || btnQtyPlus);

@@ -891,6 +891,37 @@
   padding-top: 8px;
 }
 
+/* 備註折疊(展開/收合)：預設限制顯示行數(--note-max-lines 由 JS 依門檻寫入，預設 7)；
+   是否出現展開鈕由 JS 依實際行數判斷，行數未超過門檻的備註不會被截斷 */
+.card-note-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.card-note.note-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--note-max-lines, 7);
+  line-clamp: var(--note-max-lines, 7);
+  overflow: hidden;
+}
+
+.note-toggle {
+  align-self: flex-end;
+  background: none;
+  border: none;
+  padding: 4px 0 0;
+  color: var(--japan-primary);
+  font-family: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.note-toggle:hover {
+  color: var(--japan-primary-hover);
+  text-decoration: underline;
+}
+
 /* 編輯刪除浮動按鈕 */
 .card-admin-actions {
   position: absolute;
