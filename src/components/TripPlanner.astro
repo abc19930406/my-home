@@ -2151,7 +2151,7 @@ const showTripGroupHeaders = tripGroups.length > 1;
           const tripName = tab.dataset.tripName || '';
           const tripDesc = tab.dataset.tripDesc || '';
           if (titleEl) {
-            titleEl.innerHTML = `📍 ${tripName} <span style="font-size: 0.85rem; font-weight:400; color: var(--travel-text-muted); display:block; margin-top:4px;">${tripDesc}</span>`;
+            titleEl.innerHTML = `📍 ${escapeHtml(tripName)} <span style="font-size: 0.85rem; font-weight:400; color: var(--travel-text-muted); display:block; margin-top:4px;">${escapeHtml(tripDesc)}</span>`;
           }
         } else {
           tab.classList.remove('active');
