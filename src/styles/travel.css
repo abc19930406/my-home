@@ -605,6 +605,51 @@
   text-decoration: underline;
 }
 
+/* 行程注意事項摺疊欄：預設收合，地圖/行程模式皆顯示；無內容時區塊整個 display:none */
+.trip-note-section {
+  margin-bottom: 16px;
+  background-color: rgba(245, 166, 35, 0.08);
+  border: 1px solid rgba(245, 166, 35, 0.35);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.trip-note-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 10px 14px;
+  color: var(--travel-text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.trip-note-toggle i {
+  transition: transform 0.2s ease;
+  color: var(--travel-text-muted);
+}
+
+.trip-note-toggle.expanded i {
+  transform: rotate(180deg);
+}
+
+.trip-note-body {
+  padding: 0 14px 14px;
+}
+
+.trip-note-content {
+  font-size: 0.88rem;
+  color: var(--travel-text);
+  line-height: 1.6;
+  white-space: pre-wrap; /* 保留使用者輸入的換行，仍會自動折行 */
+}
+
 /* 景點照片預覽 */
 .spot-images-row {
   display: flex;
@@ -1421,6 +1466,13 @@ body.modal-open {
   color: var(--travel-text-muted);
   border: none;
   padding: 0;
+}
+
+/* 景點時間記錄(純記錄，不做推算)：未填不輸出這個 div，不佔空間 */
+.spot-time-badge {
+  font-size: 0.78rem;
+  color: var(--travel-primary);
+  margin-top: 2px;
 }
 
 .spot-actions {

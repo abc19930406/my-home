@@ -190,6 +190,19 @@ const initialCountryTrips = initialCountryId
         </button>
       </section>
 
+      <!-- 2.7 行程注意事項摺疊欄：地圖/行程兩種模式都會顯示(不放進 .spots-list-section，
+           該區塊切到行程模式時會整個 display:none)。無內容時完全不顯示，含管理員；
+           編輯入口是標題旁既有的 ✏️ 編輯行程按鈕(admin-only)，不在此區塊另做新增入口 -->
+      <section class="trip-note-section" id="trip-note-section" style="display: none;">
+        <button type="button" class="trip-note-toggle" id="trip-note-toggle">
+          <span>⚠️ 行程注意事項</span>
+          <i class="ti ti-chevron-down"></i>
+        </button>
+        <div class="trip-note-body" id="trip-note-body" style="display: none;">
+          <div class="trip-note-content" id="trip-note-content"></div>
+        </div>
+      </section>
+
       <!-- 2.5 行程模式切換列 -->
       <section class="mode-toggle-container">
         <div style="display: flex; gap: 12px;">
@@ -468,6 +481,12 @@ const initialCountryTrips = initialCountryId
           <div class="form-group">
             <label for="trip-description">描述</label>
             <textarea id="trip-description" rows="3" placeholder="簡短描述這趟行程的點滴與目的..."></textarea>
+          </div>
+
+          <!-- 行程注意事項：頂部摺疊欄顯示，僅管理員可編輯(與 trips 表既有 UPDATE 權限一致) -->
+          <div class="form-group">
+            <label for="trip-note">⚠️ 注意事項（選填）</label>
+            <textarea id="trip-note" rows="3" placeholder="例如：集合時間、簽證提醒、行前準備事項..."></textarea>
           </div>
         </div>
         <div class="modal-footer">
@@ -850,6 +869,35 @@ const initialCountryTrips = initialCountryId
     </div>
   </div>
 
+  <!-- 景點時間記錄 Modal：純記錄抵達時間/預計停留時長，不做任何推算，僅行程模式使用 -->
+  <div id="travel-day-spot-time-modal" class="travel-modal-overlay modal-overlay">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>🕐 景點時間記錄</h3>
+        <button type="button" class="btn-modal-close" id="btn-day-spot-time-modal-close">&times;</button>
+      </div>
+      <form id="day-spot-time-form">
+        <div class="modal-body">
+          <input type="hidden" id="form-day-spot-id" />
+
+          <div class="form-group">
+            <label for="day-spot-arrival-time">抵達時間（選填）</label>
+            <input type="time" id="day-spot-arrival-time" autocomplete="off" />
+          </div>
+
+          <div class="form-group">
+            <label for="day-spot-stay-minutes">預計停留（分鐘，選填）</label>
+            <input type="number" id="day-spot-stay-minutes" min="0" placeholder="例如：90" autocomplete="off" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn-secondary" id="btn-day-spot-time-cancel">取消</button>
+          <button type="submit" class="btn-primary">儲存</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <!-- Toast 訊息通知 -->
   <div id="toast" class="toast">已成功儲存</div>
 
@@ -1165,6 +1213,46 @@ const initialCountryTrips = initialCountryId
       }
       window.addEventListener('resize', queueSpotNoteRefresh);
       document.fonts?.ready.then(queueSpotNoteRefresh);
+    }
+
+    // --- 行程注意事項摺疊欄：單一區塊、規則簡單(永遠預設收合)，不用像景點備註那樣
+    // 依行數判斷要不要顯示收合鈕，另外寫兩個小函式即可，不強行共用 spotNoteNeedsCollapse() ---
+    function renderTripNoteSection(trip: any) {
+      const section = document.getElementById('trip-note-section');
+      const body = document.getElementById('trip-note-body');
+      const content = document.getElementById('trip-note-content');
+      if (!section || !body || !content) return;
+
+      const note = trip && trip.note ? String(trip.note).trim() : '';
+      if (!note) {
+        section.style.display = 'none';
+        return;
+      }
+
+      content.innerHTML = escapeHtml(note);
+      section.style.display = 'block';
+      // 每次重繪(切換行程、存檔後)都重置為收合，比照「預設收合」的設計
+      body.style.display = 'none';
+      const toggleBtn = document.getElementById('trip-note-toggle');
+      toggleBtn?.classList.remove('expanded');
+    }
+
+    function handleTripNoteToggle() {
+      const toggleBtn = document.getElementById('trip-note-toggle');
+      const body = document.getElementById('trip-note-body');
+      if (!toggleBtn || !body) return;
+      const expanding = body.style.display === 'none';
+
+      // 比照景點備註收合的捲動補償：收合時內容變短，按鈕會往上移，需要補償捲動量避免跳位
+      const topBefore = toggleBtn.getBoundingClientRect().top;
+
+      body.style.display = expanding ? 'block' : 'none';
+      toggleBtn.classList.toggle('expanded', expanding);
+
+      if (!expanding) {
+        const delta = toggleBtn.getBoundingClientRect().top - topBefore;
+        if (Math.abs(delta) > 1) window.scrollBy({ top: delta, left: 0, behavior: 'instant' });
+      }
     }
 
     // 動態渲染首頁上方篩選列
@@ -2124,6 +2212,7 @@ const initialCountryTrips = initialCountryId
       if (container) {
         container.innerHTML = `<div class="empty-state">${message}</div>`;
       }
+      renderTripNoteSection(null);
     }
 
     // --- 切換國家：重繪國家選擇器與該國行程清單，並自動選中第一個行程(不需等使用者再點一次)。
@@ -2161,6 +2250,9 @@ const initialCountryTrips = initialCountryId
       const selectedTripData = tripsCache.find(t => String(t.id) === String(tripId));
       const countryId = selectedTripData ? selectedTripData.country_id : null;
       window.dispatchEvent(new CustomEvent('trip-changed', { detail: { tripId, countryId } }));
+
+      // 行程注意事項摺疊欄：切換行程時重繪(無內容則隱藏，預設收合)
+      renderTripNoteSection(selectedTripData);
 
       // 1. 更新行程標籤 UI
       const tabsList = document.getElementById('trips-tab-list');
@@ -2395,6 +2487,9 @@ const initialCountryTrips = initialCountryId
             await moveSpotOrder(daySpotId, -1);
           } else if (btn.classList.contains('move-down')) {
             await moveSpotOrder(daySpotId, 1);
+          } else if (btn.classList.contains('time')) {
+            const ds = daySpotsCache.find(d => String(d.id) === String(daySpotId));
+            if (ds) openDaySpotTimeModal(ds);
           }
           return;
         }
@@ -2988,6 +3083,27 @@ const initialCountryTrips = initialCountryId
       document.body.classList.remove('modal-open');
     };
 
+    // --- 景點時間記錄 Modal：純記錄，不做任何推算 ---
+    function openDaySpotTimeModal(ds: any) {
+      const modal = document.getElementById('travel-day-spot-time-modal');
+      const form = document.getElementById('day-spot-time-form');
+      if (!modal || !ds) return;
+
+      form?.reset();
+      document.getElementById('form-day-spot-id').value = ds.id;
+      document.getElementById('day-spot-arrival-time').value = ds.arrival_time ? String(ds.arrival_time).slice(0, 5) : '';
+      document.getElementById('day-spot-stay-minutes').value = ds.stay_minutes ?? '';
+
+      modal.classList.add('show');
+      document.body.classList.add('modal-open');
+    }
+
+    const closeDaySpotTimeModal = () => {
+      const modal = document.getElementById('travel-day-spot-time-modal');
+      modal?.classList.remove('show');
+      document.body.classList.remove('modal-open');
+    };
+
     // 從交通方式卡片點擊地鐵圖分類，跳到「資源」子分頁並定位該分類；
     // 若該分類目前未被顯示（不在行程預設或個人篩選中），暫時加入個人篩選以便定位，不寫入資料庫
     function jumpToSubwayCategory(category) {
@@ -3259,6 +3375,13 @@ const initialCountryTrips = initialCountryId
         const spot = ds.spot;
         const typeInfo = spotTypesCache.find(t => t.id == spot.spot_type_id) || { emoji: '📍' };
 
+        // 純記錄的抵達時間/預計停留時長：不做任何推算，未填不佔空間(arrival_time/stay_minutes
+        // 是結構化的 time/int 欄位，非自由文字，不需要 escapeHtml)
+        const timeParts = [];
+        if (ds.arrival_time) timeParts.push(String(ds.arrival_time).slice(0, 5));
+        if (ds.stay_minutes) timeParts.push(`停留 ${ds.stay_minutes} 分`);
+        const timeLine = timeParts.length > 0 ? `<div class="spot-time-badge">🕐 ${timeParts.join(' · ')}</div>` : '';
+
         html += `
           <div class="itinerary-spot-item" data-id="${ds.id}" style="cursor: pointer;">
             <div class="spot-order-badge">${index + 1}</div>
@@ -3266,9 +3389,11 @@ const initialCountryTrips = initialCountryId
             <div class="spot-info">
               <div class="spot-name">${escapeHtml(spot.name)}</div>
               <div class="spot-note">${escapeHtml(spot.address || '')}</div>
+              ${timeLine}
             </div>
             ${canEdit ? `
               <div class="spot-actions">
+                <button class="btn-itinerary-action time" data-id="${ds.id}"><i class="ti ti-clock"></i></button>
                 ${index > 0 ? `<button class="btn-itinerary-action move-up" data-id="${ds.id}"><i class="ti ti-arrow-up"></i></button>` : `<div style="width: 28px;"></div>`}
                 ${index < daySpotsCache.length - 1 ? `<button class="btn-itinerary-action move-down" data-id="${ds.id}"><i class="ti ti-arrow-down"></i></button>` : `<div style="width: 28px;"></div>`}
                 <button class="btn-itinerary-action delete" data-id="${ds.id}"><i class="ti ti-x"></i></button>
@@ -3726,6 +3851,9 @@ const initialCountryTrips = initialCountryId
         }
       });
 
+      // 1.4 綁定行程注意事項摺疊欄展開/收合
+      document.getElementById('trip-note-toggle')?.addEventListener('click', handleTripNoteToggle);
+
       // 1.5 綁定已儲存景點搜尋事件
       const savedSpotsSearch = document.getElementById('saved-spots-search');
       const btnClearSavedSearch = document.getElementById('btn-clear-saved-search');
@@ -3856,6 +3984,7 @@ const initialCountryTrips = initialCountryId
         
         document.getElementById('trip-name').value = trip.name || '';
         document.getElementById('trip-description').value = trip.description || '';
+        document.getElementById('trip-note').value = trip.note || '';
         populateTripCountrySelect(trip.country_id);
 
         const emojiToSelect = trip.emoji || '🌸';
@@ -3906,6 +4035,7 @@ const initialCountryTrips = initialCountryId
         const name = document.getElementById('trip-name').value.trim();
         const emoji = tripSelectedEmojiInput.value;
         const description = document.getElementById('trip-description').value.trim();
+        const note = document.getElementById('trip-note').value.trim();
         const countryId = document.getElementById('trip-country').value;
 
         if (!name) return;
@@ -3914,7 +4044,7 @@ const initialCountryTrips = initialCountryId
           return;
         }
 
-        const payload = { name, emoji, description, country_id: countryId };
+        const payload = { name, emoji, description, note: note || null, country_id: countryId };
 
         try {
           let savedTrip;
@@ -5220,6 +5350,51 @@ const initialCountryTrips = initialCountryId
         if (e.target === transportRouteModal) closeTransportRouteModal();
       });
 
+      // 景點時間記錄 Modal：開關與背景點擊關閉
+      const daySpotTimeModal = document.getElementById('travel-day-spot-time-modal');
+      const btnDaySpotTimeClose = document.getElementById('btn-day-spot-time-modal-close');
+      const btnDaySpotTimeCancel = document.getElementById('btn-day-spot-time-cancel');
+      const daySpotTimeForm = document.getElementById('day-spot-time-form');
+      btnDaySpotTimeClose?.addEventListener('click', closeDaySpotTimeModal);
+      btnDaySpotTimeCancel?.addEventListener('click', closeDaySpotTimeModal);
+      daySpotTimeModal?.addEventListener('click', (e) => {
+        if (e.target === daySpotTimeModal) closeDaySpotTimeModal();
+      });
+
+      daySpotTimeForm?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const dsId = document.getElementById('form-day-spot-id').value;
+        const arrivalRaw = document.getElementById('day-spot-arrival-time').value;
+        const stayRaw = document.getElementById('day-spot-stay-minutes').value;
+        if (!dsId) return;
+
+        const payload = {
+          arrival_time: arrivalRaw || null,
+          stay_minutes: stayRaw ? parseInt(stayRaw, 10) : null
+        };
+
+        try {
+          const { data, error } = await supabase
+            .from('day_spots')
+            .update(payload)
+            .eq('id', dsId)
+            .select();
+          if (error) throw error;
+          if (!data || data.length === 0) {
+            alert('儲存失敗：沒有權限或資料不存在');
+            return;
+          }
+
+          daySpotsCache = daySpotsCache.map(d => String(d.id) === String(dsId) ? { ...d, ...payload } : d);
+          closeDaySpotTimeModal();
+          await renderDaySpots();
+          showToast('景點時間已更新');
+          triggerBuildWebhook();
+        } catch (err) {
+          alert('儲存失敗：' + err.message);
+        }
+      });
+
       transportRouteForm?.addEventListener('submit', async (e) => {
         e.preventDefault();
         const routeId = document.getElementById('form-transport-route-id').value;
@@ -5337,6 +5512,7 @@ const initialCountryTrips = initialCountryId
           closeSubwayCategoriesModal();
           closeSubwayUploadModal();
           closeTransportRouteModal();
+          closeDaySpotTimeModal();
         }
       });
     };
