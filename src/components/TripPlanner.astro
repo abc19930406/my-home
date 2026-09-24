@@ -69,29 +69,22 @@ const fallbackSpots = [
 const trips = initialTrips.length > 0 ? initialTrips : fallbackTrips;
 const spots = initialSpots.length > 0 ? initialSpots : fallbackSpots;
 
-// 多國家擴充(MC-3)：行程清單依 country_id 分組，分組順序依 countries.sort_order；
-// 找不到對應國家的行程(理論上不會發生，country_id 有 FK 約束)歸類到最後一組，不遺漏
-function groupTripsByCountry(tripList, countryList) {
-  const groups = [];
-  const byCountryId = new Map();
-  countryList.forEach((c) => byCountryId.set(String(c.id), { country: c, trips: [] }));
-  const orphanGroup = { country: null, trips: [] };
-  tripList.forEach((trip) => {
-    const g = byCountryId.get(String(trip.country_id));
-    if (g) g.trips.push(trip);
-    else orphanGroup.trips.push(trip);
-  });
-  countryList.forEach((c) => {
-    const g = byCountryId.get(String(c.id));
-    if (g.trips.length > 0) groups.push(g);
-  });
-  if (orphanGroup.trips.length > 0) groups.push(orphanGroup);
-  return groups;
+// 行程頁國家導覽重構(2026-09-24)：國家選擇器提升為頁面最上層主導覽，取代 MC-3 的
+// 「所有國家依 country_id 分組、全部攤開」呈現——同一時間只顯示「當前選中國家」的行程。
+// 初始國家判斷：優先取第一筆行程所屬的國家(反映實際資料)，其次 is_default 國家，都沒有則取第一個
+function pickInitialCountryId(tripList: any[], countryList: any[]) {
+  if (countryList.length === 0) return null;
+  const firstTrip = tripList.find((t: any) => countryList.some((c: any) => String(c.id) === String(t.country_id)));
+  if (firstTrip) return String(firstTrip.country_id);
+  const defaultCountry = countryList.find((c: any) => c.is_default);
+  if (defaultCountry) return String(defaultCountry.id);
+  return String(countryList[0].id);
 }
 
-// 只有一組時(通常是只有日本)不顯示分組標題，外觀與 MC-3 之前的單一橫向列表一致
-const tripGroups = initialCountries.length > 0 ? groupTripsByCountry(trips, initialCountries) : [{ country: null, trips }];
-const showTripGroupHeaders = tripGroups.length > 1;
+const initialCountryId = pickInitialCountryId(trips, initialCountries);
+const initialCountryTrips = initialCountryId
+  ? trips.filter((t) => String(t.country_id) === String(initialCountryId))
+  : trips;
 
 ---
 
@@ -125,7 +118,22 @@ const showTripGroupHeaders = tripGroups.length > 1;
   <div class="travel-body">
     <div class="travel-container">
 
-      <!-- 0. 「行程」主分頁內的子分頁：行程 / 交通查詢 / 資源 -->
+      <!-- 0. 國家選擇器：頁面最上層主導覽，跨「行程/交通查詢/資源」三個子分頁常駐；
+           選國家即切換底下的行程清單，並連動收藏頁(trip-changed 事件，MC-4) -->
+      <section class="trip-countries-scroll-container">
+        <div class="trip-countries-list" id="trip-countries-tab-list">
+          {initialCountries.map((c) => (
+            <button
+              class={`trip-country-tab ${String(c.id) === String(initialCountryId) ? 'active' : ''}`}
+              data-country-id={c.id}
+            >
+              <span>{c.emoji || '🌍'}</span> {c.name}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <!-- 0.5 「行程」主分頁內的子分頁：行程 / 交通查詢 / 資源 -->
       <section class="trip-subtab-bar">
         <nav class="trip-subtab-nav">
           <button id="btn-subtab-itinerary" class="trip-subtab-btn active" data-subtab="itinerary">
@@ -160,30 +168,19 @@ const showTripGroupHeaders = tripGroups.length > 1;
       <!-- 子分頁面板：行程（既有全部內容，預設顯示） -->
       <div id="trip-subtab-pane-itinerary" class="trip-subtab-pane active">
 
-      <!-- 2. 行程切換列 (橫向滾動)：依國家分組(MC-3)，只有一組時不顯示分組標題，外觀與分組前一致 -->
+      <!-- 2. 行程切換列 (橫向滾動)：只顯示上方國家選擇器選中國家的行程(扁平列表，不分組) -->
       <section class="trips-scroll-container">
-        <div class="trips-groups" id="trips-tab-list">
+        <div class="trips-list" id="trips-tab-list">
           <!-- JS 動態或 HTML 靜態生成 -->
-          {tripGroups.map((group) => (
-            <div class="trip-group" data-country-id={group.country?.id || ''}>
-              {showTripGroupHeaders && (
-                <div class="trip-group-header">
-                  <span>{group.country?.emoji || '🌍'}</span> {group.country?.name || '未分類'}
-                </div>
-              )}
-              <div class="trips-list">
-                {group.trips.map((trip) => (
-                  <button
-                    class={`trip-tab ${trip.id === trips[0]?.id ? 'active' : ''}`}
-                    data-trip-id={trip.id}
-                    data-trip-name={trip.name}
-                    data-trip-desc={trip.description || ''}
-                  >
-                    <span>{trip.emoji}</span> {trip.name}
-                  </button>
-                ))}
-              </div>
-            </div>
+          {initialCountryTrips.map((trip) => (
+            <button
+              class={`trip-tab ${trip.id === initialCountryTrips[0]?.id ? 'active' : ''}`}
+              data-trip-id={trip.id}
+              data-trip-name={trip.name}
+              data-trip-desc={trip.description || ''}
+            >
+              <span>{trip.emoji}</span> {trip.name}
+            </button>
           ))}
         </div>
 
@@ -901,7 +898,8 @@ const showTripGroupHeaders = tripGroups.length > 1;
 
     // 全域快取狀態
     let tripsCache = [];
-    let countriesCache = []; // 多國家擴充(MC-3)：行程清單依此分組，新增/編輯行程的「國家」下拉也用這份快取
+    let countriesCache = []; // 新增/編輯行程的「國家」下拉、國家選擇器皆用這份快取
+    let selectedCountryId = null; // 行程頁國家導覽(2026-09-24)：目前選中的國家，決定 #trips-tab-list 顯示哪些行程
     let spotsCache = [];
     let spotTypesCache = [];
     let spotSubtypesCache = [];
@@ -2086,40 +2084,64 @@ const showTripGroupHeaders = tripGroups.length > 1;
 
     }
 
-    // --- 多國家擴充(MC-3)：行程清單依 country_id 分組重繪；只有一組(通常只有日本)時不顯示分組標題，
-    // 外觀與分組前的單一橫向列表一致；沿用既有的委派點擊監聽(綁在 #trips-tab-list 本身，不受
-    // innerHTML 整批替換影響，不需要重新綁定) ---
+    // --- 行程頁國家導覽(2026-09-24)：#trips-tab-list 只顯示 selectedCountryId 這一國的行程，
+    // 扁平列表、不分組。沿用既有的委派點擊監聽(綁在 #trips-tab-list 本身，不受 innerHTML
+    // 整批替換影響，不需要重新綁定) ---
     function renderTripsTabList() {
       const listEl = document.getElementById('trips-tab-list');
       if (!listEl) return;
 
-      const byCountryId = new Map();
-      countriesCache.forEach(c => byCountryId.set(String(c.id), { country: c, trips: [] }));
-      const orphanGroup = { country: null, trips: [] };
-      tripsCache.forEach(trip => {
-        const g = byCountryId.get(String(trip.country_id));
-        if (g) g.trips.push(trip); else orphanGroup.trips.push(trip);
-      });
-      const groups = [];
-      countriesCache.forEach(c => {
-        const g = byCountryId.get(String(c.id));
-        if (g.trips.length > 0) groups.push(g);
-      });
-      if (orphanGroup.trips.length > 0) groups.push(orphanGroup);
-      const showHeaders = groups.length > 1;
+      const tripsInCountry = tripsCache.filter(t => String(t.country_id) === String(selectedCountryId));
 
-      listEl.innerHTML = groups.map(group => `
-        <div class="trip-group" data-country-id="${group.country?.id || ''}">
-          ${showHeaders ? `<div class="trip-group-header"><span>${group.country?.emoji || '🌍'}</span> ${group.country?.name || '未分類'}</div>` : ''}
-          <div class="trips-list">
-            ${group.trips.map(t => `
-              <button class="trip-tab" data-trip-id="${t.id}" data-trip-name="${t.name}" data-trip-desc="${t.description || ''}">
-                <span>${t.emoji}</span> ${t.name}
-              </button>
-            `).join('')}
-          </div>
-        </div>
+      listEl.innerHTML = tripsInCountry.map(t => `
+        <button class="trip-tab" data-trip-id="${t.id}" data-trip-name="${t.name}" data-trip-desc="${t.description || ''}">
+          <span>${t.emoji}</span> ${t.name}
+        </button>
       `).join('');
+    }
+
+    // --- 國家選擇器(頁面最上層主導覽)重繪 ---
+    function renderCountrySelector() {
+      const listEl = document.getElementById('trip-countries-tab-list');
+      if (!listEl) return;
+
+      listEl.innerHTML = countriesCache.map(c => `
+        <button class="trip-country-tab ${String(c.id) === String(selectedCountryId) ? 'active' : ''}" data-country-id="${c.id}">
+          <span>${c.emoji || '🌍'}</span> ${c.name}
+        </button>
+      `).join('');
+    }
+
+    // --- 目前選定國家沒有任何行程時的空狀態(該國剛新增、或刪掉最後一筆行程) ---
+    function showEmptyTripState(message) {
+      currentTripId = '';
+      window.currentTripId = '';
+      clearMapMarkers();
+      clearItineraryMap();
+      const titleEl = document.getElementById('current-trip-title');
+      if (titleEl) titleEl.textContent = '景點清單';
+      const container = document.getElementById('spots-cards-container');
+      if (container) {
+        container.innerHTML = `<div class="empty-state">${message}</div>`;
+      }
+    }
+
+    // --- 切換國家：重繪國家選擇器與該國行程清單，並自動選中第一個行程(不需等使用者再點一次)。
+    // 該國沒有任何行程時，顯示空狀態並手動 dispatch trip-changed(countryId 有值、tripId 為 null)，
+    // 讓收藏頁(JapanCollection.astro 的 applyTripCountryLink)一樣能立即連動切換國家 ---
+    function switchCountry(countryId) {
+      if (!countryId || countryId === selectedCountryId) return;
+      selectedCountryId = countryId;
+      renderCountrySelector();
+      renderTripsTabList();
+
+      const tripsInCountry = tripsCache.filter(t => String(t.country_id) === String(selectedCountryId));
+      if (tripsInCountry.length > 0) {
+        selectTrip(tripsInCountry[0].id);
+      } else {
+        showEmptyTripState('此國家尚無行程，請點選「新增行程」開始建立。');
+        window.dispatchEvent(new CustomEvent('trip-changed', { detail: { tripId: null, countryId: selectedCountryId } }));
+      }
     }
 
     // --- 新增/編輯行程 Modal 的「國家」下拉 ---
@@ -2184,7 +2206,15 @@ const showTripGroupHeaders = tripGroups.length > 1;
       spotSubtypesCache = spotSubtypes || [];
       countriesCache = countries || [];
 
-      // 多國家擴充(MC-3)：以最新資料重繪行程分組列表，取代 build time 的靜態版本
+      // 行程頁國家導覽：以最新資料決定初始國家(優先第一筆行程所屬國家，其次 is_default，都沒有取第一個)，
+      // 重繪國家選擇器與該國行程列表，取代 build time 的靜態版本
+      if (countriesCache.length > 0) {
+        const firstTrip = tripsCache.find(t => countriesCache.some(c => String(c.id) === String(t.country_id)));
+        selectedCountryId = firstTrip
+          ? String(firstTrip.country_id)
+          : String((countriesCache.find(c => c.is_default) || countriesCache[0]).id);
+      }
+      renderCountrySelector();
       renderTripsTabList();
 
       renderCategoryFilters();
@@ -2197,9 +2227,10 @@ const showTripGroupHeaders = tripGroups.length > 1;
       // 行程專屬的關聯分類由下方 selectTrip() 觸發的 trip-changed 事件載入
       await loadSubwayMaps();
 
-      // 2. 決定預選的行程
-      if (tripsCache.length > 0) {
-        currentTripId = tripsCache[0].id;
+      // 2. 決定預選的行程：選定國家內的第一筆
+      const tripsInSelectedCountry = tripsCache.filter(t => String(t.country_id) === String(selectedCountryId));
+      if (tripsInSelectedCountry.length > 0) {
+        currentTripId = tripsInSelectedCountry[0].id;
       }
 
       // 3. 地圖載入完畢後初始化
@@ -2212,15 +2243,7 @@ const showTripGroupHeaders = tripGroups.length > 1;
       if (currentTripId) {
         selectTrip(currentTripId);
       } else {
-        // 沒有行程時顯示空狀態
-        const container = document.getElementById('spots-cards-container');
-        if (container) {
-          container.innerHTML = `
-            <div class="empty-state">
-              目前沒有行程，請點選「新增行程」開始建立。
-            </div>
-          `;
-        }
+        showEmptyTripState('目前沒有行程，請點選「新增行程」開始建立。');
       }
     }
 
@@ -3693,6 +3716,16 @@ const showTripGroupHeaders = tripGroups.length > 1;
         }
       });
 
+      // 0.9 綁定國家選擇器點擊事件(頁面最上層主導覽)
+      const countriesTabList = document.getElementById('trip-countries-tab-list');
+      countriesTabList?.addEventListener('click', (e) => {
+        const tab = e.target.closest('.trip-country-tab');
+        if (tab) {
+          const id = tab.dataset.countryId;
+          if (id) switchCountry(id);
+        }
+      });
+
       // 1.5 綁定已儲存景點搜尋事件
       const savedSpotsSearch = document.getElementById('saved-spots-search');
       const btnClearSavedSearch = document.getElementById('btn-clear-saved-search');
@@ -3794,9 +3827,8 @@ const showTripGroupHeaders = tripGroups.length > 1;
         tripForm.reset();
         document.getElementById('form-trip-id').value = '';
         if (tripModalTitle) tripModalTitle.textContent = '＋ 新增旅行行程';
-        // 國家預設帶入目前檢視中行程的國家，沒有目前行程時退回 is_default 國家(日本)，再不然第一個國家
-        const currentTrip = tripsCache.find(t => String(t.id) === String(currentTripId));
-        const defaultCountryId = (currentTrip && currentTrip.country_id)
+        // 國家預設帶入目前選定的國家選擇器(selectedCountryId)，沒有時退回 is_default 國家(日本)，再不然第一個國家
+        const defaultCountryId = selectedCountryId
           || countriesCache.find(c => c.is_default)?.id
           || (countriesCache[0] && countriesCache[0].id)
           || '';
@@ -3917,7 +3949,14 @@ const showTripGroupHeaders = tripGroups.length > 1;
 
           closeTripModal();
 
-          // 重新繪製行程分組列表(依國家分組，MC-3)
+          // 若存檔的行程屬於別的國家(新增時選了別國、或編輯時改了國家)，先切換國家選擇器，
+          // 確保存檔後畫面看得到這筆行程，不會停在原本的國家找不到剛存的東西
+          if (String(savedTrip.country_id) !== String(selectedCountryId)) {
+            selectedCountryId = String(savedTrip.country_id);
+            renderCountrySelector();
+          }
+
+          // 重新繪製行程清單(僅顯示 selectedCountryId 這一國)
           renderTripsTabList();
 
           // 選中新建立/更新的行程
@@ -3958,28 +3997,17 @@ const showTripGroupHeaders = tripGroups.length > 1;
           tripsCache = tripsCache.filter(t => String(t.id) !== String(tripId));
           closeTripModal();
 
-          // 重新繪製行程分組列表(依國家分組，MC-3)
+          // 重新繪製行程清單(僅顯示 selectedCountryId 這一國)
           renderTripsTabList();
 
           showToast('行程已刪除');
 
-          if (tripsCache.length > 0) {
-            selectTrip(tripsCache[0].id);
+          // 優先選「目前選定國家內」剩下的第一筆行程，避免靜默跳去別國的行程
+          const tripsInSelectedCountry = tripsCache.filter(t => String(t.country_id) === String(selectedCountryId));
+          if (tripsInSelectedCountry.length > 0) {
+            selectTrip(tripsInSelectedCountry[0].id);
           } else {
-            currentTripId = '';
-            window.currentTripId = '';
-            clearMapMarkers();
-            clearItineraryMap();
-            const container = document.getElementById('spots-cards-container');
-            if (container) {
-              container.innerHTML = `
-                <div class="empty-state">
-                  目前沒有行程，請點選「新增行程」開始建立。
-                </div>
-              `;
-            }
-            const titleEl = document.getElementById('current-trip-title');
-            if (titleEl) titleEl.textContent = '景點清單';
+            showEmptyTripState('目前沒有行程，請點選「新增行程」開始建立。');
           }
 
           triggerBuildWebhook();

@@ -93,7 +93,72 @@
 }
 
 /* ==========================================================================
-   2. 行程切換列 (橫向滾動)
+   0. 國家選擇器 (行程頁國家導覽重構，2026-09-24)
+   頁面最上層主導覽，跨「行程/交通查詢/資源」三個子分頁常駐；
+   互動樣式比照 japan.css 的 .countries-scroll-container/.country-tab，配色改用 --travel-* 變數。
+   類名獨立為 trip-country-tab（非 country-tab），避免與 JapanCollection.astro 在同一頁共存時的 CSS 衝突
+   ========================================================================== */
+.trip-countries-scroll-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.trip-countries-list {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 4px 4px 8px 4px;
+  scroll-behavior: smooth;
+  flex-grow: 1;
+  -webkit-overflow-scrolling: touch;
+}
+
+.trip-countries-list::-webkit-scrollbar {
+  height: 4px;
+}
+.trip-countries-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.trip-countries-list::-webkit-scrollbar-thumb {
+  background: rgba(139, 115, 85, 0.15);
+  border-radius: 4px;
+}
+
+.trip-country-tab {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 20px;
+  border: 1px solid var(--travel-border);
+  background-color: rgba(139, 115, 85, 0.06);
+  color: var(--travel-text);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--travel-shadow-sm);
+}
+
+.trip-country-tab:hover {
+  background-color: var(--travel-secondary);
+  border-color: var(--travel-primary);
+  transform: translateY(-1px);
+}
+
+.trip-country-tab.active {
+  background-color: var(--travel-primary);
+  border-color: var(--travel-primary);
+  color: var(--travel-bg);
+  box-shadow: 0 4px 12px rgba(139, 115, 85, 0.2);
+}
+
+/* ==========================================================================
+   2. 行程切換列 (橫向滾動)：只顯示國家選擇器選中國家的行程，扁平列表、不分組
    ========================================================================== */
 .trips-scroll-container {
   display: flex;
@@ -101,33 +166,6 @@
   gap: 12px;
   margin-bottom: 24px;
   position: relative;
-}
-
-/* 多國家擴充(MC-3)：行程依國家分組的外層容器；只有一組(通常是只有日本)時
-   內層只有一個 .trip-group、不顯示 .trip-group-header，外觀與分組前的單一橫向列表一致 */
-.trips-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  flex-grow: 1;
-  min-width: 0; /* flex 子項預設 min-width:auto 會讓內層橫向捲動失效，這裡明確歸零 */
-}
-
-.trip-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.trip-group-header {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding-left: 2px;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--travel-text-muted);
 }
 
 .trips-list {
