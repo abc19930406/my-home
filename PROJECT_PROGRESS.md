@@ -1127,6 +1127,38 @@ MC-5b 驗收後使用者發現：被授權協作者打開「新增品項」Modal
 
 ---
 
+### ✅ 行程景點（TripPlanner.astro）備註換行/收合 + 全站欄位 XSS 轉義修復（2026-09-24，已結案）
+
+延續收藏頁的備註收合模式，比照同一套設計搬到 /trip；過程中稽核發現備註顯示未經轉義就插入 `innerHTML`，順勢擴大稽核範圍，補齊其他同樣未轉義的欄位。三個 commit 為同一批工作：
+
+- **`10a067e`**：備註換行/收合本體
+  - `.spot-note` 加 `white-space: pre-wrap` 保留換行；比照 `JapanCollection.astro` 的折疊判斷/展開狀態記錄/`ResizeObserver` 重判時機，獨立實作 `spotNoteNeedsCollapse()`/`refreshSpotNoteToggles()`/`handleSpotNoteToggle()`，門檻同為 7 行（`NOTE_COLLAPSE_LINES`），展開/收合不跳位
+  - **開工前安全稽核發現**：`linkifyText(spot.note)` 只做網址轉連結的正規表達式替換，完全沒有 HTML 轉義，而 3 個呼叫點（地圖標記彈出視窗、景點卡片清單、詳情 Modal）都是用 `innerHTML`/`.setContent` 插入——行程協作者（`can_edit_itinerary=true`）可編輯景點備註，屬於當下可利用的真實 XSS 風險。修法：新增 `escapeHtml()`（`div.textContent → innerHTML` 轉義），`linkifyText()` 先轉義再對轉義後文字做網址替換
+- **`edff1c0`**：欄位轉義稽核擴大範圍
+  - 同一支檔案稽核發現 `spot.name`/`spot.address`/`spot.open_hours`/`spot.price`（同樣是協作者可編輯欄位）在另外 6 處渲染點也是未轉義插入 `innerHTML`/屬性值：地圖標記彈出視窗、已儲存景點卡片清單（含 `img alt` 屬性）、行程模式每日景點項目、想去清單 Modal（含 `data-search-text` 屬性）、景點詳情 Modal，一併套用 `escapeHtml()`
+  - **`escapeHtml()` 擴充轉義引號**：原本的寫法在「元素內容」脈絡下轉義已經足夠安全，但同一個函式也要用在屬性值（`alt="..."`、`data-search-text="..."`），屬性脈絡下引號才是特殊字元——欄位值裡一個雙引號沒轉義就能跳出屬性、接上新屬性（例如注入 `onmouseover=...`）。補上 `"` → `&quot;`、`'` → `&#39;`，讓函式兩種脈絡都安全；想去清單原本用來擋雙引號的 `.replace(/"/g,'&quot;')` 土法一併換成統一的 `escapeHtml()`
+- **`d58368e`**：行程標題（`trip.name`/`trip.description`）比照補上
+  - 稽核時發現的同類問題，但 `trips` 表寫入是 `is_admin()` 專屬、協作者無法修改，風險層級本來就比景點欄位低；順手套用已經升級好的 `escapeHtml()`，收乾淨同批修正，不留尾巴
+
+**明確排除**：未動資料、RLS、命名；未改其他景點欄位或收藏頁（`JapanCollection.astro`，已於 `cee5f64` 獨立完成）。
+
+**驗證方式**：獨立重現 `escapeHtml()`/`linkifyText()` 邏輯，餵入同時含雙引號、HTML 標籤、`<script>` 的惡意字串，分別測試「元素內容」與「屬性值」兩種插入方式——確認沒有任何額外屬性被注入（`getAttributeNames()` 與預期相符）、沒有真的產生 `<script>` 子元素；確認 `data-search-text` 轉義後透過 `.dataset` 讀回來的值與原始文字完全相同（HTML 實體讀取時自動還原），證明既有的搜尋過濾功能不受影響；`astro check` 前後錯誤數比對一致（3 個 commit 皆為 1493 則，無新增）；本機 dev server 實測真實資料，含 `&` 字元的景點名稱（如「A&W 美浜店」）顯示正確、無雙重轉義，console 無新增錯誤。
+
+#### 自我驗收對照表
+
+| 驗收項目 | 對應設計 | 結果 |
+|---|---|---|
+| a. 換行正確保留（`white-space: pre-wrap`） | 使用者實測確認 | ✅ |
+| b. 折疊/展開不跳位，與收藏頁體驗一致 | 使用者實測確認 | ✅ |
+| c. 7 行以內無按鈕，超過才折疊 | 使用者實測確認 | ✅ |
+| d. XSS 注入（`<script>`/屬性跳脫）顯示為純文字、不執行 | 本機標準化測試（合成惡意字串）驗證；正式站待協作者帳號實測，見測試步驟 | ✅(本機)／待正式站 |
+| e. 網址仍可正確轉連結 | 沿用既有 `linkifyText()` 邏輯，僅調整轉義順序 | ✅ |
+| f. 手機/桌機、協作者/管理員皆正常 | 使用者實測確認 | ✅ |
+| commit + push 並貼出終端機輸出 | `10a067e`、`edff1c0`、`d58368e` | ✅ |
+| 文件同步（本節） | 本次一併完成 | ✅ |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
