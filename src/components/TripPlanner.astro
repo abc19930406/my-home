@@ -1064,11 +1064,15 @@ const showTripGroupHeaders = tripGroups.length > 1;
     let openAddSpotModal = null; // 全域新增景點 Modal 控制器
 
     // Helper: 把純文字轉成安全的 HTML 字串(轉義 < > & 等字元)，不影響換行字元(\n 原樣保留，
-    // 顯示端搭配 CSS white-space: pre-wrap 呈現)
+    // 顯示端搭配 CSS white-space: pre-wrap 呈現)。額外手動轉義引號：div.innerHTML 序列化
+    // 元素「內容」時不會轉義引號(內容脈絡下引號不是特殊字元)，但這個函式也會被用在屬性值
+    // (例如 alt="..."、data-search-text="...")——引號不轉義的話，欄位值裡的一個雙引號就能
+    // 跳出屬性、接上新的屬性(例如注入 onerror=...)，屬性注入風險跟元素內容注入一樣真實。
+    // 轉義成 HTML 實體在內容脈絡下同樣完全安全，統一處理不必為兩種脈絡各寫一份。
     function escapeHtml(str) {
       const div = document.createElement('div');
       div.textContent = str;
-      return div.innerHTML;
+      return div.innerHTML.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     // Helper: 將網址轉為超連結。先轉義整段文字，再只把「已轉義後」文字裡的網址部分包成 <a>，
@@ -1768,7 +1772,7 @@ const showTripGroupHeaders = tripGroups.length > 1;
   <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
     <span style="font-size:20px;">${emoji}</span>
     <div>
-      <div style="font-weight:700; font-size:15px; color:#3a2e24;">${spot.name}</div>
+      <div style="font-weight:700; font-size:15px; color:#3a2e24;">${escapeHtml(spot.name)}</div>
       ${subtypeLabel ? `<span style="font-size:11px; background:#f0ebe3; color:#8B7355; padding:2px 8px; border-radius:20px; display:inline-block; margin-top:4px;">${subtypeLabel}</span>` : ''}
     </div>
   </div>
@@ -1776,17 +1780,17 @@ const showTripGroupHeaders = tripGroups.length > 1;
   <!-- 資訊列 -->
   ${spot.address ? `
   <div style="display:flex; gap:6px; margin-bottom:8px; font-size:13px; color:#5a4a35;">
-    <span>📍</span><span style="line-height:1.4;">${spot.address}</span>
+    <span>📍</span><span style="line-height:1.4;">${escapeHtml(spot.address)}</span>
   </div>` : ''}
   
   ${spot.open_hours ? `
   <div style="display:flex; gap:6px; margin-bottom:8px; font-size:13px; color:#5a4a35;">
-    <span>🕐</span><span style="line-height:1.4;">${spot.open_hours}</span>
+    <span>🕐</span><span style="line-height:1.4;">${escapeHtml(spot.open_hours)}</span>
   </div>` : ''}
   
   ${spot.price ? `
   <div style="display:flex; gap:6px; margin-bottom:8px; font-size:13px; color:#5a4a35;">
-    <span>💰</span><span style="line-height:1.4;">${spot.price}</span>
+    <span>💰</span><span style="line-height:1.4;">${escapeHtml(spot.price)}</span>
   </div>` : ''}
   
   ${spot.note ? `
@@ -1975,10 +1979,10 @@ const showTripGroupHeaders = tripGroups.length > 1;
 
         // 開放時間與價格
         let metaText = '';
-        if (spot.open_hours) metaText += `⏰ ${spot.open_hours}`;
+        if (spot.open_hours) metaText += `⏰ ${escapeHtml(spot.open_hours)}`;
         if (spot.price) {
           if (metaText) metaText += ' | ';
-          metaText += `💰 ${spot.price}`;
+          metaText += `💰 ${escapeHtml(spot.price)}`;
         }
         const metaRow = metaText ? `<div class="spot-meta">${metaText}</div>` : '';
 
@@ -1987,7 +1991,7 @@ const showTripGroupHeaders = tripGroups.length > 1;
         if (spot.images && spot.images.length > 0) {
           imagesRow = `<div class="spot-images-row">`;
           spot.images.forEach(imgUrl => {
-            imagesRow += `<img src="${imgUrl}" alt="${spot.name}" class="spot-image-thumb" />`;
+            imagesRow += `<img src="${imgUrl}" alt="${escapeHtml(spot.name)}" class="spot-image-thumb" />`;
           });
           imagesRow += `</div>`;
         }
@@ -2021,7 +2025,7 @@ const showTripGroupHeaders = tripGroups.length > 1;
             </div>
             <div class="spot-card-main">
               <div class="spot-title-row">
-                <h4 class="spot-name">${spot.name}</h4>
+                <h4 class="spot-name">${escapeHtml(spot.name)}</h4>
                 <span class="badge-status ${spot.status}">${statusText}</span>
                 ${subtypeBadge}
                 ${ratingBadge}
@@ -3237,8 +3241,8 @@ const showTripGroupHeaders = tripGroups.length > 1;
             <div class="spot-order-badge">${index + 1}</div>
             <div class="spot-emoji">${typeInfo.emoji}</div>
             <div class="spot-info">
-              <div class="spot-name">${spot.name}</div>
-              <div class="spot-note">${spot.address || ''}</div>
+              <div class="spot-name">${escapeHtml(spot.name)}</div>
+              <div class="spot-note">${escapeHtml(spot.address || '')}</div>
             </div>
             ${canEdit ? `
               <div class="spot-actions">
@@ -3366,13 +3370,15 @@ const showTripGroupHeaders = tripGroups.length > 1;
           // 檢查是否已在當天
           const isAdded = daySpotsCache.some(ds => ds.spot_id == spot.id);
           const typeInfo = spotTypesCache.find(t => t.id == spot.spot_type_id) || { emoji: '📍' };
-          const searchText = ((spot.name || '') + ' ' + (spot.note || '') + ' ' + (spot.address || '')).replace(/"/g, '&quot;');
-          
+          // escapeHtml() 同時轉義引號，可以直接用在屬性值(data-search-text)，
+          // 取代原本只手動處理雙引號的 .replace(/"/g, '&quot;')
+          const searchText = escapeHtml((spot.name || '') + ' ' + (spot.note || '') + ' ' + (spot.address || ''));
+
           html += `
             <div class="wishlist-item ${isAdded ? 'disabled' : ''}" data-spot-id="${spot.id}" data-search-text="${searchText}">
               <div class="spot-emoji">${typeInfo.emoji}</div>
               <div class="spot-info">
-                <div class="spot-name">${spot.name}</div>
+                <div class="spot-name">${escapeHtml(spot.name)}</div>
                 <div class="spot-note" style="color: ${spot.status==='visited'?'var(--travel-primary)':'#f5a623'};">
                   ${spot.status === 'visited' ? '已去' : '想去'}
                 </div>
@@ -3436,15 +3442,15 @@ const showTripGroupHeaders = tripGroups.length > 1;
         ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name)}&query_place_id=${spot.place_id}`
         : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(spot.name + ' ' + (spot.address || ''))}`;
         
-      titleEl.innerHTML = `<span style="margin-right: 8px;">${typeInfo.emoji}</span>${spot.name}`;
-      
+      titleEl.innerHTML = `<span style="margin-right: 8px;">${typeInfo.emoji}</span>${escapeHtml(spot.name)}`;
+
       let html = '';
       if (subtypeLabel) {
-        html += `<div style="margin-bottom: 12px;"><span style="font-size:12px; background:#f0ebe3; color:#8B7355; padding:4px 10px; border-radius:20px; display:inline-block;">${subtypeLabel}</span></div>`;
+        html += `<div style="margin-bottom: 12px;"><span style="font-size:12px; background:#f0ebe3; color:#8B7355; padding:4px 10px; border-radius:20px; display:inline-block;">${escapeHtml(subtypeLabel)}</span></div>`;
       }
-      if (spot.address) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>📍</span><span style="flex:1;">${spot.address}</span></div>`;
-      if (spot.open_hours) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>🕐</span><span style="flex:1;">${spot.open_hours}</span></div>`;
-      if (spot.price) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>💰</span><span style="flex:1;">${spot.price}</span></div>`;
+      if (spot.address) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>📍</span><span style="flex:1;">${escapeHtml(spot.address)}</span></div>`;
+      if (spot.open_hours) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>🕐</span><span style="flex:1;">${escapeHtml(spot.open_hours)}</span></div>`;
+      if (spot.price) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>💰</span><span style="flex:1;">${escapeHtml(spot.price)}</span></div>`;
       if (spot.note) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>📝</span><span style="flex:1; white-space:pre-wrap;">${linkifyText(spot.note)}</span></div>`;
       
       html += `
