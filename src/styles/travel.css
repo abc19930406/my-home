@@ -532,6 +532,39 @@
   line-height: 1.5;
   border-left: 2px solid var(--travel-primary);
   padding-left: 8px;
+  white-space: pre-wrap; /* 保留使用者輸入的換行與空白，仍會自動折行 */
+}
+
+/* 景點備註折疊(展開/收合)：比照收藏頁備註收合，僅作用於「已儲存景點」清單卡片；
+   預設限制顯示行數(--note-max-lines 由 JS 依門檻寫入，預設 7)，是否出現展開鈕由 JS 依
+   實際行數判斷，7 行以內的備註不會被截斷、也不會出現任何展開鈕 */
+.spot-note-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.spot-note.note-clamped {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--note-max-lines, 7);
+  line-clamp: var(--note-max-lines, 7);
+  overflow: hidden;
+}
+
+.note-toggle {
+  align-self: flex-end;
+  background: none;
+  border: none;
+  padding: 4px 0 0;
+  color: var(--travel-primary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.note-toggle:hover {
+  opacity: 0.75;
+  text-decoration: underline;
 }
 
 /* 景點照片預覽 */

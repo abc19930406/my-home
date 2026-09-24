@@ -1063,13 +1063,106 @@ const showTripGroupHeaders = tripGroups.length > 1;
     let openInfoWindow = null; // 指向當前開啟的氣泡視窗
     let openAddSpotModal = null; // 全域新增景點 Modal 控制器
 
-    // Helper: 將網址轉為超連結
+    // Helper: 把純文字轉成安全的 HTML 字串(轉義 < > & 等字元)，不影響換行字元(\n 原樣保留，
+    // 顯示端搭配 CSS white-space: pre-wrap 呈現)
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // Helper: 將網址轉為超連結。先轉義整段文字，再只把「已轉義後」文字裡的網址部分包成 <a>，
+    // 確保使用者輸入的任何 HTML 標籤(例如 <script>)一律當純文字顯示，不會被當標籤解析執行——
+    // 這裡輸出的字串是直接經 innerHTML 插入頁面的，且非管理員的行程協作者也能編輯景點備註，
+    // 沒有這層轉義就是 XSS 風險
     function linkifyText(text) {
       if (!text) return text;
-      const urlRegex = new RegExp('(https?:\\/\\/[^\\s]+)', 'g');
-      return text.replace(urlRegex, function(url) {
+      const escaped = escapeHtml(text);
+      const urlRegex = new RegExp('(https?:\\/\\/[^\\s<]+)', 'g');
+      return escaped.replace(urlRegex, function(url) {
         return '<a href="' + url + '" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: underline; opacity: 0.8;">' + url + '</a>';
       });
+    }
+
+    // ============================================================
+    // 景點備註折疊(展開/收合)：比照 JapanCollection.astro 收藏頁備註收合的既有模式，
+    // 兩處體驗一致；此處只作用於「已儲存景點」清單卡片(.spot-card .spot-note)，
+    // 地圖標記彈出內容與景點詳情 Modal 是空間受限/本來就要顯示全文的情境，不加收合
+    // ============================================================
+    const NOTE_COLLAPSE_LINES = 7; // 超過幾行才折疊；同步寫入 CSS 變數 --note-max-lines，判斷與樣式共用同一個值
+    const expandedSpotNoteIds = new Set(); // 以 spot id 記錄已展開的備註，整批重繪(篩選/切換行程)後不會被折回
+
+    // 【獨立的判斷邏輯】這則備註「是否需要折疊」。日後若折疊後的行為要改(例如改成點擊彈出 Modal 顯示全文)，
+    // 只需要換掉下方 handleSpotNoteToggle() 的行為，這個判斷不必動。
+    // 用實際「顯示行數」而非字數判斷：中英文、換行造成的字數差異很大，行數才準；
+    // 行數 = 內容總高度 ÷ 行高，內容高度取 scrollHeight(不受目前是否已被 line-clamp 截斷影響)。
+    // 回傳 null 代表目前量不到(元素被隱藏、寬度為 0)，呼叫端應維持原狀，等可見後再重新判斷。
+    function spotNoteNeedsCollapse(noteEl) {
+      if (!noteEl || noteEl.clientWidth === 0) return null;
+      const style = getComputedStyle(noteEl);
+      const lineHeight = parseFloat(style.lineHeight);
+      if (!lineHeight || Number.isNaN(lineHeight)) return null;
+      const contentHeight = noteEl.scrollHeight - parseFloat(style.paddingTop || '0') - parseFloat(style.paddingBottom || '0');
+      const lineCount = contentHeight / lineHeight;
+      return lineCount > NOTE_COLLAPSE_LINES + 0.5;
+    }
+
+    // 依實際行數決定每則備註要不要顯示展開鈕；渲染後、視窗尺寸改變時都會呼叫
+    function refreshSpotNoteToggles() {
+      const container = document.getElementById('spots-cards-container');
+      if (!container) return;
+      container.style.setProperty('--note-max-lines', String(NOTE_COLLAPSE_LINES));
+      container.querySelectorAll('.spot-note-wrap').forEach(wrap => {
+        const noteEl = wrap.querySelector('.spot-note');
+        const btn = wrap.querySelector('.note-toggle');
+        if (!noteEl || !btn) return;
+        const needs = spotNoteNeedsCollapse(noteEl);
+        if (needs === null) return;
+        // 7 行以內：整段顯示，不出現任何展開鈕(不對短備註加多餘 UI)
+        btn.style.display = needs ? '' : 'none';
+      });
+    }
+
+    // 目前的折疊行為：卡片原地展開/收合(手風琴式)，只切換 class，不重繪清單，卡片位置不變
+    function handleSpotNoteToggle(btn) {
+      const wrap = btn.closest('.spot-note-wrap');
+      const noteEl = wrap?.querySelector('.spot-note');
+      const card = btn.closest('.spot-card');
+      if (!noteEl || !card) return;
+      const id = String(card.dataset.spotId);
+      const expanding = noteEl.classList.contains('note-clamped');
+
+      // 記下按鈕在視窗中的位置：收合時內容變短，按鈕會往上移，捲動位置若不補償，
+      // 畫面就會跑到卡片下方別的內容(看起來像跳位)
+      const topBefore = btn.getBoundingClientRect().top;
+
+      noteEl.classList.toggle('note-clamped', !expanding);
+      btn.textContent = expanding ? '收合' : '⋯展開';
+      if (expanding) expandedSpotNoteIds.add(id); else expandedSpotNoteIds.delete(id);
+
+      if (!expanding) {
+        const delta = btn.getBoundingClientRect().top - topBefore;
+        if (Math.abs(delta) > 1) window.scrollBy({ top: delta, left: 0, behavior: 'instant' });
+      }
+    }
+
+    // 視窗寬度改變(含手機轉向)、地圖/行程模式切換或 /trip 外層分頁切回「行程」導致
+    // 這個容器從隱藏(寬度 0，量不到行數)變回可見時，都需要重新判斷；用 rAF 合併連續觸發。
+    // 掛 ResizeObserver 在容器本身，比只聽 window resize 更穩：分頁切換這類「寬度從 0 變回正常」
+    // 的情況不會觸發 window resize，但一定會觸發容器自身的 ResizeObserver
+    {
+      let noteRefreshQueued = false;
+      const queueSpotNoteRefresh = () => {
+        if (noteRefreshQueued) return;
+        noteRefreshQueued = true;
+        requestAnimationFrame(() => { noteRefreshQueued = false; refreshSpotNoteToggles(); });
+      };
+      const spotsNoteContainer = document.getElementById('spots-cards-container');
+      if (spotsNoteContainer && typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(queueSpotNoteRefresh).observe(spotsNoteContainer);
+      }
+      window.addEventListener('resize', queueSpotNoteRefresh);
+      document.fonts?.ready.then(queueSpotNoteRefresh);
     }
 
     // 動態渲染首頁上方篩選列
@@ -1698,7 +1791,7 @@ const showTripGroupHeaders = tripGroups.length > 1;
   
   ${spot.note ? `
   <div style="display:flex; gap:6px; margin-bottom:12px; font-size:13px; color:#5a4a35;">
-    <span>📝</span><span style="line-height:1.4;">${linkifyText(spot.note)}</span>
+    <span>📝</span><span style="line-height:1.4; white-space:pre-wrap;">${linkifyText(spot.note)}</span>
   </div>` : ''}
   
   <!-- 按鈕列 -->
@@ -1934,7 +2027,12 @@ const showTripGroupHeaders = tripGroups.length > 1;
                 ${ratingBadge}
               </div>
               ${metaRow}
-              ${spot.note ? `<p class="spot-note">${linkifyText(spot.note)}</p>` : ''}
+              ${spot.note ? `
+                <div class="spot-note-wrap">
+                  <p class="spot-note ${expandedSpotNoteIds.has(String(spot.id)) ? '' : 'note-clamped'}">${linkifyText(spot.note)}</p>
+                  <button type="button" class="note-toggle" style="display: none;">${expandedSpotNoteIds.has(String(spot.id)) ? '收合' : '⋯展開'}</button>
+                </div>
+              ` : ''}
               ${imagesRow}
             </div>
             ${adminActions}
@@ -1943,6 +2041,7 @@ const showTripGroupHeaders = tripGroups.length > 1;
       });
 
       container.innerHTML = html;
+      refreshSpotNoteToggles();
 
       // 4. 綁定列表內的點擊與管理事件
       // 點擊照片放大 Lightbox
@@ -1962,9 +2061,9 @@ const showTripGroupHeaders = tripGroups.length > 1;
       // 點擊卡片地圖置中
       container.querySelectorAll('.spot-card').forEach(card => {
         card.addEventListener('click', (e) => {
-          // 如果點擊的是按鈕或照片，不要觸發地圖移動
+          // 如果點擊的是按鈕、照片或備註展開/收合鈕，不要觸發地圖移動
           const target = e.target;
-          if (target.closest('.spot-admin-actions') || target.closest('.spot-image-thumb')) {
+          if (target.closest('.spot-admin-actions') || target.closest('.spot-image-thumb') || target.closest('.note-toggle')) {
             return;
           }
 
@@ -3346,7 +3445,7 @@ const showTripGroupHeaders = tripGroups.length > 1;
       if (spot.address) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>📍</span><span style="flex:1;">${spot.address}</span></div>`;
       if (spot.open_hours) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>🕐</span><span style="flex:1;">${spot.open_hours}</span></div>`;
       if (spot.price) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>💰</span><span style="flex:1;">${spot.price}</span></div>`;
-      if (spot.note) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>📝</span><span style="flex:1;">${linkifyText(spot.note)}</span></div>`;
+      if (spot.note) html += `<div style="display:flex; gap:8px; margin-bottom:12px;"><span>📝</span><span style="flex:1; white-space:pre-wrap;">${linkifyText(spot.note)}</span></div>`;
       
       html += `
         <div style="margin-top: 20px; border-top: 1px solid var(--travel-border); padding-top: 16px;">
@@ -3538,9 +3637,17 @@ const showTripGroupHeaders = tripGroups.length > 1;
       // 0. 綁定編輯與刪除景點事件 (Event Delegation)
       const spotsContainer = document.getElementById('spots-cards-container');
       if (spotsContainer) {
+        // 備註展開/收合：獨立的委派監聽，不受下方 canEditItinerary 權限門檻限制——
+        // 任何看得到這個景點的人(管理員、協作者、無編輯權的訪客)都能展開/收合備註，
+        // 這只是純顯示切換，不是編輯行為
+        spotsContainer.addEventListener('click', (e) => {
+          const toggleBtn = e.target.closest('.note-toggle');
+          if (toggleBtn) handleSpotNoteToggle(toggleBtn);
+        });
+
         spotsContainer.addEventListener('click', async (e) => {
           if (!canEditItinerary(currentTripId)) return;
-          
+
           const editBtn = e.target.closest('[data-action="edit-spot"]');
           if (editBtn) {
             e.stopPropagation();
