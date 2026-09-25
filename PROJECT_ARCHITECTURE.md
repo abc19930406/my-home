@@ -260,7 +260,7 @@ if (!session) {
 | status | 現在狀態（id=1 固定） |
 | cards | 首頁卡片資料，**實際資料源**（見下方「cards 資料表欄位」章節） |
 | daily | Polaroid 底片日記 |
-| transactions | 記帳明細（含 currency、amount_jpy、exchange_rate） |
+| transactions | 記帳明細（含 currency、amount_jpy、exchange_rate、original_amount；2026-09-25 新增 original_amount，exchange_rate 由 numeric(10,4) 放寬為 numeric） |
 | income_categories | 收入來源（動態管理） |
 | expense_categories | 支出分類（動態管理） |
 | japan_categories | 日本收藏分類（兩層） |
@@ -350,6 +350,8 @@ if (!session) {
 ### 匯率 API（記帳系統）
 - 後端 Serverless Function：src/pages/api/exchange-rate.ts
 - 多重備援 API，由伺服器端呼叫避免 CORS 問題
+- 2026-09-25 起支援多幣別：`?from=JPY|THB|VND`（白名單，其他回 400；不帶參數預設 JPY），回傳 `{ rate, from }`，匯率不四捨五入（VND 約 0.00125，需完整精度）；frankfurter 備援來源不支援 VND，僅作備援
+- 記帳頁（`ledger.astro`）外幣機制：`FOREIGN_CURRENCIES` 單一設定表（符號/名稱/備援匯率/顯示位數，VND 顯示 6 位）；外幣帳目寫入 `currency`（原始幣別）、`original_amount`（原始外幣金額）、`exchange_rate`（當時匯率）、`amount`（換算台幣）；日幣另照舊寫 `amount_jpy`；台幣帳目此幾欄為 null。上方匯率欄固定顯示日幣即時匯率，不隨記帳幣別變動；換算用匯率在記帳視窗內針對選中外幣抓取，失敗時視窗內顯示手動匯率輸入框；編輯既有外幣帳目沿用該筆已存匯率
 
 ### Vercel Deploy Hook（重新部署觸發，2026-07-11 安全重構）
 - **背景**：hook 網址原以 `PUBLIC_VERCEL_DEPLOY_HOOK` + `define:vars` 暴露於 7 個頁面的前端原始碼，任何人取得後可無限觸發部署，已視為洩漏並汰換

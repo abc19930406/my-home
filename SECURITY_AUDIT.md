@@ -38,7 +38,7 @@
 | **cards** | [index.astro:12](src/pages/index.astro:12) `SELECT *`,prerender=true(首頁卡片,設計上本就公開) | UPDATE 在 [admin.astro:250](src/pages/admin.astro:250) |
 | **allowed_users** | ✅ 2026-07-11 已修復:無 frontmatter 查詢 | SELECT(白名單比對)在 JapanCollection.astro、TripPlanner.astro、japan.astro;RLS 已收緊為管理員全讀、非管理員僅讀自己那一列,寫入僅管理員 |
 | **wishlist_items**(✅ 2026-07-13 INSERT/UPDATE 已收斂) | 無 frontmatter 查詢 | SELECT/INSERT/UPDATE 在 JapanCollection.astro、japan.astro(朋友願望清單);INSERT/UPDATE 新增 `can_wishlist_item()` 檢查,DELETE/SELECT 未動 |
-| **transactions** | ✅ 2026-07-11 已修復:無 frontmatter 查詢(ledger.astro 無 build-time `.from()`) | SELECT/INSERT/UPDATE/DELETE 全在 [ledger.astro](src/pages/ledger.astro:334)(記帳明細,私人財務資料);RLS 已收緊為僅管理員,`ledger.astro` 頁面本身也新增管理員身分檢查 |
+| **transactions** | ✅ 2026-07-11 已修復:無 frontmatter 查詢(ledger.astro 無 build-time `.from()`) | SELECT/INSERT/UPDATE/DELETE 全在 [ledger.astro](src/pages/ledger.astro:334)(記帳明細,私人財務資料);RLS 已收緊為僅管理員,`ledger.astro` 頁面本身也新增管理員身分檢查;2026-09-25 新增 `original_amount` 欄位並放寬 `exchange_rate` 精度,皆未改 RLS,沿用既有僅管理員政策 |
 | **income_categories / expense_categories** | 無 | SELECT 在 ledger.astro |
 | **daily** | 無 frontmatter 查詢(polaroid.astro 無 build-time `.from()`) | SELECT/INSERT/UPDATE/DELETE 在 [polaroid.astro](src/pages/polaroid.astro:187) |
 | **japan_images** | 無 | INSERT 在 JapanCollection.astro、japan.astro(上傳圖片記錄) |

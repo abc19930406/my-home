@@ -1215,6 +1215,32 @@ MC-3（2026-09-17）的「行程清單依國家分組、全部攤開」在國家
 
 ---
 
+### ✅ 記帳外幣擴充：新增泰銖(THB)、越南盾(VND)，含匯率欄調整與多幣別月統計（2026-09-25，已結案）
+
+三個 commit：`a8285ad`（THB/VND 換算）、`adfec8a`（上方匯率欄固定日幣）、`ad44138`（本月外幣合計多幣別）。
+
+- **資料庫（使用者於 Dashboard 執行，先查後改，確認完成後才動程式碼）**：查詢確認 `transactions` 已有 `currency`、`amount_jpy`、`exchange_rate`，與任務指令要新增的 `original_currency`/`original_amount`/`exchange_rate` 重疊（`exchange_rate` 同名 `ADD COLUMN` 會失敗）。與使用者確認後**只新增 `original_amount numeric`**，沿用 `currency`（原始幣別）與 `exchange_rate`（當時匯率）。另發現 `exchange_rate` 原為 `numeric(10,4)`，VND 約 0.00125 會被截成 0.0013（約 4% 誤差），放寬為不限精度 `numeric`（只放寬不改值）。不動 RLS
+- **後端**：`/api/exchange-rate?from=JPY|THB|VND`（白名單，其他 400，預設 JPY 相容），三個來源參數化，匯率不四捨五入
+- **前端（`ledger.astro`）**：`FOREIGN_CURRENCIES` 單一設定表；切換外幣才抓該幣別匯率；外幣帳目寫 `currency`/`original_amount`/`exchange_rate`/`amount`，日幣另照舊寫 `amount_jpy`（既有日幣統計與顯示不變、不重算既有帳目）；明細與分類明細顯示泛化為任何外幣
+- **編輯既有外幣帳目沿用該筆已存匯率**（原日幣行為是存檔時用最新匯率重算，舊帳台幣值會漂移，與「避免歷史失真」衝突；此為日幣唯一行為變動）
+- **手動匯率輸入框搬進記帳視窗**：原在頁面頂部，會被視窗全螢幕遮罩蓋住，抓取失敗時點不到
+- **驗收 d 修正（`adfec8a`）**：使用者要求上方匯率欄回歸多幣別前的行為——永遠固定顯示日幣即時匯率、🔄 只刷新日幣；泰銖/越南盾/日幣的換算匯率只在記帳視窗內的換算提示顯示，不寫入上方欄。日幣記帳仍在視窗內自行抓匯率（與上方欄同一 API、同值），未改為共用上方欄，以免動到已驗收的換算邏輯
+- **本月外幣支出合計（`ad44138`）**：依每筆交易 `currency` 分組（任務指令寫 `original_currency`，實際欄位為 `currency`），各組原幣金額 + 台幣合計；台幣合計是各筆帳目當時換算後儲存的 `amount` 加總，不用今天匯率重算；只顯示本月有支出的幣別，無外幣支出時整個區塊隱藏，台幣不納入；只有日幣時外觀與原本一致
+- **明確排除**：不動 RLS、不重算既有帳目、不改命名
+- **驗證**：API 實測 JPY 0.20036、THB 0.951264、VND 0.001225，USD 回 400；150000 VND ≈ 184 TWD，`toFixed(4)` 會顯示 0.0012，故 VND 顯示 6 位
+
+#### 自我驗收對照表
+
+| 驗收項目 | 結果 |
+|---|---|
+| THB/VND 自動抓匯率、換算儲存、VND 大數值與精度、手動備援、原幣別/原金額/當時匯率記錄、台幣帳目三欄為空 | ✅ 使用者實測（a-g，其中 d 依上方修正調整後重測通過） |
+| 上方匯率欄固定日幣、🔄 刷新日幣、各幣別換算不受影響 | ✅ 使用者實測（a-f） |
+| 本月外幣合計：純日幣一致、三幣別各一組、用當時匯率、無外幣時隱藏、VND 大數值、台幣不納入 | ✅ 使用者實測（a-g） |
+| commit + push | ✅ `a8285ad`、`adfec8a`、`ad44138` |
+| 文件同步（PROJECT_PROGRESS.md、PROJECT_ARCHITECTURE.md、SECURITY_AUDIT.md） | ✅ 本次完成 |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
@@ -1287,7 +1313,7 @@ MC-3（2026-09-17）的「行程清單依國家分組、全部攤開」在國家
 | status | 現在狀態（id=1 固定） | ✅ |
 | cards | 首頁卡片資料，**首頁的實際資料源**（`links.ts` 僅為查詢失敗/空表時的編譯期備援，2026-07-18 確認並補上「日文學習」卡片時發現，欄位結構與 RLS 現況見 PROJECT_ARCHITECTURE.md「cards 資料表欄位」章節） | ✅ |
 | daily | Polaroid 底片日記 | ✅ |
-| transactions | 記帳明細（含 currency、amount_jpy、exchange_rate） | ✅ |
+| transactions | 記帳明細（含 currency、amount_jpy、exchange_rate、original_amount） | ✅（2026-09-25 新增 original_amount、exchange_rate 放寬為 numeric，記帳外幣擴充） |
 | income_categories | 收入來源（動態管理） | ✅ |
 | expense_categories | 支出分類（動態管理） | ✅ |
 | japan_categories | 日本收藏分類（兩層） | ✅ |
