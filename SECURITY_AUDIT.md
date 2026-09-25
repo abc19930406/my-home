@@ -61,6 +61,7 @@
 - **修復**:刪除 `Authenticated users can update cards`,新建 `Only admin can update cards`(`USING`/`WITH CHECK (public.is_admin())`,重用既有函式);SELECT 不動。刻意**不新增** INSERT/DELETE 的管理員政策:現況無人能新增/刪除已比「僅管理員」更嚴,新增反而是開放原本沒有的能力,日後要做新增/刪除卡片再加
 - **副作用處理**:Modal 的 `.update()` 原本不檢查受影響筆數,被 RLS 擋下(或標題比對不到)只會寫入 0 筆且不報錯、畫面誤報「已儲存」;已補上 `.select()` 並檢查筆數,0 筆時走既有錯誤提示(`86900aa`)
 - 使用者已實測:管理員編輯卡片正常;朋友帳號 Console 寫入被拒且首頁卡片正常;未登入訪客首頁卡片正常顯示
+- **`/admin` 頁面層同步收緊(2026-09-26,`4e4c2b0`)**:該頁原本只檢查有無 session,朋友/家人帳號登入後可打開並看到卡片編輯 Modal 等管理介面(寫入被資料庫擋下,但入口不該暴露)。已改為比對 `PUBLIC_ADMIN_EMAIL`(不分大小寫),非管理員導回首頁並提示,未登入維持導向 `/login`;使用者已實測
 
 ### travel_coupons / travel_subway_maps / trip_subway_categories(✅ 2026-07-13 UI 已上線,V2 階段 5)
 
