@@ -278,12 +278,15 @@ import { initTitleEditor } from '../lib/title-editor';
 
     try {
       // 1. 寫入 Supabase
-      const { error } = await supabase
+      const { data: updated, error } = await supabase
         .from('cards')
         .update({ title, description, url })
-        .eq('title', originalTitle);
+        .eq('title', originalTitle)
+        .select();
 
       if (error) throw error;
+      // RLS 擋下(非管理員)或標題比對不到時不會報錯，只會寫入 0 筆；不可誤報成功
+      if (!updated || updated.length === 0) throw new Error('沒有權限或找不到這張卡片，未儲存');
       
       // 2. 觸發 Vercel Webhook 重新編譯首頁
       triggerDeploy();
