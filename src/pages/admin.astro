@@ -188,6 +188,15 @@ import { initTitleEditor } from '../lib/title-editor';
     window.location.href = '/login';
     return;
   }
+  // 管理後台僅管理員本人可進：已登入但非管理員(含白名單朋友/家人帳號)導回首頁並提示，
+  // 不導去登入頁——問題不是沒登入而是沒權限(比照 ledger.astro；email 不分大小寫比對)。
+  // 內容預設 display:none，通過檢查才顯示，非管理員不會看到管理介面
+  const adminEmail = (import.meta.env.PUBLIC_ADMIN_EMAIL || '').toLowerCase();
+  if (!adminEmail || (session.user?.email || '').toLowerCase() !== adminEmail) {
+    alert('僅管理員可使用管理頁面');
+    window.location.href = '/';
+    return;
+  }
   if (adminContent) adminContent.style.display = 'block';
 
   // 觸發重新部署:改經後端 API 驗證管理員身分,hook 網址不再暴露於前端
@@ -206,9 +215,7 @@ import { initTitleEditor } from '../lib/title-editor';
 
   // 標題：讀取與管理員編輯，與首頁共用同一份邏輯(src/lib/title-editor.ts)；「 (管理模式)」只是顯示層後綴，
   // 編輯框與寫入資料庫的永遠是純副標題值
-  const adminEmail = (import.meta.env.PUBLIC_ADMIN_EMAIL || '').toLowerCase();
-  const isAdminUser = !!(adminEmail && (session.user?.email || '').toLowerCase() === adminEmail);
-  await initTitleEditor(supabase, { isAdmin: isAdminUser, subtitleSuffix: ' (管理模式)' });
+  await initTitleEditor(supabase, { isAdmin: true, subtitleSuffix: ' (管理模式)' });
 
   // 卡片：載入後重讀 cards 表原地更新(編輯按鈕的 data-title 也同步為資料庫最新值)；失敗保留靜態版
   refreshCardsFromDb(supabase);
