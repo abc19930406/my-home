@@ -285,6 +285,14 @@ if (!session) {
 - id（固定為 1）
 - reading、music、mood、doing（現在狀態四欄）
 - japan_explore_public（boolean，控制探索日本搜尋的公開/私人）
+- site_title、site_subtitle（text 可空，2026-09-25 新增：站名/副標題的**唯一資料來源**，空值回退預設「The Corner Table」/「一個安靜角落，存放思緒與生活」）
+- RLS：SELECT 公開；UPDATE 僅 `is_admin()`（2026-09-25 由 authenticated 收緊）
+
+### 站名與首頁資料流（2026-09-25）
+- **首頁 `/` 與 `/admin` 為 prerender 靜態頁**，cards 與 status 在 build time 烤進 HTML；管理員改完要重新部署才會進靜態版。因此兩頁載入後由前端**重讀資料庫覆蓋畫面**（讀取成功才替換，失敗保留靜態版）：標題/副標題/頁尾站名由 `src/lib/title-editor.ts`（首頁與管理頁共用讀取與管理員編輯邏輯），卡片由 `src/lib/live-cards.ts`（原地更新既有卡片，不整區重繪，以保留 CardSection 的 scoped CSS 與旅行地圖卡互動；分區卡片數與靜態版不一致時該分區保留靜態版）
+- **站名連動位置**：首頁與管理頁主/副標題、兩頁頁尾版權（載入時刷新）、所有頁面分頁標題（`Layout.astro` 接收 `title`，顯示「頁面名 | 站名」；站名由 `src/lib/site-title.ts` 的 `getSiteTitle()` 在 build/SSR 時讀 `status.site_title`，60 秒記憶，失敗回退預設；分頁標題需等重新部署才更新）。**維持寫死**：網頁描述、iOS 主畫面名、PWA `manifest.json`、AI 助手系統提示（裝置/搜尋引擎固定名稱或模型身分說明）
+- 管理頁「 (管理模式)」是顯示層後綴，不寫入資料庫
+- 管理頁卡片來源原為本機 `links.ts`（重新整理後永遠是舊內容），已改為與首頁一致（先讀 `cards` 表，失敗回退 `links.ts`）
 
 ### cards 資料表欄位（首頁卡片資料，2026-07-18 補充記錄）
 - 欄位：`id`（PK，自動遞增）、`section`（分區名稱）、`title`、`icon`（Tabler icon 名稱）、`description`、`url`、`sort_order`（現有資料以 10 為單位遞增：10、20、30...）、`children`（jsonb 陣列，格式 `{ title, url }[]`，供卡片下方子連結使用，例如「知識庫」卡片的「Obsidian 筆記」）
