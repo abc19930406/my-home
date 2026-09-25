@@ -23,7 +23,7 @@ import '../styles/ledger.css';
         <h1 class="page-title">記帳</h1>
         <p class="page-subtitle">收支紀錄・薪資來源</p>
         <div class="exchange-rate-display">
-          <span id="exchange-rate-text">台幣記帳，無需換算</span>
+          <span id="exchange-rate-text">載入匯率中...</span>
           <button id="btn-refresh-rate" class="btn-refresh-rate" title="重新整理匯率">🔄</button>
         </div>
         <hr class="header-divider" />
@@ -298,18 +298,37 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
     categories.expense = rawCategories.expense.map(c => c.name);
   }
 
-  // 匯率相關：只針對「目前選中的外幣」抓取，頂部匯率欄一次只顯示這一種
+  // 上方匯率欄：固定顯示日幣(JPY→TWD)即時匯率，不隨記帳幣別變動；重新整理按鈕也只刷新日幣
+  async function fetchHeaderJpyRate() {
+    refreshRateBtn.classList.add('spinning');
+    try {
+      let rate = null;
+      const res = await fetch('/api/exchange-rate?from=JPY');
+      if (res.ok) {
+        const data = await res.json();
+        rate = data.rate || null;
+      }
+      if (!rate) throw new Error('All APIs failed');
+      const now = new Date();
+      const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      rateText.textContent = `目前匯率：1 JPY ≈ ${formatRate(rate, 'JPY')} TWD (${timeStr})`;
+    } catch (e) {
+      rateText.textContent = '日幣匯率載入失敗';
+    } finally {
+      refreshRateBtn.classList.remove('spinning');
+    }
+  }
+
+  // 記帳視窗內：針對「目前選中的外幣」抓取換算用匯率(不寫入上方匯率欄)。抓失敗時顯示視窗內的手動輸入框
   async function fetchExchangeRate() {
     const cur = currentCurrency;
     const cfg = FOREIGN_CURRENCIES[cur];
     if (!cfg) {
-      rateText.textContent = '台幣記帳，無需換算';
       manualRateContainer.style.display = 'none';
       return;
     }
-    refreshRateBtn.classList.add('spinning');
     manualRateContainer.style.display = 'none';
-    rateText.textContent = `載入 ${cur} 匯率中...`;
+    conversionHint.textContent = `載入 ${cur} 匯率中...`;
     try {
       let rate = null;
       const res = await fetch(`/api/exchange-rate?from=${cur}`);
@@ -318,29 +337,20 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
         rate = data.rate || null;
       }
       if (cur !== currentCurrency) return; // 抓取期間使用者已切換幣別，丟棄過期結果
-
-      if (rate) {
-        currentExchangeRate = rate;
-        const now = new Date();
-        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-        rateText.textContent = `目前匯率：1 ${cur} ≈ ${formatRate(rate, cur)} TWD (${timeStr})`;
-      } else {
-        throw new Error('All APIs failed');
-      }
+      if (!rate) throw new Error('All APIs failed');
+      currentExchangeRate = rate;
     } catch (e) {
       if (cur !== currentCurrency) return;
-      rateText.textContent = `${cur} 匯率載入失敗，請手動輸入`;
-      manualRateLabel.textContent = `手動輸入匯率：1 ${cur} = `;
+      manualRateLabel.textContent = `${cur} 匯率載入失敗，請手動輸入：1 ${cur} = `;
       manualRateContainer.style.display = 'flex';
       manualRateInput.value = cfg.fallbackRate;
       currentExchangeRate = cfg.fallbackRate;
     } finally {
-      refreshRateBtn.classList.remove('spinning');
       calculateConversion();
     }
   }
 
-  refreshRateBtn.onclick = fetchExchangeRate;
+  refreshRateBtn.onclick = fetchHeaderJpyRate;
 
   manualRateInput.oninput = (e) => {
     const cfg = FOREIGN_CURRENCIES[currentCurrency];
@@ -499,7 +509,6 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
       if (item.exchange_rate) {
         currentExchangeRate = Number(item.exchange_rate);
         manualRateContainer.style.display = 'none';
-        rateText.textContent = `此筆帳目記錄匯率：1 ${itemCurrency} ≈ ${formatRate(currentExchangeRate, itemCurrency)} TWD（按 🔄 可改用最新匯率）`;
       }
     } else {
       amountInput.value = item ? item.amount : '';
@@ -555,16 +564,14 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
       conversionHint.style.display = 'none';
       manualRateContainer.style.display = 'none';
       currentExchangeRate = null;
-      rateText.textContent = '台幣記帳，無需換算';
     }
     calculateConversion();
   }
 
-  // Modal 關閉後頂部匯率欄回到台幣狀態(一次只顯示當前幣別，Modal 沒開就是台幣)
+  // Modal 關閉後重置換算狀態(上方匯率欄固定顯示日幣，不受影響)
   function resetRateBar() {
     currentCurrency = 'TWD';
     currentExchangeRate = null;
-    rateText.textContent = '台幣記帳，無需換算';
     manualRateContainer.style.display = 'none';
   }
 
@@ -799,6 +806,7 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
 
   // 8. 初始化
   await loadCategories();
+  fetchHeaderJpyRate();
   loadData();
 })();
 </script>
