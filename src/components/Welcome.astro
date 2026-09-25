@@ -110,7 +110,7 @@ const formatShortDate = (dateStr: string) => {
       <span class="footer-sep">・</span>
       <a href="/login" class="footer-link" style="opacity: 0.5;">管理</a>
     </div>
-    <p class="footer-copy">© 2026 The Corner Table</p>
+    <p class="footer-copy">© 2026 <span id="footer-site-name">{siteTitle}</span></p>
   </footer>
 
 </div>
@@ -231,6 +231,8 @@ import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
     subtitleEl.textContent = st;
     titleInput.value = t;
     subtitleInput.value = st;
+    const footerName = document.getElementById('footer-site-name');
+    if (footerName) footerName.textContent = t;
   };
 
   try {

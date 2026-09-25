@@ -1,5 +1,11 @@
 ---
 import '../styles/global.css';
+import { getSiteTitle } from '../lib/site-title';
+
+// 分頁標題：「頁面名 | 站名」；站名讀共用資料來源(status.site_title)，各頁只傳頁面名；未傳則只顯示站名
+const { title } = Astro.props;
+const siteName = await getSiteTitle();
+const pageTitle = title ? `${title} | ${siteName}` : siteName;
 ---
 
 <!doctype html>
@@ -17,7 +23,7 @@ import '../styles/global.css';
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@300;400;500&display=swap" rel="stylesheet" />
-		<title>The Corner Table</title>
+		<title>{pageTitle}</title>
 		
 		<!-- PWA -->
 		<link rel="manifest" href="/manifest.json" />

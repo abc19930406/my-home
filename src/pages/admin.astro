@@ -112,7 +112,7 @@ const formatShortDate = (dateStr: string) => {
         <span class="footer-sep">・</span>
         <span class="footer-link">Email</span>
       </div>
-      <p class="footer-copy">© 2026 The Corner Table</p>
+      <p class="footer-copy">© 2026 <span id="footer-site-name">{siteTitle}</span></p>
     </footer>
   </div>
 
@@ -191,6 +191,8 @@ import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
       const subEl = document.getElementById('site-subtitle');
       if (titleEl) titleEl.textContent = t;
       if (subEl) subEl.textContent = `${st} (管理模式)`;
+      const footerName = document.getElementById('footer-site-name');
+      if (footerName) footerName.textContent = t;
     }
   } catch (err) {
     console.warn('讀取標題失敗，使用建置時的值', err);
