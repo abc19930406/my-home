@@ -294,6 +294,13 @@
   margin-top: 4px;
 }
 
+/* 多幣別時每組之間留間距與分隔線；只有一組(例如純日幣)時外觀與原本完全相同 */
+.fx-stats-group + .fx-stats-group {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--divider-color);
+}
+
 /* 明細列表 */
 .list-section {
   background: var(--card-bg);

@@ -73,8 +73,7 @@ import '../styles/ledger.css';
           <!-- JS 動態插入 -->
         </div>
         <div id="jpy-stats" class="jpy-stats-section">
-          <div class="jpy-stats-text">本月日幣支出合計 <span id="jpy-total-jpy">¥0</span></div>
-          <div class="jpy-stats-twd">≈ <span id="jpy-total-twd">NT$ 0</span></div>
+          <div id="jpy-stats-groups"></div>
         </div>
       </section>
 
@@ -224,9 +223,9 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
   let currentCurrency = 'TWD';
   // 外幣設定(單一來源)：digits 為匯率顯示位數，VND 1 元約 0.00125 台幣，需要 6 位才不會顯示失真
   const FOREIGN_CURRENCIES = {
-    JPY: { symbol: '¥', label: '日幣 ¥', fallbackRate: 0.22, digits: 4 },
-    THB: { symbol: '฿', label: '泰銖 ฿', fallbackRate: 0.9, digits: 4 },
-    VND: { symbol: '₫', label: '越南盾 ₫', fallbackRate: 0.00125, digits: 6 }
+    JPY: { symbol: '¥', name: '日幣', label: '日幣 ¥', fallbackRate: 0.22, digits: 4 },
+    THB: { symbol: '฿', name: '泰銖', label: '泰銖 ฿', fallbackRate: 0.9, digits: 4 },
+    VND: { symbol: '₫', name: '越南盾', label: '越南盾 ₫', fallbackRate: 0.00125, digits: 6 }
   };
   const formatRate = (rate, cur) => Number(rate).toFixed(FOREIGN_CURRENCIES[cur]?.digits ?? 4);
   // 外幣帳目的原始外幣金額：日幣沿用既有 amount_jpy，其他外幣讀 original_amount
@@ -274,8 +273,7 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
   const currencyBtns = document.querySelectorAll('.currency-btn');
   const conversionHint = document.getElementById('conversion-hint');
   const jpyStatsSection = document.getElementById('jpy-stats');
-  const jpyTotalJpyEl = document.getElementById('jpy-total-jpy');
-  const jpyTotalTwdEl = document.getElementById('jpy-total-twd');
+  const fxStatsGroupsEl = document.getElementById('jpy-stats-groups');
   const manualRateContainer = document.getElementById('manual-rate-container');
   const manualRateInput = document.getElementById('manual-rate-input');
   const manualRateLabel = document.getElementById('manual-rate-label');
@@ -386,8 +384,9 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
   function render() {
     let incomeSum = 0;
     let expenseSum = 0;
-    let monthJpySum = 0;
-    let monthJpyTwdSum = 0;
+    // 本月外幣支出合計：依每筆交易的幣別(currency)分組；台幣合計是各筆帳目當時換算後儲存的 amount 加總，
+    // 不用今天匯率重算，與帳目一致
+    const fxSums = {};
     const incomeMap = {};
     const expenseMap = {};
 
@@ -398,9 +397,10 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
       } else {
         expenseSum += t.amount;
         expenseMap[t.category] = (expenseMap[t.category] || 0) + t.amount;
-        if (t.currency === 'JPY') {
-          monthJpySum += t.amount_jpy || 0;
-          monthJpyTwdSum += t.amount;
+        if (FOREIGN_CURRENCIES[t.currency]) {
+          const g = fxSums[t.currency] || (fxSums[t.currency] = { original: 0, twd: 0 });
+          g.original += Number(getOriginalAmount(t));
+          g.twd += t.amount;
         }
       }
     });
@@ -432,12 +432,21 @@ const adminEmail = import.meta.env.PUBLIC_ADMIN_EMAIL ?? '';
     renderChart(expenseMap, expenseList, expenseSum, 'expense');
 
     // 日幣統計
-    if (monthJpySum > 0) {
+    // 只顯示本月實際有外幣支出的幣別(依設定表順序)；完全沒有時整個區塊隱藏
+    const fxCodes = Object.keys(FOREIGN_CURRENCIES).filter(c => fxSums[c] && fxSums[c].original > 0);
+    if (fxCodes.length > 0) {
       jpyStatsSection.style.display = 'block';
-      jpyTotalJpyEl.textContent = `¥${monthJpySum.toLocaleString()}`;
-      jpyTotalTwdEl.textContent = `NT$ ${monthJpyTwdSum.toLocaleString()}`;
+      fxStatsGroupsEl.innerHTML = fxCodes.map(c => {
+        const cfg = FOREIGN_CURRENCIES[c];
+        const g = fxSums[c];
+        return `<div class="fx-stats-group">
+          <div class="jpy-stats-text">本月${cfg.name}支出合計 <span>${cfg.symbol}${g.original.toLocaleString()}</span></div>
+          <div class="jpy-stats-twd">≈ <span>NT$ ${g.twd.toLocaleString()}</span></div>
+        </div>`;
+      }).join('');
     } else {
       jpyStatsSection.style.display = 'none';
+      fxStatsGroupsEl.innerHTML = '';
     }
 
     // 明細列表
