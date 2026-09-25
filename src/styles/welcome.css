@@ -32,6 +32,72 @@
   margin: 0;
 }
 
+.site-title-wrap {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.title-edit-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.8rem;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+  padding: 2px 4px;
+}
+
+.title-edit-btn:hover {
+  opacity: 1;
+}
+
+.title-edit-form {
+  margin-top: 0.5rem;
+}
+
+.title-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid #4A3525;
+  border-radius: 4px;
+  color: #F5E6CC;
+  font-family: inherit;
+  font-size: 0.95rem;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  outline: none;
+}
+
+.title-input:focus {
+  border-color: #A08060;
+}
+
+.title-edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.title-btn {
+  background: transparent;
+  border: 1px solid #4A3525;
+  border-radius: 4px;
+  color: #A08060;
+  font-family: inherit;
+  font-size: 0.8rem;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.title-btn-primary {
+  background: rgba(160, 125, 65, 0.2);
+  color: #F5E6CC;
+  border-color: #A08060;
+}
+
 .site-subtitle {
   color: #A08060;
   font-size: 0.85rem;

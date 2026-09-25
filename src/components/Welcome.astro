@@ -17,10 +17,18 @@ interface Props {
     mood: string;
     doing: string;
     updated_at: string;
+    site_title?: string | null;
+    site_subtitle?: string | null;
   };
 }
 
 const { groupedCards, initialStatus } = Astro.props;
+
+// 主標題/副標題：存在 status 表(id=1)的 site_title/site_subtitle；讀取失敗、尚無資料或為空時回退預設值，不出現空白標題
+const DEFAULT_TITLE = 'The Corner Table';
+const DEFAULT_SUBTITLE = '一個安靜角落，存放思緒與生活';
+const siteTitle = initialStatus.site_title?.trim() || DEFAULT_TITLE;
+const siteSubtitle = initialStatus.site_subtitle?.trim() || DEFAULT_SUBTITLE;
 
 // 格式化日期：5.13 更新
 const formatShortDate = (dateStr: string) => {
@@ -34,12 +42,23 @@ const formatShortDate = (dateStr: string) => {
   <!-- ===== HEADER 頂部 ===== -->
   <header class="header">
     <div class="header-top">
-      <h1 class="site-name">The Corner Table</h1>
+      <div class="site-title-wrap">
+        <h1 class="site-name" id="site-name">{siteTitle}</h1>
+        <button id="edit-title-btn" class="title-edit-btn admin-only" style="display: none;" title="編輯標題">✏️</button>
+      </div>
       <p class="site-meta">
         <span id="current-date"></span> ・ 台南 ・ 晴 29°C
       </p>
     </div>
-    <p class="site-subtitle">一個安靜角落，存放思緒與生活</p>
+    <p class="site-subtitle" id="site-subtitle">{siteSubtitle}</p>
+    <div id="title-edit-form" class="title-edit-form" style="display: none;">
+      <input type="text" id="input-site-title" class="title-input" maxlength="60" placeholder={DEFAULT_TITLE} value={siteTitle} />
+      <input type="text" id="input-site-subtitle" class="title-input" maxlength="120" placeholder={DEFAULT_SUBTITLE} value={siteSubtitle} />
+      <div class="title-edit-actions">
+        <button type="button" id="cancel-title-btn" class="title-btn">取消</button>
+        <button type="button" id="save-title-btn" class="title-btn title-btn-primary">儲存</button>
+      </div>
+    </div>
     <hr class="header-divider" />
   </header>
 
@@ -103,9 +122,14 @@ import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
 (async () => {
   const supabase = getSupabaseBrowserClient();
 
-  // 1. 偵測登入狀態
+  const DEFAULT_TITLE = 'The Corner Table';
+  const DEFAULT_SUBTITLE = '一個安靜角落，存放思緒與生活';
+  const adminEmail = (import.meta.env.PUBLIC_ADMIN_EMAIL || '').toLowerCase();
+
+  // 1. 偵測登入狀態：必須比對管理員 email，不能只看有沒有 session(朋友登入也有 session)
   const { data: { session } } = await supabase.auth.getSession();
-  if (session) {
+  const isAdmin = !!(session && adminEmail && (session.user?.email || '').toLowerCase() === adminEmail);
+  if (isAdmin) {
     document.querySelectorAll('.admin-only').forEach(el => {
       // @ts-ignore
       el.style.display = el.tagName === 'BUTTON' ? 'flex' : 'block';
@@ -188,6 +212,81 @@ import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
       }
     });
   }
+
+  // 3. 主標題/副標題：頁面是靜態的，存檔後到重新部署完成前重新整理會看到舊 HTML，
+  // 所以載入時再讀一次資料庫覆蓋畫面；失敗或無資料就保留 SSR 值(預設值)。一律用 textContent，不經 innerHTML
+  const titleEl = document.getElementById('site-name');
+  const subtitleEl = document.getElementById('site-subtitle');
+  const titleForm = document.getElementById('title-edit-form');
+  const titleInput = document.getElementById('input-site-title');
+  const subtitleInput = document.getElementById('input-site-subtitle');
+  const editTitleBtn = document.getElementById('edit-title-btn');
+  const saveTitleBtn = document.getElementById('save-title-btn');
+  const cancelTitleBtn = document.getElementById('cancel-title-btn');
+
+  const applyTitles = (title, subtitle) => {
+    const t = (title || '').trim() || DEFAULT_TITLE;
+    const st = (subtitle || '').trim() || DEFAULT_SUBTITLE;
+    titleEl.textContent = t;
+    subtitleEl.textContent = st;
+    titleInput.value = t;
+    subtitleInput.value = st;
+  };
+
+  try {
+    const { data: titleRow } = await supabase.from('status').select('site_title, site_subtitle').eq('id', 1).single();
+    if (titleRow) applyTitles(titleRow.site_title, titleRow.site_subtitle);
+  } catch (err) {
+    console.warn('讀取標題失敗，使用預設/建置時的值', err);
+  }
+
+  const setTitleEditing = (editing) => {
+    titleForm.style.display = editing ? 'block' : 'none';
+    titleEl.style.display = editing ? 'none' : '';
+    subtitleEl.style.display = editing ? 'none' : '';
+    editTitleBtn.style.display = editing ? 'none' : (isAdmin ? 'flex' : 'none');
+  };
+
+  editTitleBtn?.addEventListener('click', () => {
+    titleInput.value = titleEl.textContent;
+    subtitleInput.value = subtitleEl.textContent;
+    setTitleEditing(true);
+  });
+  cancelTitleBtn?.addEventListener('click', () => setTitleEditing(false));
+
+  saveTitleBtn?.addEventListener('click', async () => {
+    if (!isAdmin) return;
+    const newTitle = titleInput.value.trim();
+    const newSubtitle = subtitleInput.value.trim();
+    const prevTitle = titleEl.textContent;
+    const prevSubtitle = subtitleEl.textContent;
+
+    // 樂觀更新(比照編輯狀態)；空白存 null，畫面回退預設值
+    applyTitles(newTitle, newSubtitle);
+    setTitleEditing(false);
+
+    try {
+      const { data, error } = await supabase
+        .from('status')
+        .update({ site_title: newTitle || null, site_subtitle: newSubtitle || null })
+        .eq('id', 1)
+        .select();
+      if (error) throw error;
+      if (!data || data.length === 0) throw new Error('沒有權限或資料不存在');
+
+      const { data: { session: deploySession } } = await supabase.auth.getSession();
+      if (deploySession) {
+        fetch('/api/trigger-deploy', {
+          method: 'POST',
+          headers: { Authorization: 'Bearer ' + deploySession.access_token },
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.error('儲存標題失敗:', err);
+      applyTitles(prevTitle, prevSubtitle);
+      alert('儲存失敗，請檢查權限');
+    }
+  });
 
   // 日期邏輯
   const dateEl = document.getElementById('current-date');
