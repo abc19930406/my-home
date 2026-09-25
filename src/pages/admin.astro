@@ -41,7 +41,7 @@ try {
   console.warn('⚠️ Build Warning: 無法取得現在狀態資料。');
 }
 
-// 主標題/副標題與首頁共用 status(id=1) 的 site_title/site_subtitle，空值回退預設；此頁只讀取顯示，編輯入口在首頁
+// 主標題/副標題與首頁共用 status(id=1) 的 site_title/site_subtitle，空值回退預設；讀取與編輯邏輯共用 src/lib/title-editor.ts
 const DEFAULT_TITLE = 'The Corner Table';
 const DEFAULT_SUBTITLE = '一個安靜角落，存放思緒與生活';
 const siteTitle = (initialStatus as any).site_title?.trim() || DEFAULT_TITLE;
@@ -60,12 +60,23 @@ const formatShortDate = (dateStr: string) => {
     <!-- ===== HEADER 頂部 ===== -->
     <header class="header">
       <div class="header-top">
-        <h1 class="site-name" id="site-name">{siteTitle}</h1>
+        <div class="site-title-wrap">
+          <h1 class="site-name" id="site-name">{siteTitle}</h1>
+          <button id="edit-title-btn" class="title-edit-btn" style="display: none;" title="編輯標題">✏️</button>
+        </div>
         <div class="site-meta">
           <span id="current-date"></span> ・ 台南 ・ 晴 29°C
         </div>
       </div>
       <p class="site-subtitle" id="site-subtitle">{siteSubtitle} (管理模式)</p>
+      <div id="title-edit-form" class="title-edit-form" style="display: none;">
+        <input type="text" id="input-site-title" class="title-input" maxlength="60" placeholder={DEFAULT_TITLE} value={siteTitle} />
+        <input type="text" id="input-site-subtitle" class="title-input" maxlength="120" placeholder={DEFAULT_SUBTITLE} value={siteSubtitle} />
+        <div class="title-edit-actions">
+          <button type="button" id="cancel-title-btn" class="title-btn">取消</button>
+          <button type="button" id="save-title-btn" class="title-btn title-btn-primary">儲存</button>
+        </div>
+      </div>
       
       <div class="admin-actions">
         <span>管理員登入中</span>
@@ -164,6 +175,7 @@ const formatShortDate = (dateStr: string) => {
 <script>
 import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
 import { refreshCardsFromDb } from '../lib/live-cards';
+import { initTitleEditor } from '../lib/title-editor';
 
 (async () => {
   const supabase = getSupabaseBrowserClient();
@@ -192,22 +204,11 @@ import { refreshCardsFromDb } from '../lib/live-cards';
     }
   }
 
-  // 標題：靜態頁存檔後到重新部署完成前會是舊值，載入時再讀一次資料庫覆蓋(與首頁一致)；失敗則保留原值
-  try {
-    const { data: titleRow } = await supabase.from('status').select('site_title, site_subtitle').eq('id', 1).single();
-    if (titleRow) {
-      const t = (titleRow.site_title || '').trim() || 'The Corner Table';
-      const st = (titleRow.site_subtitle || '').trim() || '一個安靜角落，存放思緒與生活';
-      const titleEl = document.getElementById('site-name');
-      const subEl = document.getElementById('site-subtitle');
-      if (titleEl) titleEl.textContent = t;
-      if (subEl) subEl.textContent = `${st} (管理模式)`;
-      const footerName = document.getElementById('footer-site-name');
-      if (footerName) footerName.textContent = t;
-    }
-  } catch (err) {
-    console.warn('讀取標題失敗，使用建置時的值', err);
-  }
+  // 標題：讀取與管理員編輯，與首頁共用同一份邏輯(src/lib/title-editor.ts)；「 (管理模式)」只是顯示層後綴，
+  // 編輯框與寫入資料庫的永遠是純副標題值
+  const adminEmail = (import.meta.env.PUBLIC_ADMIN_EMAIL || '').toLowerCase();
+  const isAdminUser = !!(adminEmail && (session.user?.email || '').toLowerCase() === adminEmail);
+  await initTitleEditor(supabase, { isAdmin: isAdminUser, subtitleSuffix: ' (管理模式)' });
 
   // 卡片：載入後重讀 cards 表原地更新(編輯按鈕的 data-title 也同步為資料庫最新值)；失敗保留靜態版
   refreshCardsFromDb(supabase);
