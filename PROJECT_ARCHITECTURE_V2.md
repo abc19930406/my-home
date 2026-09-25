@@ -93,6 +93,9 @@
   - 新增/編輯沿用「交通查詢」子分頁同一個 Modal，開啟前把該子分頁的起訖點欄位設為預填值（不修改交通查詢子分頁本身邏輯）；新增/編輯/刪除後兩處互相刷新（`queryTransportRoutes()` 與 `renderDaySpots()` 互相呼叫，Modal 關閉時重抓，非即時推播）
   - 排序安全性：`moveSpotOrder()` 為純陣列運算（`daySpotsCache.findIndex` + 交換 `order_index`），不依賴 DOM 順序或 `nth-child`，交通區塊以獨立 sibling 元素插入不影響既有排序邏輯，已實測確認
 
+- ✅ **行程注意事項摺疊欄**（2026-09-25，`trips.note`）：行程切換列與模式切換列之間的常駐區塊（不放進 `.spots-list-section`，該區塊在行程模式會整個隱藏），地圖/行程模式皆顯示；預設收合，無內容時任何身份（含管理員）都不顯示；內容經 `escapeHtml` + `white-space: pre-wrap`；編輯入口為既有 `admin-only` 的編輯行程 Modal 內的注意事項欄位，權限僅管理員（與 `trips` UPDATE 政策一致，未放寬）
+- ✅ **景點時間記錄**（2026-09-25，`day_spots.arrival_time`/`stay_minutes`）：僅行程模式，顯示「🕐 14:00 · 停留 90 分」，有填才輸出；編輯經 `#travel-day-spot-time-modal`，入口為 `.spot-actions` 的時鐘按鈕（`canEditItinerary` 才有），寫入沿用 `day_spots` 既有 `can_edit_trip()` RLS。純記錄，不推算、不與交通時間連動
+
 ### 3.2 交通查詢 ✅ 已上線（2026-07-13，V2 階段 6 任務一）
 
 獨立工具，用於行程調整時查詢任意兩點之間的交通方式：
@@ -284,6 +287,8 @@ UNIQUE(trip_id, user_email)。RLS：SELECT 為 `is_admin() OR lower(user_email)=
 | japan_items | 新增 `trip_id`（可空，FK → trips，`ON DELETE SET NULL`） | ✅ 已完成（2026-07-12） |
 | travel_subway_maps | 新增 `category`（text, NOT NULL）；改用 trip_subway_categories 記錄關聯，`trip_id` 已於 2026-07-16（階段 9 O3）確認無引用後 `DROP COLUMN` | ✅ 已完成（2026-07-13 新增欄位／2026-07-16 舊欄位刪除） |
 | spots | `trip_id` 外鍵刪除規則 `CASCADE` → `SET NULL`（配合刪除行程功能，比照 japan_items 設計） | ✅ 已完成（2026-07-13） |
+| trips | 新增 `note`（text，可空）：行程注意事項 | ✅ 已完成（2026-09-25） |
+| day_spots | 新增 `arrival_time`（time，可空）、`stay_minutes`（int，可空）：景點抵達時間/預計停留 | ✅ 已完成（2026-09-25） |
 
 ### 7.3 Storage Buckets
 

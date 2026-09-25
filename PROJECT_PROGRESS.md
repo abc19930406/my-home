@@ -1190,6 +1190,31 @@ MC-3（2026-09-17）的「行程清單依國家分組、全部攤開」在國家
 
 ---
 
+### ✅ 行程頁任務二：行程注意事項摺疊欄 + 景點時間記錄（2026-09-25，已結案）
+
+國家導覽重構的後續任務，commit `a35dd2e`。前置 SQL 由使用者於 Dashboard 執行並確認成功後才開始實作（三個皆為可空新增欄位，不改 RLS）：`trips.note text`、`day_spots.arrival_time time`、`day_spots.stay_minutes int`。
+
+- **行程注意事項**：`#trip-note-section` 放在行程切換列與模式切換列之間（不放進 `.spots-list-section`，該區塊行程模式會整個隱藏），兩種模式皆顯示；預設收合；無內容時任何身份（含管理員）都不顯示——原任務指令「無內容且非編輯者不顯示」與驗收標準 a「無內容時區塊不顯示」字面不一致，已與使用者確認採驗收標準版本，編輯入口因此沿用標題旁既有 admin-only 的編輯行程 Modal（新增注意事項欄位），不在區塊本身另做新增入口。內容 `escapeHtml` + `pre-wrap`；展開收合比照景點備註的捲動補償，不跳位。函式 `renderTripNoteSection()`/`handleTripNoteToggle()`，`selectTrip()`/`showEmptyTripState()` 內呼叫
+- **景點時間記錄**：行程模式景點項目顯示「🕐 14:00 · 停留 90 分」（有填才輸出，未填不佔空間；地圖模式不顯示）；新增 `#travel-day-spot-time-modal`，入口為 `.spot-actions` 新增的時鐘按鈕（`canEditItinerary` 才有）；寫入 `day_spots` 沿用既有 `can_edit_trip()` RLS，`.select()` 檢查受影響筆數；按鈕/背景/ESC/取消四種關閉路徑皆清 `body.modal-open`。純記錄，不推算、不與交通時間連動
+- **權限決策（待使用者日後決定）**：注意事項編輯僅管理員（`trips` UPDATE 本來就只有 `is_admin()`），協作者看得到但無編輯入口；若要開放協作者編輯，需另外放寬 `trips` UPDATE RLS，屬獨立的權限決策，本任務未動
+- **明確排除**：不做時間自動推算、不與交通時間連動、不動地圖模式、不放寬 `trips` 寫入權限、不改命名
+- **驗證**：`astro check` 1511（基準 1491，新增 20 則皆為檔案內既有大量寫法相同的 `getElementById().value` null 檢查噪音，非執行期問題）；本機 dev server 驗證隱藏/展開收合/`<script>` 純文字/Modal 四種關閉路徑
+
+#### 自我驗收對照表
+
+| 驗收項目 | 結果 |
+|---|---|
+| a. 管理員填注意事項，換行保留、預設收合可展開、不跳位；無內容時區塊不顯示 | ✅ 使用者實測 |
+| b. 注意事項含 `<` `>`/`<script>` 顯示為純文字不執行 | ✅ 使用者實測 |
+| c. 管理員填景點抵達時間與停留時長，行程模式顯示正確，地圖模式不顯示 | ✅ 使用者實測 |
+| d. 協作者能填景點時間；注意事項僅管理員可編輯 | ✅ 使用者實測 |
+| e. 未填的景點與行程版面無多餘空位 | ✅ 使用者實測 |
+| f. 手機與桌機、收合展開、Modal 正常 | ✅ 使用者實測 |
+| commit + push | ✅ `a35dd2e` |
+| 文件同步（PROJECT_PROGRESS.md、PROJECT_ARCHITECTURE_V2.md 3.1/7.2 節、SECURITY_AUDIT.md） | ✅ 本次完成 |
+
+---
+
 ## 二、規劃中功能（尚未開始）
 
 ### /trip 整合頁面後續開發（詳見 PROJECT_ARCHITECTURE_V2.md）
@@ -1269,12 +1294,12 @@ MC-3（2026-09-17）的「行程清單依國家分組、全部攤開」在國家
 | japan_items | 日本收藏品項（含 owner_wishlist、owner_quantity、trip_id、country_id、created_by） | ✅（2026-09-16 新增 country_id，MC-1；2026-09-17 新增 created_by，MC-5a） |
 | allowed_users | 日本收藏白名單 | ✅ |
 | wishlist_items | 朋友/家人願望清單（含 quantity） | ✅ |
-| trips | 旅行行程（含 country_id） | ✅（2026-09-16 新增 country_id，MC-1） |
+| trips | 旅行行程（含 country_id、note） | ✅（2026-09-16 新增 country_id，MC-1；2026-09-25 新增 note 行程注意事項） |
 | spots | 旅行景點（含 spot_type_id、spot_subtype_id、place_id） | ✅ |
 | spot_types | 景點主類型（含 is_chain_store） | ✅ |
 | spot_subtypes | 景點子類型（含 is_chain_store） | ✅ |
 | trip_days | 每日行程（關聯 trips） | ✅ |
-| day_spots | 每天景點安排（關聯 trip_days + spots） | ✅ |
+| day_spots | 每天景點安排（關聯 trip_days + spots；含 arrival_time、stay_minutes） | ✅（2026-09-25 新增抵達時間/預計停留） |
 | travel_coupons | 優惠券，全站共用 | ✅ 已建立，UI 已上線（2026-07-13） |
 | travel_subway_maps | 地鐵圖，全域分類庫（新增 category 欄位；trip_id 已於 2026-07-16 確認無引用後刪除） | ✅ 已建立，UI 已上線（2026-07-13） |
 | trip_subway_categories | trip_id + category，行程關聯的地鐵圖分類 | ✅ 已建立，UI 已上線（2026-07-13） |

@@ -81,6 +81,12 @@
 - **現況(尚無授權朋友)**:`country_collaborators` 為空表,`can_add_country_item()` 對任何非管理員恆為 `false`,三條新政策實際效果退化為等價於原本的 `is_admin()`,系統行為與 MC-5a 之前完全一致
 - 使用者已實測驗證:管理員新增/編輯/刪除收藏品、標願望清單皆與調整前一致;朋友帳號於 Console 對 `japan_items` 執行 INSERT 收到 `403`/`42501`,`data` 為 `null`;白名單朋友對一般收藏(`trip_id` 為空)標願望清單正常。行程協作分支(`trip_collaborators.can_edit_wishlist`)因使用者目前未設定任何行程協作者,無實測對象,改以函式定義文字比對確認該分支未被改動
 
+### trips.note / day_spots.arrival_time / day_spots.stay_minutes(新增欄位,2026-09-25,行程頁任務二)
+
+- 三個皆為可空新增欄位,不新增資料表、**不修改任何 RLS**:RLS 為 row-level,`trips` 既有 UPDATE 政策(僅 `is_admin()`)與 `day_spots` 既有寫入政策(`can_edit_trip()`)自動涵蓋新欄位
+- `trips.note` 為自由文字,僅管理員可寫(協作者無法寫入,刻意不放寬 `trips` 的 UPDATE 政策);前端顯示一律經 `escapeHtml()` 轉義後以 `innerHTML` 插入並搭配 `white-space: pre-wrap`,比照 `spots` 欄位的 XSS 防護標準(見 PROJECT_PROGRESS.md「欄位 XSS 轉義修復」),使用者已於正式站以 `<script>` 等 payload 實測顯示為純文字
+- `day_spots.arrival_time`(`time`)/`stay_minutes`(`int`)為結構化型別,非自由文字,無 XSS 面向,不需轉義;協作者(`can_edit_itinerary`)可寫,行為與 `day_spots` 其他欄位一致,前端寫入 `.select()` 檢查受影響筆數
+
 ---
 
 ## 二、Code-level 已確認的風險(不需等 RLS 結果即可定性的部分)
