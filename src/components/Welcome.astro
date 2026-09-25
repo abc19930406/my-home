@@ -118,6 +118,7 @@ const formatShortDate = (dateStr: string) => {
 <!-- 現在狀態管理邏輯 -->
 <script>
 import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
+import { refreshCardsFromDb } from '../lib/live-cards';
 
 (async () => {
   const supabase = getSupabaseBrowserClient();
@@ -241,6 +242,9 @@ import { getSupabaseBrowserClient } from '../lib/supabase-browser.js';
   } catch (err) {
     console.warn('讀取標題失敗，使用預設/建置時的值', err);
   }
+
+  // 卡片：載入後重讀 cards 表原地更新，改完不需等重新部署；失敗保留靜態版
+  refreshCardsFromDb(supabase);
 
   const setTitleEditing = (editing) => {
     titleForm.style.display = editing ? 'block' : 'none';
