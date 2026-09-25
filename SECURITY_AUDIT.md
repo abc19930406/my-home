@@ -53,7 +53,14 @@
 - **盤點發現**:`status` 原 UPDATE 政策為 `auth.role() = 'authenticated'`(任何登入帳號可改整張表);且首頁 `Welcome.astro` 的編輯入口只判斷有沒有 session,朋友/家人登入也會看到「編輯狀態」按鈕。若標題直接存進去,任何登入帳號都能從 Console 改掉全站站名
 - **修復**:刪除舊政策 `Authenticated users can update status`,新建 `Only admin can update status`(`USING`/`WITH CHECK (public.is_admin())`);SELECT 政策「Public status viewable by everyone」不動。已盤點 `status` 寫入方(首頁編輯狀態、`admin.astro`、收藏頁探索開關)皆為管理員操作,無需非管理員寫入
 - 前端入口改為比對 `PUBLIC_ADMIN_EMAIL`(首頁編輯狀態與標題編輯皆是);使用者已以非管理員帳號於 Console 驗證寫入被拒
-- ⚠️ 同批盤點時 `cards` 表的寫入權限**未一併修**(見上方矩陣),仍為待辦
+- `cards` 表已於 2026-09-26 比照修復,見下方「cards」小節
+
+### cards(2026-09-26,寫入權限收緊,補 2026-09-25 待辦)
+
+- **盤點**:全專案 `cards` 寫入點只有一處——[admin.astro](src/pages/admin.astro) 卡片編輯 Modal 的 `.update()`;沒有任何 `.insert()`/`.delete()`,也沒有後端 API 寫入。現有 RLS 只有 SELECT(`true`,公開)與 UPDATE(`auth.role() = 'authenticated'`,任何登入帳號可改);INSERT/DELETE 無政策(預設全部拒絕)
+- **修復**:刪除 `Authenticated users can update cards`,新建 `Only admin can update cards`(`USING`/`WITH CHECK (public.is_admin())`,重用既有函式);SELECT 不動。刻意**不新增** INSERT/DELETE 的管理員政策:現況無人能新增/刪除已比「僅管理員」更嚴,新增反而是開放原本沒有的能力,日後要做新增/刪除卡片再加
+- **副作用處理**:Modal 的 `.update()` 原本不檢查受影響筆數,被 RLS 擋下(或標題比對不到)只會寫入 0 筆且不報錯、畫面誤報「已儲存」;已補上 `.select()` 並檢查筆數,0 筆時走既有錯誤提示(`86900aa`)
+- 使用者已實測:管理員編輯卡片正常;朋友帳號 Console 寫入被拒且首頁卡片正常;未登入訪客首頁卡片正常顯示
 
 ### travel_coupons / travel_subway_maps / trip_subway_categories(✅ 2026-07-13 UI 已上線,V2 階段 5)
 
@@ -175,7 +182,7 @@ order by tablename, cmd;
 | **spots / trips / trip_days / day_spots**(✅ 2026-07-13 寫入已修復,SELECT 維持公開設計) | 🟡 全表可讀(完整行程、地點、座標,刻意保留) | 否 | 全表可讀(不變) | ~~🔴 任何登入帳號可 CRUD 任何行程/景點~~ → 已收斂:`trips` 一律僅 `is_admin()`;`trip_days`/`spots`/`day_spots` 改用新函式 `can_edit_trip(trip_id)`(管理員,或該行程 `trip_collaborators.can_edit_itinerary=true` 的協作者);`day_spots` 的 INSERT/UPDATE 新增完整性檢查,擋下「把 A 行程景點塞進 B 行程某一天」 | 寫入已收斂,SELECT 維持設計原狀 |
 | **spot_types / spot_subtypes** | 🟡 全表可讀(僅分類名稱) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD | **LOW** |
 | **expense_categories / income_categories** | 🟡 全表可讀(記帳分類名稱,非金額) | 否 | 全表可讀 | 🔴 任何登入帳號可 CRUD | **LOW** |
-| **cards** | 🟢 全表可讀(設計上本就公開:首頁卡片) | 否 | 全表可讀 | 🔴 任何登入帳號可改,非僅管理員(2026-09-25 複查:尚未收緊,`status` 已修但 `cards` 未動) | **LOW**(讀取合理,寫入權限過寬,尚未修復) |
+| **cards**(✅ 2026-09-26 寫入已收緊) | 🟢 全表可讀(設計上本就公開:首頁卡片) | 否 | 全表可讀 | ✅ UPDATE 已由 `authenticated` 改為 `is_admin()`;INSERT/DELETE 本來就無政策(預設拒絕) | ~~LOW~~ → 已修復 |
 | **status**(✅ 2026-09-25 寫入已收緊) | 🟢 全表可讀(首頁便條與標題,設計上本就公開) | 否 | 全表可讀 | ✅ UPDATE 已由 `authenticated` 改為 `is_admin()`(見上方「status」小節) | ~~LOW~~ → 已修復 |
 | **daily**(✅ 2026-07-13 已修復) | 🟢 全表可讀(設計上本就公開:Polaroid 底片日記) | 否 | 全表可讀(不變) | ~~🔴 任何登入帳號可 CRUD,非僅管理員(政策命名為「admin」但條件只查 `auth.role() = 'authenticated'`)~~ → INSERT/UPDATE/DELETE 已改為 `public.is_admin()` | ~~LOW~~ → 寫入已收斂,SELECT 維持設計原狀 |
 | **travel_coupons / travel_subway_maps**(✅ 2026-07-13 UI 已上線) | 🟢 全表可讀,UI 使用中 | 否 | 全表可讀 | 🟢 **正確示範**:寫入鎖定 `auth.jwt()->>'email' = 'abc19930406@gmail.com'`,真正限定管理員本人 | UI 已上線,結構與寫入權限正確,未異動 |
